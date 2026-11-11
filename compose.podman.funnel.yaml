@@ -1,0 +1,16 @@
+# Rootless Podman overlay for Funnel. scripts/deployment.py adds it after
+# compose.podman.yaml when the engine is Podman and Funnel is on. It cannot be
+# part of compose.podman.yaml: without compose.funnel.yaml the tailscale entry
+# has no image and Compose rejects the project.
+
+services:
+  tailscale:
+    networks:
+      tailscale-uplink:
+        gw_priority: !reset null
+
+networks:
+  funnel-link:
+    driver_opts: !override {isolate: strict}
+  tailscale-uplink:
+    driver_opts: !override {isolate: strict}

@@ -1,4 +1,5 @@
 """Compose handles dotenv interpolation; this module validates feature settings."""
+from functools import cache
 import json
 import os
 from pathlib import Path
@@ -10,17 +11,47 @@ sys.path.insert(0, str(ROOT / 'components/webapp'))
 from settings import Settings, proxy_config
 
 
+def _output(*args):
+    return subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=True).stdout
+
+
+@cache
+def engine():
+    """Return 'podman' only when the engine positively identifies as Podman.
+
+    Any other answer, including a failed query, selects Docker. On Docker the
+    Docker files are then complete; on Podman netavark rejects their Docker
+    bridge options, so startup stops instead of running with weaker isolation.
+    """
+    try:
+        # podman-docker and docker shims run Podman as the `docker` command, and
+        # `podman compose` points Compose at the Podman socket.
+        if _output('docker', '--version').lower().startswith('podman version'):
+            return 'podman'
+        # The Docker CLI follows DOCKER_HOST and the current context, as Compose does.
+        components = json.loads(_output('docker', 'version', '--format', '{{json .Server.Components}}'))
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return 'docker'
+    names = [entry.get('Name') for entry in components or [] if isinstance(entry, dict)]
+    return 'podman' if 'Podman Engine' in names else 'docker'
+
+
+def compose_files(funnel, extra=()):
+    """Return Compose file arguments. The Podman files must stay last."""
+    files = ['compose.yaml', *(['compose.funnel.yaml'] if funnel else []), *extra]
+    if engine() == 'podman':
+        files += ['compose.podman.yaml', *(['compose.podman.funnel.yaml'] if funnel else [])]
+    return [argument for name in files for argument in ('-f', name)]
+
+
 def settings():
-    result = subprocess.run(['docker', 'compose', '-f', 'compose.yaml', 'config', '--format', 'json'],
+    result = subprocess.run(['docker', 'compose', *compose_files(False), 'config', '--format', 'json'],
                             cwd=ROOT, text=True, capture_output=True, check=True)
     return Settings.read(json.loads(result.stdout)['x-deployment'])
 
 
 def compose(config, all_ingress=False):
-    command = ['docker', 'compose', '-f', 'compose.yaml']
-    if config.funnel or all_ingress:
-        command += ['-f', 'compose.funnel.yaml']
-    return command
+    return ['docker', 'compose', *compose_files(config.funnel or all_ingress)]
 
 
 def maintenance_compose(all_ingress=False, executor_build=False):
@@ -35,10 +66,7 @@ def maintenance_compose(all_ingress=False, executor_build=False):
         # Saved-state inspection/shutdown do not select or build an executor.
         # An invalid optional desktop preference must not block those operations.
         os.environ['COMPUTER_USE_ENABLED'] = 'false'
-    command = ['docker', 'compose', '-f', 'compose.yaml']
-    if all_ingress:
-        command += ['-f', 'compose.funnel.yaml']
-    return command
+    return ['docker', 'compose', *compose_files(all_ingress)]
 
 
 def maintenance_command(arguments):
@@ -65,4 +93,4 @@ def maintenance_command(arguments):
 def render(config):
     path = ROOT / 'config/webapp/proxy.cfg'
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(proxy_config(config))
+    path.write_text(proxy_config(config, loopback_forwarder=engine() == 'podman'))

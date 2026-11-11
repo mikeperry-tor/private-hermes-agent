@@ -1,0 +1,50 @@
+# Rootless Podman overlay. scripts/deployment.py adds it last, and only when the
+# engine identifies as Podman. It removes or replaces the Docker-only settings
+# of compose.yaml; see docs/architecture.md (engine differences).
+#
+# Netavark forwards between bridge networks unless they are isolated, and it
+# rejects Docker's bridge options. isolate: strict restores the separation
+# between networks that Docker gives by default.
+
+services:
+  tor:
+    healthcheck:
+      start_interval: !reset null
+  agent-net:
+    healthcheck:
+      start_interval: !reset null
+  executor-net:
+    healthcheck:
+      start_interval: !reset null
+  executor:
+    healthcheck:
+      start_interval: !reset null
+  teep:
+    networks:
+      teep-uplink:
+        gw_priority: !reset null
+  webapp-proxy:
+    environment:
+      # The rootless port forwarder connects from inside the proxy namespace.
+      PRIVATE_HERMES_PORT_FORWARDER: loopback
+
+networks:
+  agent-route:
+    driver_opts: !override {isolate: strict}
+  executor-route:
+    driver_opts: !override {isolate: strict}
+  execution-control:
+    driver_opts: !override {isolate: strict}
+  inference:
+    driver_opts: !override {isolate: strict}
+  mcp-access:
+    driver_opts: !override {isolate: strict}
+  webapp-backend:
+    driver_opts: !override {isolate: strict}
+  tor-uplink:
+    driver_opts: !override {isolate: strict}
+  teep-uplink:
+    driver_opts: !override {isolate: strict}
+  webapp-publish:
+    # No route out: HAProxy only answers published connections.
+    driver_opts: !override {isolate: strict, no_default_route: "true"}

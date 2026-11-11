@@ -21,6 +21,14 @@ def main():
     config = Path('/usr/local/etc/haproxy/haproxy.cfg').read_text()
     if config.splitlines()[0] != f'# WEBAPP_EXTERNAL_CONTENT={policy}':
         raise ValueError('External-content policy mismatch: regenerate ingress and recreate services')
+    # Docker delivers published connections on the publication interface. The
+    # rootless Podman port forwarder connects from inside this namespace over
+    # loopback; compose.podman.yaml selects that mode.
+    forwarder = os.environ.get('PRIVATE_HERMES_PORT_FORWARDER', 'interface')
+    if forwarder not in ('interface', 'loopback'):
+        raise ValueError('Invalid port forwarder mode')
+    if config.splitlines()[1:2] != [f'# PORT_FORWARDER={forwarder}']:
+        raise ValueError('Port forwarder mismatch: regenerate ingress and recreate services')
     port = int(os.environ['WEBAPP_PORT'])
     if not 1 <= port <= 65535:
         raise ValueError('Invalid webapp port')
@@ -40,6 +48,11 @@ def main():
     rules = [f'-A INPUT -i {edge[0]} -d {edge_ip}/32 -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
     if enabled == 'true':
         rules += ['-A INPUT -s 10.203.87.2/32 -d 10.203.87.3/32 -p tcp --dport 8443 -m conntrack --ctstate NEW -j ACCEPT']
+    if forwarder == 'loopback':
+        # Only processes in this namespace can send on lo; traffic from the
+        # connected networks arrives on other interfaces and stays dropped.
+        rules += [f'-A INPUT -i lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT',
+                  f'-A OUTPUT -o lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
     run('iptables-restore', input='\n'.join([
         '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
         '-A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',

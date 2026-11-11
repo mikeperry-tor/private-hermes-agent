@@ -50,6 +50,8 @@ class Settings:
             raise ValueError('TAILSCALE_FUNNEL_HOST must be one exact lowercase .ts.net hostname')
         if funnel and not host:
             raise ValueError('TAILSCALE_FUNNEL_HOST is required when Funnel is enabled')
+        if funnel and local_port == 8443:
+            raise ValueError('WEBAPP_PORT must not be 8443 when Funnel is enabled: the Funnel frontend uses 8443')
         public_port = port(values['funnel_port'], 'TAILSCALE_FUNNEL_PORT')
         if public_port not in (443, 8443, 10000):
             raise ValueError('TAILSCALE_FUNNEL_PORT must be 443, 8443 or 10000')
@@ -63,10 +65,20 @@ def authorities(host, port_number, default_port):
     return result
 
 
-def proxy_config(settings):
+def proxy_config(settings, loopback_forwarder=False):
+    """Render HAProxy's configuration.
+
+    Docker delivers published connections on the publication interface.
+    Rootless Podman's port forwarder runs inside the proxy namespace and
+    connects over loopback to one of the proxy's addresses, so with
+    loopback_forwarder the local frontend listens on all proxy addresses and
+    the proxy firewall admits new loopback connections only.
+    """
     local_hosts = sorted({authority for host in ('localhost', settings.bind)
                           for authority in authorities(host, settings.port, 80)})
-    text = f'# WEBAPP_EXTERNAL_CONTENT={settings.external_content}\n' + '''global
+    forwarder = 'loopback' if loopback_forwarder else 'interface'
+    text = (f'# WEBAPP_EXTERNAL_CONTENT={settings.external_content}\n'
+            f'# PORT_FORWARDER={forwarder}\n') + '''global
     log stdout format raw local0 notice
 
 defaults
@@ -98,7 +110,8 @@ frontend {name}
     http-request set-header X-Forwarded-For %[src]
     default_backend hermes
 '''
-    text += frontend('localhost', f'${{PRIVATE_HERMES_EDGE_IP}}:{settings.port}', local_hosts, 'http')
+    listen = f':{settings.port}' if loopback_forwarder else f'${{PRIVATE_HERMES_EDGE_IP}}:{settings.port}'
+    text += frontend('localhost', listen, local_hosts, 'http')
     if settings.funnel:
         text += frontend('funnel', '10.203.87.3:8443',
                          authorities(settings.funnel_host, settings.funnel_port, 443), 'https', '10.203.87.2')

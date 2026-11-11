@@ -6,6 +6,8 @@ check:
 	python3 -m unittest discover -s tests -p 'test_*.py'
 	python3 scripts/stack.py config
 	docker compose -f compose.yaml -f compose.funnel.yaml config --quiet
+	docker compose -f compose.yaml -f compose.podman.yaml config --quiet
+	docker compose -f compose.yaml -f compose.funnel.yaml -f compose.podman.yaml -f compose.podman.funnel.yaml config --quiet
 	python3 -m compileall -q components scripts tests
 build:
 	python3 scripts/stack.py build

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from deployment import ROOT, compose, render, settings, maintenance_compose, maintenance_command
+from deployment import ROOT, compose, compose_files, render, settings, maintenance_compose, maintenance_command
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config
@@ -17,6 +17,15 @@ def run(command, **kwargs):
 
 def capture(command):
     return run(command, text=True, capture_output=True).stdout.strip()
+
+
+def require_inference_key(command):
+    # Teep exits at once without a provider key. Rootless Podman restarts it
+    # without backoff and `up --wait` would wait without end, so stop here.
+    environment = json.loads(capture(command + ['config', '--format', 'json']))['services']['teep']['environment']
+    if not any(value for name, value in environment.items() if name.endswith('_API_KEY')):
+        raise RuntimeError('Set at least one inference provider API key in .env, for example NEARAI_API_KEY. '
+                           'Teep does not start without one.')
 
 
 def stop_funnel(all_command):
@@ -50,7 +59,7 @@ def main_unlocked():
     if args.action == 'compose' and args.arguments[:1] == ['config']:
         # Inspect the actual model, including invalid policy values, without
         # replacing them with maintenance placeholders or pre-validating policy.
-        run(['docker', 'compose', '-f', 'compose.yaml', '-f', 'compose.funnel.yaml', *args.arguments])
+        run(['docker', 'compose', *compose_files(True), *args.arguments])
         return
     if args.action == 'compose' and maintenance_command(args.arguments):
         run(maintenance_compose(all_ingress=True, executor_build=args.arguments[:1] == ['build']) + args.arguments)
@@ -70,6 +79,7 @@ def main_unlocked():
         if not path.is_file():
             raise RuntimeError('Run make init before starting the stack.')
         validate(json.loads(path.read_text()))
+        require_inference_key(command)
         # Build shared images before setup consumes them or services are changed.
         # Include treasury even before preparation: setup/config seeding need it.
         run(command + ['--profile', 'x402_treazury', 'build'])
