@@ -1,7 +1,9 @@
 # Rootless Podman support
 
-Status: proposed; independent design review and implementation are pending.
-Planning baseline: branch `main`, commit `4a08841`.
+Status: G1 passed with conditions; this revision resolves them. P1 is merged.
+P2–P4 and G2 are pending.
+Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
+`main`, commit `f2a08e1`.
 Plan path: `docs/plans/rootless-podman.md`.
 Follow the [planning workflow](../planning-workflow.md) before implementation.
 
@@ -70,10 +72,11 @@ loading. Saved logs show F2, F4 and the started services.
 | F6 | Published port enters on the publication interface | `rootlessport-child` runs inside the HAProxy namespace and connects over loopback to the container's first network address, `10.203.85.3:9120`; the proxy firewall dropped it in OUTPUT | Loopback-only accept rule and a second HAProxy listen address |
 | F7 | Restart backoff | A container that exits at once restarts about every 0.3 s: teep without a provider key restarted 13,597 times in an hour while `make up --wait` waited | None |
 | F8 | Compose 2.36 | Compose 2.26.1 drops `gw_priority` and renders `create_host_path: false` as `bind: {}`, which fails `test_storage`. It keeps `stop_grace_period: -1s` in `config` output; whether it applies it is not known | None |
+| F9 | Docker drops forwarding between different bridge networks | Netavark forwards between two ordinary rootless networks: a client on one reached a listener on the other. With `-o isolate=strict` on both, the connection was blocked | None; the trial stack had this exposure |
 
-Network evidence from disposable experiments. These used networks with
-`-o isolate=strict` and `--disable-dns`, which the trial Compose and the proposal
-do not set (D5).
+Network evidence from disposable experiments. Except for F9, these used
+networks with `-o isolate=strict` and `--disable-dns`. The trial Compose set
+neither; the overlay sets `isolate: strict` (D5).
 
 - The executor's public TCP left through Tor over the GRE link in the trial
   stack: `{"IsTor":true}`.
@@ -105,24 +108,36 @@ isolation. A Podman difference must not weaken a boundary on either engine.
 
 ## Proposed approach
 
-1. Engine-neutral changes go into the base files. F1 and F2 are in pull
-   request 1.
+1. Engine-neutral changes go into the base files. F1 and F2 are merged (pull
+   request 1).
 2. `compose.yaml`, `compose.funnel.yaml` and all Docker consumers stay as they
    are.
 3. One file, `compose.podman.yaml`, removes or replaces the Docker-only keys with
-   Compose's `!reset` and `!override` tags: `driver_opts: !reset {}` on the
-   internal networks and `funnel-link`, `driver_opts: !override
-   {no_default_route: "true"}` on `webapp-publish`, `start_interval: !reset null`,
-   `gw_priority: !reset null`, and an environment value for HAProxy's startup
-   (F6). A review check with Compose 2.26.1 confirmed `!reset` and `!override`
-   give the intended model.
-4. `scripts/deployment.py` adds the overlay to the commands it builds when the
+   Compose's `!reset` and `!override` tags:
+   - `driver_opts: !override {isolate: strict}` on every network, including the
+     uplinks, `webapp-publish` and `funnel-link`. This replaces Docker's gateway
+     options and restores Docker's separation between networks (F9).
+     `webapp-publish` also gets `no_default_route: "true"`.
+   - `start_interval: !reset null`, and `gw_priority: !reset null` on teep and
+     on `tailscale` (`compose.funnel.yaml:39`).
+   - An environment value for HAProxy's startup (F6, D7).
+   A review check with Compose 2.26.1 confirmed `!reset` and `!override` give the
+   intended model.
+4. The overlay is always the last `-f` file: after `compose.funnel.yaml` and
+   after any test overlay. A review check showed that an overlay placed before
+   `compose.funnel.yaml` lets `funnel-link` get the Docker options back. Without
+   Funnel, Compose drops the unused `funnel-link` entry, so one overlay serves
+   both cases.
+5. `scripts/deployment.py` adds the overlay to the commands it builds when the
    engine is Podman, and preflight checks the floors of that engine. Other
-   callers that name files (`stack.py:53`, the Makefile, the smoke tests) get the
-   same file list from `deployment.py` or a shared helper.
-5. Docker gets no new file. If Podman detection fails, the Docker options stay in
-   the model, netavark rejects them and startup stops with a visible error.
-6. The `docker` and `docker compose` commands stay. On Podman, `podman-docker` or
+   callers that name files (`stack.py:53`, the Makefile, the smoke tests and unit
+   tests) get the same file list from `deployment.py` or a shared helper.
+6. Docker gets no new file. The overlay is selected only when the engine
+   positively identifies as Podman (D1). A failed or uncertain detection selects
+   Docker; on Podman the Docker options then stay in the model, netavark rejects
+   them and startup stops with a visible error. No detection result can remove
+   Docker's options on Docker.
+7. The `docker` and `docker compose` commands stay. On Podman, `podman-docker` or
    a `docker` shim and the user `podman.socket` provide them.
 
 Support for both engines is a stated requirement, so this engine selection is
@@ -133,18 +148,25 @@ not a speculative option.
 - **D1, engine identification.** The engine that matters is the one behind the
   socket Compose uses. With `podman-docker`, `docker` runs `podman` directly and
   `docker version --format json` has no server component list, so a check of the
-  component name `Podman Engine` does not work in that form. Recommendation:
-  query the API of the socket Compose uses (`DOCKER_HOST`, or Podman's default
-  socket that `podman compose` sets) and select the overlay from its answer. To
-  verify on Docker, Docker Desktop and Podman.
+  component name `Podman Engine` does not work in that form. Decision: select the
+  overlay only on a positive Podman identification, in either form: the server
+  reports the `Podman Engine` component (the Docker CLI on a Podman socket), or
+  the `docker` command is Podman (`podman-docker` or a shim). Everything else is
+  Docker, with the Docker floors checked. The check follows the endpoint Compose
+  uses, including `DOCKER_HOST` and the current Docker context, which Docker
+  Desktop uses in place of `DOCKER_HOST`. To verify on Docker, Docker Desktop and
+  Podman.
 - **D2, Compose floor on Podman.** `make down` and the treasury controller pass
   `--timeout -1` (`stack.py:48`, `x402_treazury.py:186,206,242,278`), so
   `stop_grace_period` does not govern them. `gw_priority` leaves the Podman model
   in either case. Open questions: what Podman does with a stop timeout of `-1`
-  through the API, and the treasury recreate path (`x402_treazury.py:256`).
-  Recommendation: decide the floor after those checks; Compose 2.26.1 is enough
-  if they pass, apart from the `test_storage` rendering difference (F8), which
-  the test must then accept.
+  through the API, and the treasury recreate path (`x402_treazury.py:256`). Also
+  check the container's `.Config.StopTimeout` for `stop_grace_period: -1s`: it
+  governs stops that the engine starts, such as logout without linger, the user
+  `podman-restart.service` and reboot, which can end a running wallet job.
+  Recommendation: one floor, Compose 2.36+, on both engines. It removes the F8
+  exceptions and keeps `test_storage` proving that a missing bind source fails.
+  On Debian 13 this means the Compose release binary, installed per user.
 - **D3, `start_interval` on Podman.** Compose refuses it because of the Podman
   API version, not the Compose version. The overlay resets it.
 - **D4, host loopback through pasta (Podman only).** On Docker, teep already
@@ -154,43 +176,67 @@ not a speculative option.
   with a documented reason; set pasta options in the user's `containers.conf`
   (user-wide, outside the repository); or add a deny in teep's namespace, which
   needs a namespace owner or `NET_ADMIN` and conflicts with the least-machinery
-  rules. Recommendation: test loopback-only reachability first, then decide. P3 checks follow the decision.
-- **D5, network settings and aardvark-dns.** The endpoint firewalls deny
-  `10.0.0.0/8` and connected networks (`network.py:17,105,146`), which covers
-  aardvark at each gateway. Decide whether the overlay also sets `isolate: strict`
-  to match the experiments, and whether DNS off can be set through Compose at
-  all. Keep a P3 runtime check of aardvark on port 53.
+  rules. Recommendation: test loopback-only reachability from teep first, with a
+  host service bound only to `127.0.0.1`, at `169.254.1.2` and at the host's
+  default gateway address as seen in the rootless namespace (pasta can map it to
+  the host). Then decide. Hermes, the executor and Tor already deny
+  `169.254.0.0/16` (`network.py:17-18`). P3 checks follow the decision.
+- **D5, network isolation and aardvark-dns.** Decision: `isolate: strict` on
+  every network (F9). The endpoint firewalls deny `10.0.0.0/8` and connected
+  networks (`network.py:17,107,148`), which covers aardvark at each gateway. DNS
+  stays on for `teep-uplink`: teep resolves provider names through aardvark
+  there, where Docker uses `127.0.0.11`. Turning DNS off on the internal networks
+  is optional and only if Compose can set it. Keep a P3 runtime check of aardvark
+  on port 53.
 - **D6, restart loops (F7).** Any fail-closed exit restarts about every 0.3 s
   on Podman, and `up --wait` then waits without end. Recommendation: preflight
   checks that teep has at least one provider key, a real startup requirement.
-  For other exits, the guide states how an operator sees the loop
+  For other exits, the guide states how to see the loop
   (`podman ps`, restart count). A general backoff stays deferred.
 - **D7, Funnel on Podman.** The port forwarder connects to the first network
   address. With Funnel, `funnel-link` (`10.203.87.3`) may sort before
-  `webapp-backend`, and F6's rule and listen address would then miss.
-  Recommendation: derive the address in HAProxy's startup from the forwarder's
-  actual connection target, or fix the network order; check local access with
-  Funnel on, without live enrollment.
+  `webapp-backend`, and F6's rule and listen address would then miss. Podman
+  appears to order networks by name. Decision: on Podman, HAProxy's local
+  frontend also listens on its internal addresses, and the firewall accepts new
+  connections to the webapp port from those addresses only on `lo`, with the
+  matching OUTPUT rule. Only processes inside HAProxy's namespace can send
+  loopback traffic, and the port forwarder is one of them; traffic from
+  `funnel-link` or `webapp-backend` arrives on other interfaces and stays
+  dropped. This does not depend on network order. The engine reaches HAProxy's
+  configuration through `render()` (`stack.py:76`), and its startup through the
+  overlay's environment value. Check local access with Funnel on, without live
+  enrollment.
 
 ## Phases
 
 ### P1 — Engine-neutral changes (pull request 1)
 
-GRE through netlink and the Tor control directory owner (F1, F2). Status: draft
-pull request 1, Docker check in progress.
+GRE through netlink and the Tor control directory owner (F1, F2). Status:
+merged as `be62899` (merge `ce5b966`) after a check on Docker by the maintainer.
+The Docker Desktop result is not recorded here.
 
 ### P2 — Podman overlay, engine selection and ingress
 
-Implement the approach and D1–D7. Consumers: `compose.podman.yaml`,
-`scripts/deployment.py`, `scripts/stack.py`, `scripts/preflight.py`, the
-Makefile, `tests/compose.yaml`, `tests/test_configuration.py`,
-`tests/test_storage.py`, the smoke tests that build Compose commands
-(`smoke.py`, `storage_smoke.py`, `plugins_smoke.py`, `webapp_smoke.py`,
-`x402_treazury_smoke.py`, `research_config_smoke.py`,
-`endpoint_readiness_smoke.py`), `components/webapp/settings.py`,
-`components/webapp/proxy-start.py`. Acceptance: the effective models for Docker
-and Podman, each with and without Funnel, differ only in the intended keys;
-unit tests pass on both engines.
+Implement the approach and D1–D7. Consumers:
+
+- `compose.podman.yaml`, `scripts/deployment.py`, `scripts/stack.py`, the
+  Makefile, `.env.example`.
+- `scripts/preflight.py`: engine floors (D1, D2), the teep key check (D6), and
+  the address-conflict check, which reads Docker's `Labels` and `IPAM.Config`
+  and checks nothing on Podman, whose inspect output has `labels` and `subnets`.
+- Direct engine calls: `scripts/provisioning.py`, and `docker inspect`, `logs
+  --since` and `wait` in `scripts/x402_treazury.py`; Podman's `StartedAt` format
+  must work with `logs --since`.
+- Tests: `tests/compose.yaml`, `test_configuration.py`, `test_storage.py`,
+  `test_endpoint_readiness.py`, `hermes_ui.py`, and the smoke tests that build
+  Compose or `docker run` commands (`smoke.py`, `storage_smoke.py`,
+  `plugins_smoke.py`, `webapp_smoke.py`, `x402_treazury_smoke.py`,
+  `research_config_smoke.py`, `endpoint_readiness_smoke.py`, `images_smoke.py`,
+  `context_refs_smoke.py`, `desktop_tools_smoke.py`).
+- `components/webapp/settings.py`, `components/webapp/proxy-start.py`.
+
+Acceptance: the effective models for Docker and Podman, each with and without
+Funnel, differ only in the intended keys; unit tests pass on both engines.
 
 ### P3 — Qualification on both engines
 
@@ -204,7 +250,9 @@ next to the Docker addresses:
 - Forbidden paths: direct egress; host services at the host IP and each gateway;
   `169.254.1.2` from Hermes and the executor, and from teep as D4 decides;
   Docker or Podman DNS; UDP other than DNS; non-loopback IPv6; Hermes to
-  HAProxy's listen addresses; wrong `Host` (421).
+  HAProxy's listen addresses; wrong `Host` (421). Between networks (F9): teep to
+  HAProxy's edge address, `tailscale` to HAProxy's edge address, `tailscale` to
+  teep, and teep to the Tor uplink.
 - `make storage-test` and the locking checks on rootless volumes.
 - x402_treazury without funds: `group_add: 102` access to the Tor SOCKS socket
   under user-namespace mapping, `make x402_treazury-init` and the preparation
@@ -228,7 +276,11 @@ next to the Docker addresses:
 ### Gates
 
 - **G1, design gate before P2:** a fresh independent reviewer checks this plan,
-  D1–D7 and the evidence.
+  D1–D7 and the evidence. Result on `f2a08e1`: pass with conditions. Blocking
+  findings: missing separation between networks, a D1 rule that must identify
+  Podman positively, the overlay's position in the file list, and stale P1
+  status. This revision resolves them; F9 was tested after the review. The
+  non-blocking findings are in D2, D4, D5, D7 and the P2 consumer list.
 - **G2, final gate after P4:** a fresh independent reviewer checks the combined
   change, the P3 evidence on both engines and the guides.
 
@@ -258,9 +310,10 @@ state format changes.
 
 ## Missing evidence
 
-- Docker runs of P1, on Docker Desktop and Linux Docker.
-- D1 detection, D2 stop-timeout behavior, D4 loopback-only reachability, D5
-  settings through Compose, D7 network order with Funnel.
+- A recorded Docker Desktop run of P1.
+- D1 detection, D2 stop-timeout behavior and `.Config.StopTimeout`, D4
+  loopback-only reachability, D5 settings through Compose and `isolate: strict`
+  on the uplink networks, D7 with Funnel.
 - x402_treazury and Funnel on Podman.
 - Other kernels and distributions, for example hosts with `br_netfilter` loaded
   or with restricted unprivileged user namespaces.
