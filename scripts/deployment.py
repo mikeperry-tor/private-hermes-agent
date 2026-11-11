@@ -3,6 +3,7 @@ from functools import cache
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 
@@ -15,25 +16,86 @@ def _output(*args):
     return subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=True).stdout
 
 
+def _endpoint_components(url):
+    """Return the component names that the engine API at a unix:// URL reports."""
+    if not url.startswith('unix://'):
+        raise ValueError('Only unix:// engine endpoints can be identified')
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(10)
+        connection.connect(url[len('unix://'):])
+        connection.sendall(b'GET /version HTTP/1.0\r\nHost: engine\r\n\r\n')
+        response = b''
+        while chunk := connection.recv(65536):
+            response += chunk
+    body = response.partition(b'\r\n\r\n')[2]
+    return [entry.get('Name') for entry in json.loads(body).get('Components') or [] if isinstance(entry, dict)]
+
+
 @cache
 def engine():
-    """Return 'podman' only when the engine positively identifies as Podman.
+    """Return 'podman' only when the endpoint Compose uses identifies as Podman.
 
-    Any other answer, including a failed query, selects Docker. On Docker the
-    Docker files are then complete; on Podman netavark rejects their Docker
-    bridge options, so startup stops instead of running with weaker isolation.
+    Any other answer, including a failed query, selects Docker, whose files are
+    complete on Docker. With the Docker files, Podman refuses to start the stack:
+    Compose rejects healthcheck.start_interval for Podman's API version.
     """
     try:
-        # podman-docker and docker shims run Podman as the `docker` command, and
-        # `podman compose` points Compose at the Podman socket.
         if _output('docker', '--version').lower().startswith('podman version'):
-            return 'podman'
-        # The Docker CLI follows DOCKER_HOST and the current context, as Compose does.
-        components = json.loads(_output('docker', 'version', '--format', '{{json .Server.Components}}'))
-    except (OSError, subprocess.CalledProcessError, ValueError):
+            # podman-docker or a shim: `podman compose` passes DOCKER_HOST to
+            # Compose when it is set, so identify that endpoint; otherwise
+            # Compose uses the user's Podman socket.
+            host = os.environ.get('DOCKER_HOST')
+            names = _endpoint_components(host) if host else ['Podman Engine']
+        else:
+            # The Docker CLI follows DOCKER_HOST and the current context, as Compose does.
+            components = json.loads(_output('docker', 'version', '--format', '{{json .Server.Components}}'))
+            names = [entry.get('Name') for entry in components or [] if isinstance(entry, dict)]
+    except (OSError, subprocess.CalledProcessError, ValueError, AttributeError):
         return 'docker'
-    names = [entry.get('Name') for entry in components or [] if isinstance(entry, dict)]
     return 'podman' if 'Podman Engine' in names else 'docker'
+
+
+def ensure_networks(command):
+    """On Podman, create the project's networks with their declared options.
+
+    Compose creates networks through Podman's Docker-compatible API, which sets
+    only isolate=true and drops other bridge options such as isolate=strict and
+    no_default_route. Networks created here carry Compose's labels, so Compose
+    adopts them and `down` removes them. An existing network without the
+    declared options stops startup.
+    """
+    if engine() != 'podman':
+        return
+    config = json.loads(_output(*command, '--profile', '*', 'config', '--format', 'json'))
+    for key, network in (config.get('networks') or {}).items():
+        if network.get('external'):
+            continue
+        name = network['name']
+        options = {option: str(value) for option, value in (network.get('driver_opts') or {}).items()}
+        subnets = sorted(entry['subnet'] for entry in (network.get('ipam') or {}).get('config') or []
+                         if 'subnet' in entry)
+        internal = bool(network.get('internal'))
+        found = subprocess.run(['podman', 'network', 'inspect', name], cwd=ROOT, text=True, capture_output=True)
+        if found.returncode == 0:
+            actual = json.loads(found.stdout)[0]
+            actual_options = actual.get('options') or {}
+            actual_subnets = sorted(entry['subnet'] for entry in actual.get('subnets') or [])
+            if (any(actual_options.get(option) != value for option, value in options.items())
+                    or bool(actual.get('internal')) != internal
+                    or (subnets and actual_subnets != subnets)):
+                raise RuntimeError(f'Podman network {name} does not have the options the stack declares. '
+                                   'Run make down so that it is created again.')
+            continue
+        arguments = ['podman', 'network', 'create',
+                     '--label', f"com.docker.compose.project={config['name']}",
+                     '--label', f'com.docker.compose.network={key}']
+        if internal:
+            arguments.append('--internal')
+        for subnet in subnets:
+            arguments += ['--subnet', subnet]
+        for option, value in options.items():
+            arguments += ['--opt', f'{option}={value}']
+        subprocess.run([*arguments, name], cwd=ROOT, text=True, capture_output=True, check=True)
 
 
 def compose_files(funnel, extra=()):

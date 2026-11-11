@@ -21,8 +21,9 @@ from storage import initialize as initialize_storage
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from provisioning import initialize_setup, initialize_research_config
+from deployment import compose_files, ensure_networks
 
-COMPOSE = ['docker', 'compose', '-p', 'private-hermes-test', '-f', 'compose.yaml', '-f', 'tests/compose.yaml']
+COMPOSE = ['docker', 'compose', '-p', 'private-hermes-test', *compose_files(False, extra=('tests/compose.yaml',))]
 
 
 @contextmanager
@@ -72,7 +73,15 @@ for base,dirs,files in os.walk(root):
                 os.environ['TEST_DATA_DIR'] = previous
 
 
+# Podman counterparts of the Docker host and VM addresses: pasta's address for the
+# host, and the gateway address of each network, where aardvark-dns answers.
+GATEWAYS = ('10.203.80.1', '10.203.81.1', '10.203.82.1', '10.203.83.1', '10.203.84.1', '10.203.85.1')
+PODMAN_HOST_TARGETS = ('169.254.1.2', *GATEWAYS)
+
+
 def compose(*args, check=True, **kwargs):
+    if args[:1] == ('up',):
+        ensure_networks(COMPOSE)
     return subprocess.run(COMPOSE + list(args), check=check, text=True, capture_output=True, **kwargs)
 
 
@@ -136,7 +145,7 @@ def run_suite():
         # namespace, or make the executor able to use inference indirectly.
         for service in ('hermes', 'executor'):
             python(service, f"""import socket
-for host in ('172.17.0.1','192.168.65.1','192.168.65.2','192.168.65.254'):
+for host in ('172.17.0.1','192.168.65.1','192.168.65.2','192.168.65.254',*{PODMAN_HOST_TARGETS!r}):
  try: socket.create_connection((host,{host_port}),timeout=.3).close()
  except OSError: pass
  else: raise AssertionError(('Published inference reached through host',host))
@@ -150,10 +159,11 @@ for host in ('172.17.0.1','192.168.65.1','192.168.65.2','192.168.65.254'):
         assert curl('fixture', 'http://127.0.0.1:8001').stdout == 'ok'
         python('fixture', "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(2); s.sendto(b'probe',('127.0.0.1',111)); assert s.recv(1024)==b'rpcbind-open'")
         for service in ('hermes', 'executor'):
-            for host in ('10.203.80.10', '172.17.0.1', '192.168.65.1', '192.168.65.2', '192.168.65.254', '169.254.169.254'):
+            for host in ('10.203.80.10', '172.17.0.1', '192.168.65.1', '192.168.65.2', '192.168.65.254', '169.254.169.254',
+                         *PODMAN_HOST_TARGETS):
                 assert curl(service, f'http://{host}:111', check=False).returncode != 0, (service, host)
             python(service, """import socket
-for host in ('10.203.80.10', '172.17.0.1', '192.168.65.254'):
+for host in ('10.203.80.10', '172.17.0.1', '192.168.65.254', '169.254.1.2'):
  s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(.3)
  try:
   s.connect((host,111)); s.send(b'blocked'); s.recv(1024)
@@ -191,12 +201,13 @@ assert 'False' in str(r), r
         for service in ('hermes', 'executor'):
             python(service, """import socket
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(.5)
-try:
- s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),('127.0.0.11',53))
- s.recv(4096)
-except (OSError, TimeoutError): pass
-else: raise AssertionError('Docker embedded DNS bypass')
-""")
+for server in ('127.0.0.11', *GATEWAYS):
+ try:
+  s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),(server,53))
+  s.recv(4096)
+ except (OSError, TimeoutError): pass
+ else: raise AssertionError(('Engine DNS bypass', server))
+""".replace('GATEWAYS', repr(GATEWAYS)))
         print('PASS: actual Hermes terminal and execute_code run remotely without agent keys; code has no capabilities; embedded DNS blocked', flush=True)
 
         # Actual MCP SDK initialize/list/call over streamed HTTP/SSE.

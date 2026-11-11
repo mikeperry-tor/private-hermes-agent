@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from deployment import ROOT, compose, compose_files, render, settings, maintenance_compose, maintenance_command
+from deployment import ROOT, compose, compose_files, ensure_networks, render, settings, maintenance_compose, maintenance_command
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config
@@ -91,6 +91,7 @@ def main_unlocked():
         initialize_research_config(command, ROOT)
         initialize_setup(command)
         infrastructure = ['tor', 'agent-net', 'executor-net', 'executor', 'teep']
+        ensure_networks(command)
         run(command + ['up', '-d', '--wait', '--no-deps', *infrastructure])
         controller = Controller(command, ROOT)
         # Setup already removed research registrations. The recreated gateway

@@ -19,9 +19,8 @@ from auth import hash_password
 from settings import Settings, proxy_config
 
 PROJECT = 'private-hermes-webapp-test'
-smoke.COMPOSE = ['docker', 'compose', '-p', PROJECT, '-f', 'compose.yaml',
-                 '-f', 'compose.funnel.yaml',
-                 '-f', 'tests/compose.yaml', '-f', 'tests/webapp-compose.yaml']
+smoke.COMPOSE = ['docker', 'compose', '-p', PROJECT,
+                 *smoke.compose_files(True, extra=('tests/compose.yaml', 'tests/webapp-compose.yaml'))]
 
 
 def http(path, headers=None, data=None):

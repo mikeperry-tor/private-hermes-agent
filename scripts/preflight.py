@@ -3,6 +3,7 @@
 import argparse
 import ipaddress
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,12 +23,20 @@ def version(value):
 
 def check_engine():
     if engine() == 'podman':
-        # Netavark isolate and the overlay's Compose tags were qualified on 5.4.
-        client = output('docker', '--version')
-        found = client if client.lower().startswith('podman version') else \
-            output('docker', 'version', '--format', '{{.Server.Version}}')
-        if version(found) < (5, 4, 0):
+        # The stack creates its Podman networks with the podman command
+        # (deployment.ensure_networks); netavark isolate=strict was qualified on 5.4.
+        try:
+            info = json.loads(output('podman', 'info', '--format', 'json'))
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise SystemExit('The podman command is required with the Podman engine.') from error
+        if version(info['version']['Version']) < (5, 4, 0):
             raise SystemExit('Podman 5.4+ is required for rootless network isolation.')
+        if info['host']['security']['rootless'] is not True:
+            raise SystemExit('Podman must run rootless: rootful bridge gateways are host addresses.')
+        host = os.environ.get('DOCKER_HOST')
+        socket_path = info['host'].get('remoteSocket', {}).get('path', '')
+        if host and host.removeprefix('unix://') != socket_path.removeprefix('unix://'):
+            raise SystemExit(f'DOCKER_HOST must name this user\'s Podman socket ({socket_path}) or be unset.')
     elif version(output('docker', 'version', '--format', '{{.Server.Version}}')) < (28, 0, 0):
         raise SystemExit('Docker Engine 28+ is required for isolated bridge gateway mode.')
     if version(output('docker', 'compose', 'version', '--short')) < (2, 36, 0):

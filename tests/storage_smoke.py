@@ -9,7 +9,7 @@ import smoke
 
 
 smoke.COMPOSE = ['docker', 'compose', '-p', 'private-hermes-storage-test',
-                 '-f', 'compose.yaml', '-f', 'tests/compose.yaml']
+                 *smoke.compose_files(False, extra=('tests/compose.yaml',))]
 
 
 def main():

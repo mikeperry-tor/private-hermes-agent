@@ -6,7 +6,7 @@ import subprocess
 import smoke
 
 smoke.COMPOSE = ['docker', 'compose', '-p', 'private-hermes-plugins-test',
-                 '-f', 'compose.yaml', '-f', 'tests/compose.yaml']
+                 *smoke.compose_files(False, extra=('tests/compose.yaml',))]
 FIXTURE = (Path(__file__).parent / 'fixtures/plugin_lifecycle.py').read_text()
 
 

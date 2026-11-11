@@ -105,11 +105,30 @@ class DiagnosticContractTests(unittest.TestCase):
         controller = treasury.Controller(['test-compose'])
         controller.running = lambda service: ''
         controller.call = Mock(return_value=subprocess.CompletedProcess([], 0, stdout='stopped-id\n'))
-        with patch.object(treasury.subprocess, 'check_output', return_value='current-start\n'), \
+        with patch.object(treasury.subprocess, 'check_output',
+                          return_value='2026-11-11 22:32:02.496429564 +0000 UTC\n'), \
                 patch.object(treasury.subprocess, 'run') as logs, \
                 self.assertRaisesRegex(RuntimeError, 'Research service stopped'):
             controller.serving_instance()
-        self.assertEqual(logs.call_args.args[0], ['docker', 'logs', '--since', 'current-start', 'stopped-id'])
+        self.assertEqual(logs.call_args.args[0],
+                         ['docker', 'logs', '--since', '1794436322.496429', 'stopped-id'])
+
+    def test_start_times_of_both_engines_become_the_same_unix_timestamp(self):
+        # Podman's StartedAt contains spaces; logs --since takes a Unix timestamp on both engines.
+        for started in ('2026-11-11T22:32:02.496429564Z', '2026-11-11 22:32:02.496429564 +0000 UTC',
+                        '2026-11-11T23:32:02.496429564+01:00'):
+            with self.subTest(started=started):
+                self.assertEqual(treasury.log_since(started), '1794436322.496429')
+        self.assertEqual(treasury.log_since('2026-11-11T22:32:02Z'), '1794436322.000000')
+        with self.assertRaises(ValueError):
+            treasury.log_since('2026-11-11')
+
+    def test_instance_keeps_start_time_and_restart_count_apart(self):
+        controller = treasury.Controller(['test-compose'])
+        controller.running = lambda service: 'serving-id'
+        with patch.object(treasury.subprocess, 'check_output',
+                          return_value='2|2026-11-11 22:32:02.496429564 +0000 UTC\n'):
+            self.assertEqual(controller.serving_instance(), ('serving-id', '1794436322.496429', '2'))
 
     def follow(self, line):
         process = Mock(stdout=io.StringIO(line))

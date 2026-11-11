@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'components/x402_treazury'))
 from endpoints import ADDRESS, ENDPOINTS
 
 smoke.COMPOSE = ['docker', 'compose', '-p', 'private-hermes-x402-treazury-test',
-                 '-f', 'compose.yaml', '-f', 'tests/compose.yaml']
+                 *smoke.compose_files(False, extra=('tests/compose.yaml',))]
 
 
 def run_suite():

@@ -2,16 +2,18 @@
 """Deployment-side staged onboarding; no wallet secrets leave its container."""
 import argparse
 from contextlib import contextmanager
+from datetime import datetime
 import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
 import threading
 import time
-from deployment import ROOT, maintenance_compose
+from deployment import ROOT, ensure_networks, maintenance_compose
 from provisioning import initialize_research_config
 
 
@@ -20,6 +22,23 @@ ENDPOINT_FAILURES = (
     'MCP endpoint unavailable; catalog startup failed; correct the reported cause and restart',
     'MCP endpoint tools are unavailable because its tool selection is invalid; correct the configuration and restart',
 )
+
+
+def log_since(started_at):
+    """Return a container start time as a Unix timestamp for `logs --since`.
+
+    Docker reports RFC 3339 (`2026-11-11T22:32:02.496429564Z`); Podman reports
+    `2026-11-11 22:32:02.496429564 +0000 UTC`. Both engines accept a Unix
+    timestamp for --since.
+    """
+    match = re.fullmatch(r'(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d:\d\d)(?:\.(\d+))?'
+                         r'\s*(Z|[+-]\d\d:?\d\d)?(?: [A-Z]+)?', started_at.strip())
+    if not match:
+        raise ValueError(f'Cannot read the container start time: {started_at!r}')
+    day, clock, fraction, zone = match.groups()
+    zone = '+00:00' if zone in (None, 'Z') else f'{zone[:3]}:{zone[-2:]}'
+    instant = datetime.fromisoformat(f'{day}T{clock}{zone}')
+    return f'{instant.timestamp():.0f}.{(fraction or "0")[:6].ljust(6, "0")}'
 
 
 @contextmanager
@@ -66,6 +85,8 @@ class Controller:
         self.command, self.root = command, Path(root)
 
     def call(self, *arguments, **kwargs):
+        if arguments[:1] == ('up',):
+            ensure_networks(self.command)
         return subprocess.run([*self.command, *arguments], cwd=self.root, text=True, check=True, **kwargs)
 
     def admin(self, action, capture=False):
@@ -108,12 +129,14 @@ class Controller:
             stopped = self.call('ps', '-a', '-q', 'x402_treazury', capture_output=True).stdout.strip()
             if stopped:
                 started = subprocess.check_output(['docker', 'inspect', stopped, '--format',
-                                                   '{{.State.StartedAt}}'], text=True).strip()
-                subprocess.run(['docker', 'logs', '--since', started, stopped], cwd=self.root, check=True)
+                                                   '{{.State.StartedAt}}'], text=True)
+                subprocess.run(['docker', 'logs', '--since', log_since(started), stopped], cwd=self.root, check=True)
             raise RuntimeError('Research service stopped before MCP activation completed; see its startup diagnostics.')
-        state = subprocess.check_output(['docker', 'inspect', identifier, '--format',
-                                         '{{.State.StartedAt}} {{.RestartCount}}'], text=True).split()
-        return identifier, *state
+        # Podman's start time contains spaces, so the restart count comes first.
+        restarts, started = subprocess.check_output(['docker', 'inspect', identifier, '--format',
+                                                     '{{.RestartCount}}|{{.State.StartedAt}}'],
+                                                    text=True).strip().split('|', 1)
+        return identifier, log_since(started), restarts
 
     def require_instance(self, expected):
         if self.serving_instance() != expected:

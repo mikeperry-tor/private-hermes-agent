@@ -10,6 +10,29 @@ def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, **kwargs)
 
 
+def firewall(forwarder, edge, edge_ip, port, funnel):
+    """Return the IPv4 iptables-restore input for HAProxy's namespace."""
+    if forwarder == 'interface':
+        # Docker delivers published connections on the publication interface.
+        rules = [f'-A INPUT -i {edge} -d {edge_ip}/32 -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
+    else:
+        # The rootless Podman port forwarder runs in this namespace and connects
+        # over loopback. Only processes in this namespace can send on lo; traffic
+        # from the connected networks arrives on other interfaces and stays dropped.
+        rules = [f'-A INPUT -i lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT',
+                 f'-A OUTPUT -o lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
+    if funnel:
+        rules += ['-A INPUT -s 10.203.87.2/32 -d 10.203.87.3/32 -p tcp --dport 8443 -m conntrack --ctstate NEW -j ACCEPT']
+    return '\n'.join([
+        '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
+        '-A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',
+        '-A OUTPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',
+        *rules,
+        '-A OUTPUT -d 10.203.85.2/32 -p tcp --dport 9120 -m conntrack --ctstate NEW -j ACCEPT',
+        'COMMIT', '',
+    ])
+
+
 def main():
     # Fail closed on any error, including restarts with existing interfaces.
     for binary in ('iptables', 'ip6tables'):
@@ -21,9 +44,7 @@ def main():
     config = Path('/usr/local/etc/haproxy/haproxy.cfg').read_text()
     if config.splitlines()[0] != f'# WEBAPP_EXTERNAL_CONTENT={policy}':
         raise ValueError('External-content policy mismatch: regenerate ingress and recreate services')
-    # Docker delivers published connections on the publication interface. The
-    # rootless Podman port forwarder connects from inside this namespace over
-    # loopback; compose.podman.yaml selects that mode.
+    # compose.podman.yaml selects the loopback mode; see firewall().
     forwarder = os.environ.get('PRIVATE_HERMES_PORT_FORWARDER', 'interface')
     if forwarder not in ('interface', 'loopback'):
         raise ValueError('Invalid port forwarder mode')
@@ -45,22 +66,7 @@ def main():
     edge_ip = next(info['local'] for entry in addresses if entry['ifname'] == edge[0]
                    for info in entry['addr_info'] if info['scope'] == 'global')
     os.environ['PRIVATE_HERMES_EDGE_IP'] = edge_ip
-    rules = [f'-A INPUT -i {edge[0]} -d {edge_ip}/32 -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
-    if enabled == 'true':
-        rules += ['-A INPUT -s 10.203.87.2/32 -d 10.203.87.3/32 -p tcp --dport 8443 -m conntrack --ctstate NEW -j ACCEPT']
-    if forwarder == 'loopback':
-        # Only processes in this namespace can send on lo; traffic from the
-        # connected networks arrives on other interfaces and stays dropped.
-        rules += [f'-A INPUT -i lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT',
-                  f'-A OUTPUT -o lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
-    run('iptables-restore', input='\n'.join([
-        '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
-        '-A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',
-        '-A OUTPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',
-        *rules,
-        '-A OUTPUT -d 10.203.85.2/32 -p tcp --dport 9120 -m conntrack --ctstate NEW -j ACCEPT',
-        'COMMIT', '',
-    ]))
+    run('iptables-restore', input=firewall(forwarder, edge[0], edge_ip, port, enabled == 'true'))
     run('ip6tables-restore', input='\n'.join([
         '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
         'COMMIT', '',
