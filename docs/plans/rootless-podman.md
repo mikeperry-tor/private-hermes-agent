@@ -299,10 +299,16 @@ Funnel off):
   on port 8337 and HAProxy's edge address, every network had `isolate=true`,
   and HAProxy had a default route.
 - After item 6a, the same test on a stack recreated with `make down` and
-  `make up` gave 33 of 33 expected results: all of the above blocked, every
-  network `isolate=strict`, no default route for HAProxy, and the allowed and
-  forbidden paths of the first run unchanged. teep's direct HTTPS on its
-  isolated uplink works (`"IsTor":false`); the test now includes it.
+  `make up` gave all expected results: all of the above blocked, every network
+  `isolate=strict`, no default route for HAProxy, the allowed and forbidden paths
+  of the first run unchanged, and teep's direct HTTPS on its isolated uplink
+  (`"IsTor":false`). The current test has 35 checks, including a positive
+  control that its DNS probe gets an answer where Podman's DNS server is
+  reachable; a container without the probe tool makes a check fail, not pass.
+  This check first exposed that Hermes has no `nslookup`, so an earlier "blocked"
+  result for Hermes was not evidence; the raw UDP probe replaced it. The final run
+  on commit `TBD` passed 35 of 35, and `make down` then left no project
+  network.
 
 - `tests/smoke.py` (the `make test` suite, run as preflight plus the script,
   because `make check` stops at `test_storage`) passed all six sections on
@@ -410,18 +416,23 @@ state format changes.
 
 ## Missing evidence
 
-- A recorded Docker Desktop run of P1.
-- Podman's handling of `stop_grace_period: -1s` (`.Config.StopTimeout` on the
-  treasury container) and `stop --timeout -1` (D2).
-- Compose 2.36+ against Podman 5.4: `create_host_path: false`, `gw_priority` and
-  `start_interval` handling. The trial used Compose 2.26.1; P3 uses 2.40.3.
+- Docker: every P3 item on Docker Desktop and Linux Docker, including the unit
+  tests, `make check`, the live targets and a recorded Docker Desktop run of P1.
+  No Docker engine was available for this work.
+- The x402_treazury lifecycle on Podman beyond `x402_treazury-test`:
+  `make x402_treazury-init`, the preparation path up to funding, the live
+  `serving_instance()` and `log_since()` path, `.Config.StopTimeout` for
+  `stop_grace_period: -1s`, and real stops with `--timeout -1` (D2).
+- Restart and recreation of `tor` and the network owners on Podman, with the
+  services that share their namespaces.
 - The Compose version with which `test_storage` passes: 2.26.1 and 2.40.3 both
-  omit `create_host_path: false` from `config` output.
-- F9 between internal and mixed networks, and `isolate` set through Compose
-  rather than `podman network create -o`. P3 runs on a stack Compose creates.
-- D1 detection, D2 stop-timeout behavior and `.Config.StopTimeout`, D4
-  loopback-only reachability, D5 settings through Compose and `isolate: strict`
-  on the uplink networks, D7 with Funnel.
-- x402_treazury and Funnel on Podman.
-- Other kernels and distributions, for example hosts with `br_netfilter` loaded
-  or with restricted unprivileged user namespaces.
+  omit `create_host_path: false` from `config` output. Compose 2.36 to 2.39 with
+  Podman, including adoption of pre-created networks, is not tested; P3 used
+  2.40.3.
+- Live Funnel enrollment (only the simulated HTTPS path ran), the Firefox and
+  WebKit content checks, and other kernels and distributions, for example hosts
+  with `br_netfilter` loaded or restricted unprivileged user namespaces.
+- `research_config_smoke.py`, `endpoint_readiness_smoke.py`, `images_smoke.py`,
+  `context_refs_smoke.py`, `desktop_tools_smoke.py` and `hermes_ui.py` were not
+  run on Podman. They are unchanged: they use their own fixture models,
+  `network_mode: none` or no network, so they do not depend on the overlays.

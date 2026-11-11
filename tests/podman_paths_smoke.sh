@@ -3,7 +3,7 @@
 # (project private-hermes). Run after `make up` on Podman:
 #   sh tests/podman_paths_smoke.sh
 # Each check prints PASS or FAIL against the expected result; the script exits
-# non-zero on any FAIL. It starts a host service on 127.0.0.1:11111, and a
+# non-zero on any FAIL. It starts a TCP listener on 127.0.0.1:11111, and a
 # disposable network and container without isolation, and removes them at exit.
 set -u
 P=private-hermes
@@ -19,14 +19,22 @@ import socket,sys
 s=socket.socket(); s.settimeout(5)
 try: s.connect(('$2',$3)); print('open')
 except Exception: print('blocked')" 2>/dev/null
-  else
+  elif podman exec "$(c "$1")" sh -c "command -v nc >/dev/null" 2>/dev/null; then
     podman exec "$(c "$1")" sh -c "nc -z -w 5 $2 $3 && echo open || echo blocked" 2>/dev/null
+  else
+    echo "error (no python3 or nc in $1)"
   fi
 }
 ip_of() { podman inspect "$(c "$1")" --format "{{(index .NetworkSettings.Networks \"${P}_$2\").IPAddress}}"; }
 
 # Stand-in host service bound only to host loopback (D4).
-python3 -I -m http.server 11111 --bind 127.0.0.1 >/dev/null 2>&1 & HOSTSVC=$!
+# A TCP listener that serves nothing: the probes only test whether a connection opens.
+python3 -I -c '
+import socket
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", 11111)); s.listen()
+while True: s.accept()[0].close()
+' >/dev/null 2>&1 & HOSTSVC=$!
 PLAIN=private-hermes-paths-plain
 cleanup() {
   kill $HOSTSVC 2>/dev/null
@@ -68,7 +76,13 @@ expect "teep -> HAProxy edge $edge:9120 (between networks)" blocked "$(tcp teep 
 expect "teep -> Tor uplink $torup:9040 (between networks)" blocked "$(tcp teep "$torup" 9040)"
 expect "tor -> teep uplink $teepup:8337 (between networks)" blocked "$(tcp tor "$teepup" 8337)"
 for svc in executor hermes; do
-  r=$(podman exec "$(c $svc)" sh -c 'nslookup -timeout=3 example.org 10.203.82.1 >/dev/null 2>&1 && echo open || echo blocked' 2>/dev/null)
+  # A raw DNS query for example.com over UDP, as tests/smoke.py sends.
+  r=$(podman exec "$(c $svc)" sh -c 'command -v python3 >/dev/null || { echo "error (no python3)"; exit; }; python3 -c "
+import socket
+s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)
+try:
+    s.sendto(bytes.fromhex(\"123401000001000000000000076578616d706c6503636f6d0000010001\"),(\"10.203.82.1\",53)); s.recv(4096); print(\"open\")
+except OSError: print(\"blocked\")"' 2>/dev/null)
   expect "$svc -> aardvark-dns at gateway 10.203.82.1:53" blocked "$r"
 done
 r=$(podman exec "$(c executor)" sh -c 'curl -6 -s --max-time 8 -o /dev/null https://check.torproject.org/ && echo open || echo blocked' 2>/dev/null)
@@ -80,6 +94,16 @@ expect "executor IPv6 egress" blocked "$r"
 IMAGE=$(podman inspect "$(c teep)" --format '{{.ImageName}}')
 podman network create --subnet 10.203.95.0/24 "$PLAIN" >/dev/null
 podman run -d --name "$PLAIN" --network "$PLAIN" --entrypoint sleep "$IMAGE" 600 >/dev/null
+# Positive control for the DNS probe: Podman's DNS server answers on the
+# disposable network's gateway.
+EXECUTOR_IMAGE=$(podman inspect "$(c executor)" --format '{{.ImageName}}')
+r=$(podman run --rm --network "$PLAIN" --entrypoint python3 "$EXECUTOR_IMAGE" -c "
+import socket
+s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)
+try:
+    s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),('10.203.95.1',53)); s.recv(4096); print('open')
+except OSError: print('blocked')" 2>/dev/null)
+expect "DNS probe control: Podman DNS answers on a plain network" open "$r"
 for target in "$teepup 8337 teep-uplink" "$edge 9120 HAProxy-edge" "10.203.83.3 8337 teep-inference"; do
   set -- $target
   r=$(podman exec "$PLAIN" sh -c "nc -z -w 5 $1 $2 && echo open || echo blocked" 2>/dev/null)

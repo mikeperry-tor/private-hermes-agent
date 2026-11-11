@@ -55,6 +55,32 @@ def engine():
     return 'podman' if 'Podman Engine' in names else 'docker'
 
 
+def remove_networks(command):
+    """On Podman, remove the project networks that Compose `down` left.
+
+    ensure_networks() creates the networks of every profile; Compose `down`
+    removes only those of the services it manages. Only networks with this
+    project's Compose label are removed. A failure is reported and does not
+    block shutdown.
+    """
+    if engine() != 'podman':
+        return
+    config = json.loads(_output(*command, '--profile', '*', 'config', '--format', 'json'))
+    for network in (config.get('networks') or {}).values():
+        if network.get('external'):
+            continue
+        name = network['name']
+        found = subprocess.run(['podman', 'network', 'inspect', name], cwd=ROOT, text=True, capture_output=True)
+        if found.returncode != 0:
+            continue
+        labels = json.loads(found.stdout)[0].get('labels') or {}
+        if labels.get('com.docker.compose.project') != config['name']:
+            continue
+        removed = subprocess.run(['podman', 'network', 'rm', name], cwd=ROOT, text=True, capture_output=True)
+        if removed.returncode:
+            print(f'Could not remove Podman network {name}: {removed.stderr.strip()}', file=sys.stderr, flush=True)
+
+
 def ensure_networks(command):
     """On Podman, create the project's networks with their declared options.
 

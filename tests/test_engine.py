@@ -164,6 +164,35 @@ class NetworkCreationTests(unittest.TestCase):
             with self.subTest(name=name, change=change), self.assertRaisesRegex(RuntimeError, 'make down'):
                 self.run_ensure({**good, name: {**good[name], **change}})
 
+    def test_down_removes_only_this_projects_leftover_networks(self):
+        inspected = {'private-hermes_inference': {'labels': {'com.docker.compose.project': 'private-hermes'}},
+                     'private-hermes_webapp-publish': {'labels': {'com.docker.compose.project': 'other'}}}
+        calls = []
+        def run(arguments, **kwargs):
+            calls.append(arguments)
+            if arguments[:3] == ['podman', 'network', 'inspect']:
+                found = inspected.get(arguments[3])
+                return subprocess.CompletedProcess(arguments, 0 if found else 125, json.dumps([found]) if found else '', '')
+            return subprocess.CompletedProcess(arguments, 0, '', '')
+        with patch.object(deployment, 'engine', return_value='podman'), \
+                patch.object(deployment, '_output', return_value=json.dumps(self.CONFIG)), \
+                patch.object(deployment.subprocess, 'run', side_effect=run):
+            deployment.remove_networks(['docker', 'compose'])
+        self.assertEqual([call for call in calls if call[:3] == ['podman', 'network', 'rm']],
+                         [['podman', 'network', 'rm', 'private-hermes_inference']])
+
+    def test_compose_passthrough_creates_networks_before_starting_services(self):
+        for command, creates in ((['up', '-d'], True), (['run', '--rm', 'teep', 'serve', '--help'], True),
+                                 (['ps'], False)):
+            with self.subTest(command=command), patch.object(sys, 'argv', ['stack.py', 'compose', *command]), \
+                    patch.object(stack, 'settings', return_value=deployment.Settings.read(dict(
+                        external_content='tor_proxied', funnel_enabled='false', webapp_bind='127.0.0.1',
+                        webapp_port='9120', webapp_username='admin', funnel_host='', funnel_port='443',
+                        tailscale_hostname='private-hermes'))), \
+                    patch.object(stack, 'ensure_networks') as ensure, patch.object(stack, 'run'):
+                stack.main_unlocked()
+                self.assertEqual(ensure.called, creates)
+
     def test_docker_engine_creates_no_network(self):
         with patch.object(deployment, 'engine', return_value='docker'), \
                 patch.object(deployment, '_output', side_effect=AssertionError('no Compose call')):

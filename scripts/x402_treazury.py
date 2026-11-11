@@ -32,7 +32,7 @@ def log_since(started_at):
     timestamp for --since.
     """
     match = re.fullmatch(r'(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d:\d\d)(?:\.(\d+))?'
-                         r'\s*(Z|[+-]\d\d:?\d\d)?(?: [A-Z]+)?', started_at.strip())
+                         r'\s*(Z|[+-]\d\d:?\d\d)?(?: \S+)?', started_at.strip())
     if not match:
         raise ValueError(f'Cannot read the container start time: {started_at!r}')
     day, clock, fraction, zone = match.groups()

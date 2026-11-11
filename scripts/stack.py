@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from deployment import ROOT, compose, compose_files, ensure_networks, render, settings, maintenance_compose, maintenance_command
+from deployment import ROOT, compose, compose_files, ensure_networks, remove_networks, render, settings, maintenance_compose, maintenance_command
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config
@@ -55,6 +55,7 @@ def main_unlocked():
             stop_funnel(all_command)
         finally:
             run(all_command + ['down', '--timeout', '-1'])
+            remove_networks(all_command)
         return
     if args.action == 'compose' and args.arguments[:1] == ['config']:
         # Inspect the actual model, including invalid policy values, without
@@ -70,7 +71,11 @@ def main_unlocked():
     if args.action == 'compose':
         if not args.arguments:
             raise ValueError('Provide a Compose command after compose')
+        if args.arguments[0] in ('up', 'create', 'run', 'start'):
+            ensure_networks(command)
         run(command + args.arguments)
+        if args.arguments[0] == 'down':
+            remove_networks(command)
     elif args.action == 'config':
         run(command + ['config', '--quiet'])
     else:

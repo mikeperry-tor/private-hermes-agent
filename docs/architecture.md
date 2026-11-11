@@ -98,7 +98,7 @@ Preflight requires rootless Podman 5.4+, the `podman` command, and a
 | `enable_ip_masquerade: false` on `webapp-publish` | `no_default_route=true`: HAProxy has no default route. |
 | Published ports enter on the publication interface | The rootless port forwarder runs inside HAProxy's namespace and connects over loopback to one of its addresses. The local frontend listens on all proxy addresses, and the proxy firewall admits new connections to the webapp port only on `lo`, so traffic from connected networks stays dropped. HAProxy's `X-Forwarded-For` value is therefore a proxy address for every client. |
 | Embedded DNS at `127.0.0.11` | aardvark-dns at each network gateway, denied by the endpoint firewalls with the connected networks. teep resolves provider names through it on `teep-uplink`. |
-| `healthcheck.start_interval`, `gw_priority` | Removed by the overlay. Podman's API refuses `start_interval`. `gw_priority` is not needed: the other network of teep and Tailscale is internal and has no gateway. |
+| `healthcheck.start_interval`, `gw_priority` | Removed by the overlay. Podman's API refuses `start_interval`. `gw_priority` is not needed: the other network of teep and Tailscale is internal and gives no default route. |
 | Unprivileged processes may bind any port (`net.ipv4.ip_unprivileged_port_start=0`) | Podman sets the floor to 1024. The overlay sets 0 for HAProxy, so a `WEBAPP_PORT` below 1024 works as on Docker; the other services use ports above 1024 or bind as root. |
 | Restart backoff | A container that exits at once restarts about every 0.3 s. Startup refuses to run without an inference provider key, on both engines, because teep exits at once without one. Check `podman ps` and restart counts when a service does not become healthy. |
 

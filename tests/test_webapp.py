@@ -116,12 +116,13 @@ class ShutdownTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / 'scripts'))
         import stack
         import os
-        with patch.dict(os.environ, {'TAILSCALE_FUNNEL_ENABLED':'bad', 'TEEP_HOST_PORT':'invalid'}), patch.object(sys,'argv',['stack.py','down']), patch.object(stack,'settings',side_effect=AssertionError('Unrelated settings validation')), patch.object(stack,'stop_funnel',side_effect=RuntimeError('test reset failure')), patch.object(stack,'run') as run:
+        with patch.dict(os.environ, {'TAILSCALE_FUNNEL_ENABLED':'bad', 'TEEP_HOST_PORT':'invalid'}), patch.object(sys,'argv',['stack.py','down']), patch.object(stack,'settings',side_effect=AssertionError('Unrelated settings validation')), patch.object(stack,'stop_funnel',side_effect=RuntimeError('test reset failure')), patch.object(stack,'remove_networks') as cleanup, patch.object(stack,'run') as run:
             with self.assertRaises(RuntimeError):
                 # Shutdown behavior must not acquire the operator's real lock.
                 stack.main_unlocked()
             self.assertIn('down', run.call_args.args[0])
             self.assertNotIn('--volumes', run.call_args.args[0])
+            cleanup.assert_called_once()
             self.assertNotIn('-v', run.call_args.args[0])
 
     def test_startup_runs_setup_once_before_gateway_without_starting_funnel(self):

@@ -115,8 +115,10 @@ class DiagnosticContractTests(unittest.TestCase):
 
     def test_start_times_of_both_engines_become_the_same_unix_timestamp(self):
         # Podman's StartedAt contains spaces; logs --since takes a Unix timestamp on both engines.
+        # Podman prints the host's local zone, whose name can be numeric (+04).
         for started in ('2026-11-11T22:32:02.496429564Z', '2026-11-11 22:32:02.496429564 +0000 UTC',
-                        '2026-11-11T23:32:02.496429564+01:00'):
+                        '2026-11-11T23:32:02.496429564+01:00', '2026-11-12 02:32:02.496429564 +0400 +04',
+                        '2026-11-11 19:32:02.496429564 -0300 -03', '2026-11-11 23:32:02.496429564 +0100 CET'):
             with self.subTest(started=started):
                 self.assertEqual(treasury.log_since(started), '1794436322.496429')
         self.assertEqual(treasury.log_since('2026-11-11T22:32:02Z'), '1794436322.000000')

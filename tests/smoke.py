@@ -21,7 +21,7 @@ from storage import initialize as initialize_storage
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from provisioning import initialize_setup, initialize_research_config
-from deployment import compose_files, engine, ensure_networks
+from deployment import compose_files, engine, ensure_networks, remove_networks
 
 COMPOSE = ['docker', 'compose', '-p', 'private-hermes-test', *compose_files(False, extra=('tests/compose.yaml',))]
 
@@ -84,7 +84,10 @@ PODMAN_HOST_TARGETS = ('169.254.1.2', *GATEWAYS)
 def compose(*args, check=True, **kwargs):
     if args[:1] == ('up',):
         ensure_networks(COMPOSE)
-    return subprocess.run(COMPOSE + list(args), check=check, text=True, capture_output=True, **kwargs)
+    result = subprocess.run(COMPOSE + list(args), check=check, text=True, capture_output=True, **kwargs)
+    if args[:1] == ('down',):
+        remove_networks(COMPOSE)
+    return result
 
 
 def execute(service, *args, user=None, check=True):
