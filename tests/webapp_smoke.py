@@ -32,6 +32,11 @@ def http(path, headers=None, data=None):
         return error.code, error.read()
 
 
+def render_proxy(values):
+    # Rootless Podman's port forwarder connects over loopback; see proxy_config().
+    return proxy_config(Settings.read(values), loopback_forwarder=smoke.engine() == 'podman')
+
+
 def wait_ready():
     for attempt in range(120):
         try:
@@ -68,7 +73,7 @@ def run_suite():
         values = dict(external_content='tor_proxied', funnel_enabled='true', webapp_bind='127.0.0.1',
                       webapp_port='19120', webapp_username='admin', funnel_host='webapp-test.example.ts.net',
                       funnel_port='10000', tailscale_hostname='private-hermes')
-        (folder / 'proxy.cfg').write_text(proxy_config(Settings.read(values)))
+        (folder / 'proxy.cfg').write_text(render_proxy(values))
         tls = folder / 'tls'
         tls.mkdir()
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -171,7 +176,7 @@ print(base64.b64encode(p.read_bytes()).decode())
             for content_mode in ('tor_proxied', 'ask', 'off', 'browser_native'):
                 os.environ['WEBAPP_EXTERNAL_CONTENT'] = content_mode
                 values['external_content'] = content_mode
-                (folder / 'proxy.cfg').write_text(proxy_config(Settings.read(values)))
+                (folder / 'proxy.cfg').write_text(render_proxy(values))
                 smoke.compose('up', '-d', '--no-deps', '--force-recreate', 'hermes', 'webapp-proxy')
                 wait_ready()
                 subprocess.run([os.environ.get('WEBAPP_BROWSER_PYTHON', sys.executable),
@@ -186,7 +191,7 @@ print(base64.b64encode(p.read_bytes()).decode())
             # One live ask document crosses gateway restart and a policy change.
             os.environ['WEBAPP_EXTERNAL_CONTENT'] = 'ask'
             values['external_content'] = 'ask'
-            (folder / 'proxy.cfg').write_text(proxy_config(Settings.read(values)))
+            (folder / 'proxy.cfg').write_text(render_proxy(values))
             smoke.compose('up', '-d', '--no-deps', '--force-recreate', 'hermes', 'webapp-proxy')
             wait_ready()
             child = subprocess.Popen([os.environ.get('WEBAPP_BROWSER_PYTHON', sys.executable),
@@ -200,7 +205,7 @@ print(base64.b64encode(p.read_bytes()).decode())
                 assert child.stdout.readline().strip() == 'READY_OFF'
                 os.environ['WEBAPP_EXTERNAL_CONTENT'] = 'off'
                 values['external_content'] = 'off'
-                (folder / 'proxy.cfg').write_text(proxy_config(Settings.read(values)))
+                (folder / 'proxy.cfg').write_text(render_proxy(values))
                 smoke.compose('up', '-d', '--no-deps', '--force-recreate', 'hermes', 'webapp-proxy')
                 wait_ready()
                 child.stdin.write('off\n'); child.stdin.flush()
@@ -213,14 +218,14 @@ print(base64.b64encode(p.read_bytes()).decode())
             # Restore the default for the remaining integrated activation checks.
             os.environ['WEBAPP_EXTERNAL_CONTENT'] = 'tor_proxied'
             values['external_content'] = 'tor_proxied'
-            (folder / 'proxy.cfg').write_text(proxy_config(Settings.read(values)))
+            (folder / 'proxy.cfg').write_text(render_proxy(values))
             smoke.compose('up', '-d', '--no-deps', '--force-recreate', 'hermes', 'webapp-proxy')
             wait_ready()
             subprocess.run([os.environ.get('WEBAPP_BROWSER_PYTHON', sys.executable),
                             str(ROOT / 'tests/content_dns_browser.py'), str(folder / 'password')], check=True)
             # A mismatched ingress header is refused by the gateway; a stale
             # generated mode marker prevents HAProxy from listening at all.
-            correct_proxy = proxy_config(Settings.read(values))
+            correct_proxy = render_proxy(values)
             (folder / 'proxy.cfg').write_text(correct_proxy.replace(
                 'X-Private-Hermes-Content-Mode tor_proxied', 'X-Private-Hermes-Content-Mode off'))
             smoke.compose('restart', 'webapp-proxy')

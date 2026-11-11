@@ -312,6 +312,16 @@ Funnel off):
   differences were fixed first: the fixture binds port 111 without capabilities,
   which Podman refuses below `ip_unprivileged_port_start=1024`, and cleanup must
   return files to container UID 0, which is the host user under rootless Podman.
+- `storage-test`, `x402_treazury-test` and `plugins-test` passed on Podman.
+  `webapp-test` passed every ingress check, including capability-free HAProxy
+  with separate local and Funnel listeners across restart, exact `Host`
+  enforcement, browser login over local HTTP and the simulated Funnel HTTPS path,
+  and executor denial of private ingress, plus the Chromium content checks. It
+  stopped at the Firefox content check, which could not play the test video on
+  this host (missing media codec); WebKit could not start without host libraries
+  that need root. These browser limits do not depend on the engine. The test now
+  renders its proxy configuration for the engine in use; before that, HAProxy
+  refused the mismatched mode and did not start, as designed.
 - A host umask of `0002` makes the bind-mounted Hermes SSH client
   configuration group-writable, and OpenSSH then refuses it. This does not
   depend on the engine; it is reported separately and was worked around in the
@@ -321,8 +331,9 @@ Limits: the Tor checks would also be blocked by the router firewall, so the
 teep checks are the ones that show isolation. The teep result for the
 loopback-only host service does not show whether services bound to all host
 addresses are reachable from uplink containers under `isolate=strict`. Not yet
-run on Podman: the other live targets (`storage-test`, `x402_treazury-test`,
-`webapp-test` with Funnel, `plugins-test`), restart and recreation. Not yet run on Docker: everything
+run on Podman: the Firefox and WebKit content checks of `webapp-test` (host
+browser limits), and restart and recreation of `tor` and the network owners
+outside the tests that already restart services. Not yet run on Docker: everything
 in this phase.
 
 ### P4 — Guides
