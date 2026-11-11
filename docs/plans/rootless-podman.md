@@ -171,9 +171,12 @@ not a speculative option.
   check the container's `.Config.StopTimeout` for `stop_grace_period: -1s`: it
   governs stops that the engine starts, such as logout without linger, the user
   `podman-restart.service` and reboot, which can end a running wallet job.
-  Recommendation: one floor, Compose 2.36+, on both engines. It removes the F8
-  exceptions and keeps `test_storage` proving that a missing bind source fails.
-  On Debian 13 this means the Compose release binary, installed per user.
+  Recommendation: one floor, Compose 2.36+, on both engines. On Debian 13 this
+  means the Compose release binary, installed per user. Compose 2.40.3 also
+  renders `create_host_path: false` as `bind: {}`, so `test_storage` fails with
+  it as with 2.26.1; the floor does not settle that test. Record the Compose
+  version with which the test passes, and check at runtime that a missing bind
+  source fails instead of being created.
 - **D3, `start_interval` on Podman.** Compose refuses it because of the Podman
   API version, not the Compose version. The overlay resets it.
 - **D4, host loopback through pasta (Podman only).** On Docker, teep already
@@ -272,6 +275,27 @@ next to the Docker addresses:
 - Restart and recreation of `tor` and the network owners; stop with
   `--timeout -1` (D2); repeated `make init` and `make up`.
 
+Evidence so far, rootless Podman 5.4.2 with Compose 2.40.3, commit `4c50917`:
+`make up` started the stack with no manual change (treasury not initialized,
+Funnel off). A disposable check script gave 20 of 20 expected results:
+
+- Allowed: executor and Hermes public HTTPS through Tor (`"IsTor":true`), Hermes
+  to teep and to executor SSH, webapp through HAProxy (302 to login).
+- Refused or blocked: wrong `Host` (421); executor to teep; Hermes to
+  `10.203.85.3:9120`; a host service bound to `127.0.0.1`, at `169.254.1.2` and at
+  the host's default gateway, from the executor, Hermes and teep; teep to
+  HAProxy's edge address, teep to Tor's uplink address, Tor to teep's uplink
+  address; the executor and Hermes to aardvark-dns at `10.203.82.1:53`; executor
+  IPv6 egress.
+
+Limits of this evidence: teep to HAProxy's edge address is the check that shows
+`isolate: strict` working, because HAProxy accepts any source on that interface;
+the Tor checks would also be blocked by the router firewall. The teep result for
+the loopback-only host service does not show whether pasta's `169.254.1.2`
+mapping is reachable from teep at all under `isolate: strict`. The checks are
+not yet part of the smoke tests. Not yet run: Funnel, x402_treazury, storage and
+locking checks, restart and recreation, and Docker regression.
+
 ### P4 — Guides
 
 - README requirements for both engines: `podman-docker` or a shim, the user
@@ -328,7 +352,9 @@ state format changes.
 
 - A recorded Docker Desktop run of P1.
 - Compose 2.36+ against Podman 5.4: `create_host_path: false`, `gw_priority` and
-  `start_interval` handling. All trial evidence used Compose 2.26.1.
+  `start_interval` handling. The trial used Compose 2.26.1; P3 uses 2.40.3.
+- The Compose version with which `test_storage` passes: 2.26.1 and 2.40.3 both
+  omit `create_host_path: false` from `config` output.
 - F9 between internal and mixed networks, and `isolate` set through Compose
   rather than `podman network create -o`. P3 runs on a stack Compose creates.
 - D1 detection, D2 stop-timeout behavior and `.Config.StopTimeout`, D4
