@@ -21,7 +21,7 @@ from storage import initialize as initialize_storage
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from provisioning import initialize_setup, initialize_research_config
-from deployment import compose_files, ensure_networks
+from deployment import compose_files, engine, ensure_networks
 
 COMPOSE = ['docker', 'compose', '-p', 'private-hermes-test', *compose_files(False, extra=('tests/compose.yaml',))]
 
@@ -63,8 +63,10 @@ for base,dirs,files in os.walk(root):
   os.chown(path,uid,gid,follow_symlinks=False)
   if not stat.S_ISLNK(meta.st_mode): path.chmod(stat.S_IMODE(meta.st_mode)|(0o700 if stat.S_ISDIR(meta.st_mode) else 0o600))
 '''
+                    # Rootless Podman maps the host user to container UID 0.
+                    owner = ('0', '0') if engine() == 'podman' else (str(os.getuid()), str(os.getgid()))
                     compose('run', '--rm', '-T', '--no-deps', '--entrypoint', 'python3',
-                            'setup', '-c', script, marker, str(os.getuid()), str(os.getgid()))
+                            'setup', '-c', script, marker, *owner)
                     shutil.rmtree(root)
         finally:
             if previous is None:

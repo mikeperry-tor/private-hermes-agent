@@ -65,6 +65,10 @@ services:
   fixture:
     image: private-hermes-executor:local
     user: "10000:10000"
+    # The fixture binds port 111 without capabilities; Docker allows this by
+    # default, Podman sets the floor to 1024.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true

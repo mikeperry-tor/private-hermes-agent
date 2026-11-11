@@ -24,6 +24,10 @@ services:
       teep-uplink:
         gw_priority: !reset null
   webapp-proxy:
+    # Docker lets unprivileged processes bind any port; Podman sets the floor
+    # to 1024. Keep a WEBAPP_PORT below 1024 working as on Docker.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     environment:
       # The rootless port forwarder connects from inside the proxy namespace.
       PRIVATE_HERMES_PORT_FORWARDER: loopback

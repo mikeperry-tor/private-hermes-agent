@@ -304,12 +304,25 @@ Funnel off):
   forbidden paths of the first run unchanged. teep's direct HTTPS on its
   isolated uplink works (`"IsTor":false`); the test now includes it.
 
+- `tests/smoke.py` (the `make test` suite, run as preflight plus the script,
+  because `make check` stops at `test_storage`) passed all six sections on
+  Podman: published teep port and host isolation, Tor versus direct egress,
+  host/VM, rpcbind TCP/UDP and IPv6 blocks, the real Hermes terminal and
+  `execute_code` over SSH, MCP streaming, and Tor outage. Two test-side
+  differences were fixed first: the fixture binds port 111 without capabilities,
+  which Podman refuses below `ip_unprivileged_port_start=1024`, and cleanup must
+  return files to container UID 0, which is the host user under rootless Podman.
+- A host umask of `0002` makes the bind-mounted Hermes SSH client
+  configuration group-writable, and OpenSSH then refuses it. This does not
+  depend on the engine; it is reported separately and was worked around in the
+  test checkout with `chmod g-w`.
+
 Limits: the Tor checks would also be blocked by the router firewall, so the
 teep checks are the ones that show isolation. The teep result for the
 loopback-only host service does not show whether services bound to all host
 addresses are reachable from uplink containers under `isolate=strict`. Not yet
-run on Podman: `make test` and the other live targets, Funnel, x402_treazury,
-storage and locking, restart and recreation. Not yet run on Docker: everything
+run on Podman: the other live targets (`storage-test`, `x402_treazury-test`,
+`webapp-test` with Funnel, `plugins-test`), restart and recreation. Not yet run on Docker: everything
 in this phase.
 
 ### P4 — Guides
