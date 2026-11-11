@@ -112,27 +112,33 @@ isolation. A Podman difference must not weaken a boundary on either engine.
    request 1).
 2. `compose.yaml`, `compose.funnel.yaml` and all Docker consumers stay as they
    are.
-3. One file, `compose.podman.yaml`, removes or replaces the Docker-only keys with
-   Compose's `!reset` and `!override` tags:
-   - `driver_opts: !override {isolate: strict}` on every network, including the
-     uplinks, `webapp-publish` and `funnel-link`. This replaces Docker's gateway
-     options and restores Docker's separation between networks (F9).
-     `webapp-publish` also gets `no_default_route: "true"`.
-   - `start_interval: !reset null`, and `gw_priority: !reset null` on teep and
-     on `tailscale` (`compose.funnel.yaml:39`).
-   - An environment value for HAProxy's startup (F6, D7).
-   A review check with Compose 2.26.1 confirmed `!reset` and `!override` give the
-   intended model.
-4. The overlay is always the last `-f` file: after `compose.funnel.yaml` and
-   after any test overlay. A review check showed that an overlay placed before
-   `compose.funnel.yaml` lets `funnel-link` get the Docker options back. Without
-   Funnel, Compose drops the unused `funnel-link` entry, so one overlay serves
-   both cases.
-5. `scripts/deployment.py` adds the overlay to the commands it builds when the
-   engine is Podman, and preflight checks the floors of that engine. Other
-   callers that name files (`stack.py:53`, the Makefile, the smoke tests and unit
-   tests) get the same file list from `deployment.py` or a shared helper.
-6. Docker gets no new file. The overlay is selected only when the engine
+3. Two Podman files remove or replace the Docker-only keys with Compose's
+   `!reset` and `!override` tags:
+   - `compose.podman.yaml`, always on Podman:
+     `driver_opts: !override {isolate: strict}` on every network of
+     `compose.yaml`, including the uplinks and `webapp-publish`. This replaces
+     Docker's gateway options and restores Docker's separation between networks
+     (F9). `webapp-publish` also gets `no_default_route: "true"`. It also holds
+     `start_interval: !reset null`, `gw_priority: !reset null` on teep, and an
+     environment value for HAProxy's startup (F6, D7).
+   - `compose.podman.funnel.yaml`, on Podman with Funnel only: the same
+     `isolate` override for `funnel-link` and `tailscale-uplink`, and
+     `gw_priority: !reset null` on `tailscale` (`compose.funnel.yaml:39`). A
+     single file cannot hold these: without Funnel, the `tailscale` entry makes
+     Compose fail (`service "tailscale" has neither an image nor a build context
+     specified`).
+   Review checks with Compose 2.26.1 confirmed that `!reset` and `!override` give
+   the intended model, with and without Funnel.
+4. The Podman files are always last: `compose.podman.yaml` after
+   `compose.funnel.yaml` and any test overlay, then `compose.podman.funnel.yaml`
+   when Funnel is on. A review check showed that an overlay placed before
+   `compose.funnel.yaml` lets `funnel-link` get the Docker options back.
+5. `scripts/deployment.py` adds the Podman files to the commands it builds when
+   the engine is Podman, and preflight checks the floors of that engine. Other
+   callers that name files (`stack.py:53`, `preflight.py:32-34`, the Makefile,
+   the smoke tests and unit tests) get the same file list from `deployment.py` or
+   a shared helper.
+6. Docker gets no new file. The Podman files are selected only when the engine
    positively identifies as Podman (D1). A failed or uncertain detection selects
    Docker; on Podman the Docker options then stay in the model, netavark rejects
    them and startup stops with a visible error. No detection result can remove
@@ -154,8 +160,9 @@ not a speculative option.
   the `docker` command is Podman (`podman-docker` or a shim). Everything else is
   Docker, with the Docker floors checked. The check follows the endpoint Compose
   uses, including `DOCKER_HOST` and the current Docker context, which Docker
-  Desktop uses in place of `DOCKER_HOST`. To verify on Docker, Docker Desktop and
-  Podman.
+  Desktop uses in place of `DOCKER_HOST`. The second form identifies the client;
+  it is enough because `podman compose` points Compose at the Podman socket. To
+  verify on Docker, Docker Desktop and Podman.
 - **D2, Compose floor on Podman.** `make down` and the treasury controller pass
   `--timeout -1` (`stack.py:48`, `x402_treazury.py:186,206,242,278`), so
   `stop_grace_period` does not govern them. `gw_priority` leaves the Podman model
@@ -197,12 +204,16 @@ not a speculative option.
   address. With Funnel, `funnel-link` (`10.203.87.3`) may sort before
   `webapp-backend`, and F6's rule and listen address would then miss. Podman
   appears to order networks by name. Decision: on Podman, HAProxy's local
-  frontend also listens on its internal addresses, and the firewall accepts new
-  connections to the webapp port from those addresses only on `lo`, with the
-  matching OUTPUT rule. Only processes inside HAProxy's namespace can send
-  loopback traffic, and the port forwarder is one of them; traffic from
-  `funnel-link` or `webapp-backend` arrives on other interfaces and stays
-  dropped. This does not depend on network order. The engine reaches HAProxy's
+  frontend also listens on all of its own addresses at the webapp port, and the
+  firewall accepts new connections to the webapp port at those addresses only on
+  `lo`, with the matching OUTPUT rule. Only processes inside HAProxy's namespace
+  can send loopback traffic, and the port forwarder is one of them; traffic from
+  `funnel-link`, `webapp-backend` or `webapp-publish` arrives on other interfaces
+  and stays dropped. This does not depend on network order. With Funnel on, the
+  webapp port must differ from the Funnel frontend's fixed port 8443
+  (`settings.py:103`); settings validation rejects `WEBAPP_PORT=8443` when Funnel
+  is enabled, on both engines, so two frontends never share one address and
+  port. The engine reaches HAProxy's
   configuration through `render()` (`stack.py:76`), and its startup through the
   overlay's environment value. Check local access with Funnel on, without live
   enrollment.
@@ -219,8 +230,8 @@ The Docker Desktop result is not recorded here.
 
 Implement the approach and D1–D7. Consumers:
 
-- `compose.podman.yaml`, `scripts/deployment.py`, `scripts/stack.py`, the
-  Makefile, `.env.example`.
+- `compose.podman.yaml`, `compose.podman.funnel.yaml`, `scripts/deployment.py`,
+  `scripts/stack.py`, the Makefile, `.env.example`.
 - `scripts/preflight.py`: engine floors (D1, D2), the teep key check (D6), and
   the address-conflict check, which reads Docker's `Labels` and `IPAM.Config`
   and checks nothing on Podman, whose inspect output has `labels` and `subnets`.
@@ -228,7 +239,8 @@ Implement the approach and D1–D7. Consumers:
   --since` and `wait` in `scripts/x402_treazury.py`; Podman's `StartedAt` format
   must work with `logs --since`.
 - Tests: `tests/compose.yaml`, `test_configuration.py`, `test_storage.py`,
-  `test_endpoint_readiness.py`, `hermes_ui.py`, and the smoke tests that build
+  `test_endpoint_readiness.py`, `test_maintenance.py`, `test_webapp.py`,
+  `hermes_ui.py`, and the smoke tests that build
   Compose or `docker run` commands (`smoke.py`, `storage_smoke.py`,
   `plugins_smoke.py`, `webapp_smoke.py`, `x402_treazury_smoke.py`,
   `research_config_smoke.py`, `endpoint_readiness_smoke.py`, `images_smoke.py`,
@@ -280,7 +292,11 @@ next to the Docker addresses:
   findings: missing separation between networks, a D1 rule that must identify
   Podman positively, the overlay's position in the file list, and stale P1
   status. This revision resolves them; F9 was tested after the review. The
-  non-blocking findings are in D2, D4, D5, D7 and the P2 consumer list.
+  non-blocking findings are in D2, D4, D5, D7 and the P2 consumer list. A fresh
+  re-review of the amendment (`f0b29e6`) passed it with two conditions: a
+  separate Podman file for Funnel, because one file fails without Funnel, and a
+  rule against the webapp and Funnel frontends sharing port 8443. This revision
+  resolves both (items 3–5, D7).
 - **G2, final gate after P4:** a fresh independent reviewer checks the combined
   change, the P3 evidence on both engines and the guides.
 
@@ -304,13 +320,17 @@ next to the Docker addresses:
 
 ## Rollback
 
-Remove `compose.podman.yaml` and the engine selection in `deployment.py` and
+Remove the two Podman files and the engine selection in `deployment.py` and
 preflight. Docker is not affected. Volumes, keys and configuration stay; no
 state format changes.
 
 ## Missing evidence
 
 - A recorded Docker Desktop run of P1.
+- Compose 2.36+ against Podman 5.4: `create_host_path: false`, `gw_priority` and
+  `start_interval` handling. All trial evidence used Compose 2.26.1.
+- F9 between internal and mixed networks, and `isolate` set through Compose
+  rather than `podman network create -o`. P3 runs on a stack Compose creates.
 - D1 detection, D2 stop-timeout behavior and `.Config.StopTimeout`, D4
   loopback-only reachability, D5 settings through Compose and `isolate: strict`
   on the uplink networks, D7 with Funnel.
