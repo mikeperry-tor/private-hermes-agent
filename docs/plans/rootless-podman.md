@@ -4,7 +4,7 @@ Status: G1 passed with conditions, resolved. P1 is merged. P2 and P4 are
 implemented; the first G2 review did not pass, and this revision resolves its
 findings (see Gates). P3 is partial; G2 is pending again.
 Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
-`main`, commit `f2a08e1`.
+`main`, commit `d5287db`.
 Plan path: `docs/plans/rootless-podman.md`.
 Follow the [planning workflow](../planning-workflow.md) before implementation.
 
@@ -292,7 +292,7 @@ next to the Docker addresses:
 Evidence, rootless Podman 5.4.2 with Compose 2.40.3 (treasury not initialized,
 Funnel off):
 
-- First run, commit `4c50917`, networks created by Compose: a disposable script
+- First run, commit `3329a49`, networks created by Compose: a disposable script
   gave 20 of 20 expected results, but the G2 review and a security audit found
   F10. Run against that stack, `tests/podman_paths_smoke.sh` failed 12 checks: a
   container on a user network without isolation reached teep's uplink address
@@ -357,13 +357,13 @@ in this phase.
   Podman positively, the overlay's position in the file list, and stale P1
   status. This revision resolves them; F9 was tested after the review. The
   non-blocking findings are in D2, D4, D5, D7 and the P2 consumer list. A fresh
-  re-review of the amendment (`f0b29e6`) passed it with two conditions: a
+  re-review of the amendment (`659c560`) passed it with two conditions: a
   separate Podman file for Funnel, because one file fails without Funnel, and a
   rule against the webapp and Funnel frontends sharing port 8443. This revision
   resolves both (items 3–5, D7).
 - **G2, final gate after P4:** a fresh independent reviewer checks the combined
   change, the P3 evidence on both engines and the guides. First result on
-  `b0f6e83`: not pass. A security audit of the same snapshot agreed. Findings
+  `695b141`: not pass. A security audit of the same snapshot agreed. Findings
   and resolutions:
   - The overlay's network options did not reach Podman (F10). Resolved by item
     6a, and by `tests/podman_paths_smoke.sh`, which checks the engine's network
