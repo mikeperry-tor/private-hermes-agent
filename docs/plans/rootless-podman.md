@@ -1,7 +1,7 @@
 # Rootless Podman support
 
 Status: G1 passed with conditions; this revision resolves them. P1 is merged.
-P2–P4 and G2 are pending.
+P2 and P4 are implemented; P3 qualification and G2 are pending.
 Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
 `main`, commit `f2a08e1`.
 Plan path: `docs/plans/rootless-podman.md`.

@@ -411,7 +411,10 @@ changing it selects a different set of volumes. `docker compose down -v` explici
 deletes the application volumes, including wallets and conversations, as well as
 the runtime socket volume. Do not use it on a deployment whose state you need.
 Deleting bind-mounted host data requires a separate filesystem operation.
-Backing up `data/` alone does not include the application volumes.
+Backing up `data/` alone does not include the application volumes. On rootless
+Podman, files under `data/` belong to subordinate user IDs; copy them inside the
+user namespace, for example `podman unshare tar -C data -cpf backup.tar .`, so
+ownership is preserved.
 
 Hermes's generated profile `.env` in `hermes-data` is distinct from the root
 deployment `.env`: it contains the MCP token and Hermes-owned credentials.

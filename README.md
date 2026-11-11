@@ -66,11 +66,24 @@ wallet groups, and operation.
 
 ## Get started
 
-You need Docker Engine 28+ with Linux containers, Compose 2.36+, `make`, and
-Python 3. The stack requires isolated bridge networking and Linux GRE support;
-startup checks reject unsupported setups. Its fixed `10.203.80.0/24` through
-`10.203.84.0/24` networks, local ingress `10.203.85.0/24`, and optional Funnel
-`10.203.87.0/24` must not overlap your existing networks.
+You need a container engine, Compose 2.36+, `make`, and Python 3. Use either:
+
+- **Docker Engine 28+** with Linux containers, or
+- **rootless Podman 5.4+** on Linux, with the `docker` command provided by
+  `podman-docker` (or a `docker` script that runs `podman`) and the user API
+  socket enabled: `systemctl --user enable --now podman.socket`. Rootless Podman
+  runs no root daemon, and container root maps to your unprivileged user.
+
+The stack detects Podman and adds its overlay files itself. It requires isolated
+bridge networking and Linux GRE support; startup checks reject unsupported
+setups. Its fixed `10.203.80.0/24` through `10.203.84.0/24` networks, local
+ingress `10.203.85.0/24`, and optional Funnel `10.203.87.0/24` must not overlap
+your existing networks.
+
+On rootless Podman, containers stop when you log out unless lingering is enabled
+for your user (`loginctl enable-linger`, which may need an administrator), and
+they start again after a reboot only with `systemctl --user enable
+podman-restart.service`. See [engine differences](docs/architecture.md#rootless-podman).
 
 Initialize your local settings:
 

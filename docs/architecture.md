@@ -72,6 +72,32 @@ inside an application cannot grant a direct uplink.
   their firewall rules and have no direct fallback. Existing local teep/MCP/SSH
   paths remain usable. Initial startup waits for Tor readiness.
 
+## Rootless Podman
+
+The same topology and boundaries apply on rootless Podman. `scripts/deployment.py`
+selects `compose.podman.yaml`, and `compose.podman.funnel.yaml` with Funnel, as
+the last Compose files, only when the engine identifies as Podman: the `docker`
+command is Podman, or the server reports the `Podman Engine` component. Any
+other answer selects Docker. On Podman, netavark then rejects the Docker bridge
+options, so a missed detection stops startup instead of weakening isolation.
+
+| Docker behavior | Rootless Podman counterpart |
+| --- | --- |
+| Isolated gateway mode: internal bridges have no host-side address | Rootless bridges live in the user's network namespace, so the gateway is not a host address. The endpoint firewalls deny connected networks and `169.254.0.0/16` on both engines. |
+| No forwarding between different bridge networks | Netavark forwards between bridges unless they are isolated. The overlay sets `isolate: strict` on every network. |
+| `enable_ip_masquerade: false` on `webapp-publish` | `no_default_route: "true"`: HAProxy has no route out. |
+| Published ports enter on the publication interface | The rootless port forwarder runs inside HAProxy's namespace and connects over loopback to one of its addresses. The local frontend listens on all proxy addresses, and the proxy firewall admits new connections to the webapp port only on `lo`, so traffic from connected networks stays dropped. HAProxy's `X-Forwarded-For` value is therefore a proxy address for every client. |
+| Embedded DNS at `127.0.0.11` | aardvark-dns at each network gateway, denied by the endpoint firewalls with the connected networks. teep resolves provider names through it on `teep-uplink`. |
+| `healthcheck.start_interval`, `gw_priority` | Removed by the overlay. Podman's API refuses `start_interval`. `gw_priority` is not needed: the other network of teep and Tailscale is internal and has no gateway. |
+| Restart backoff | A container that exits at once restarts about every 0.3 s. Startup refuses to run without an inference provider key, because teep exits at once without one. Check `podman ps` and restart counts when a service does not become healthy. |
+
+Containers with an uplink can reach the host's loopback services through pasta
+at `169.254.1.2`. The router denies this for Tor's own traffic; Hermes and the
+executor have no uplink. teep has its direct uplink as on Docker.
+
+Bind data under `data/` is owned by subordinate user IDs on the host; use
+`podman unshare` for host-side copies (see [backup scope](configuration.md#backup-scope)).
+
 ## Images and other Hermes isolation choices
 
 - Tor: `dockurr/tor:0.4.9.16`, pinned by digest in

@@ -64,6 +64,11 @@ References: [Hermes backends](https://hermes-agent.nousresearch.com/docs/user-gu
 [Docker isolated networks](https://docs.docker.com/engine/network/port-publishing/#gateway-modes),
 [teep](https://github.com/13rac1/teep).
 
+`make check` validates the Docker and Podman Compose models on either engine;
+`tests/test_engine.py` covers engine selection and the overlay contents. Run
+`make test` on each engine before changing network, ingress or overlay code.
+On Podman, the live tests need Compose 2.36+ as the provider of `podman compose`.
+
 Component-specific checks and limits are documented in the
 [webapp](webapp.md#verification-and-current-limits),
 [x402_treazury](x402_treazury.md#stop-and-test), and
