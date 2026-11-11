@@ -65,9 +65,13 @@ References: [Hermes backends](https://hermes-agent.nousresearch.com/docs/user-gu
 [teep](https://github.com/13rac1/teep).
 
 `make check` validates the Docker and Podman Compose models on either engine;
-`tests/test_engine.py` covers engine selection and the overlay contents. Run
-`make test` on each engine before changing network, ingress or overlay code.
-On Podman, the live tests need Compose 2.36+ as the provider of `podman compose`.
+`tests/test_engine.py` covers engine selection, Podman network creation, the
+proxy firewall rules and the engine floors. The live tests use the same Compose
+files as the stack, including the Podman overlays. Run `make test` on each engine
+before changing network, ingress or overlay code. On Podman, the live tests need
+Compose 2.36+ as the provider of `podman compose`, and `sh tests/podman_paths_smoke.sh`
+checks the paths of a running stack, including a client on a network without
+isolation.
 
 Component-specific checks and limits are documented in the
 [webapp](webapp.md#verification-and-current-limits),

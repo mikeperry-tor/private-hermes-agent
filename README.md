@@ -80,10 +80,13 @@ setups. Its fixed `10.203.80.0/24` through `10.203.84.0/24` networks, local
 ingress `10.203.85.0/24`, and optional Funnel `10.203.87.0/24` must not overlap
 your existing networks.
 
-On rootless Podman, containers stop when you log out unless lingering is enabled
-for your user (`loginctl enable-linger`, which may need an administrator), and
-they start again after a reboot only with `systemctl --user enable
-podman-restart.service`. See [engine differences](docs/architecture.md#rootless-podman).
+On rootless Podman, Compose 2.36+ must be the provider of `podman compose`;
+Debian 13's `docker-compose` package is older. Install the Compose release binary
+for your user and set `PODMAN_COMPOSE_PROVIDER` to its path, or name it in
+`compose_providers` in `~/.config/containers/containers.conf`. Containers stop
+when you log out unless lingering is enabled for your user (`loginctl
+enable-linger`, which may need an administrator). After a reboot, run `make up`
+to start the stack again. See [engine differences](docs/architecture.md#rootless-podman).
 
 Initialize your local settings:
 

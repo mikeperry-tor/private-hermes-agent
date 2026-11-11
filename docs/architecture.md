@@ -76,27 +76,43 @@ inside an application cannot grant a direct uplink.
 
 The same topology and boundaries apply on rootless Podman. `scripts/deployment.py`
 selects `compose.podman.yaml`, and `compose.podman.funnel.yaml` with Funnel, as
-the last Compose files, only when the engine identifies as Podman: the `docker`
-command is Podman, or the server reports the `Podman Engine` component. Any
-other answer selects Docker. On Podman, netavark then rejects the Docker bridge
-options, so a missed detection stops startup instead of weakening isolation.
+the last Compose files, only when the endpoint Compose uses identifies as Podman:
+the server reports the `Podman Engine` component, or the `docker` command is
+Podman and `DOCKER_HOST`, when set, names a Podman endpoint. Any other answer
+selects Docker. With the Docker files, Podman does not start the stack, because
+Compose refuses `healthcheck.start_interval` for Podman's API version.
+
+Compose creates networks through Podman's Docker-compatible API, which sets
+only `isolate=true` and drops other bridge options. Before Compose starts
+services, `deployment.ensure_networks()` therefore creates each project network
+with the `podman` command, using the options the overlays declare and Compose's
+labels; Compose adopts these networks, and `make down` removes them. An existing
+network without the declared options stops startup until `make down` removes it.
+Preflight requires rootless Podman 5.4+, the `podman` command, and a
+`DOCKER_HOST` that is unset or names the user's Podman socket.
 
 | Docker behavior | Rootless Podman counterpart |
 | --- | --- |
 | Isolated gateway mode: internal bridges have no host-side address | Rootless bridges live in the user's network namespace, so the gateway is not a host address. The endpoint firewalls deny connected networks and `169.254.0.0/16` on both engines. |
-| No forwarding between different bridge networks | Netavark forwards between bridges unless they are isolated. The overlay sets `isolate: strict` on every network. |
-| `enable_ip_masquerade: false` on `webapp-publish` | `no_default_route: "true"`: HAProxy has no route out. |
+| No forwarding between different bridge networks | Netavark forwards between bridges unless they are isolated. Every network has `isolate=strict`, which also blocks traffic from the user's other networks without isolation. |
+| `enable_ip_masquerade: false` on `webapp-publish` | `no_default_route=true`: HAProxy has no default route. |
 | Published ports enter on the publication interface | The rootless port forwarder runs inside HAProxy's namespace and connects over loopback to one of its addresses. The local frontend listens on all proxy addresses, and the proxy firewall admits new connections to the webapp port only on `lo`, so traffic from connected networks stays dropped. HAProxy's `X-Forwarded-For` value is therefore a proxy address for every client. |
 | Embedded DNS at `127.0.0.11` | aardvark-dns at each network gateway, denied by the endpoint firewalls with the connected networks. teep resolves provider names through it on `teep-uplink`. |
 | `healthcheck.start_interval`, `gw_priority` | Removed by the overlay. Podman's API refuses `start_interval`. `gw_priority` is not needed: the other network of teep and Tailscale is internal and has no gateway. |
-| Restart backoff | A container that exits at once restarts about every 0.3 s. Startup refuses to run without an inference provider key, because teep exits at once without one. Check `podman ps` and restart counts when a service does not become healthy. |
+| Restart backoff | A container that exits at once restarts about every 0.3 s. Startup refuses to run without an inference provider key, on both engines, because teep exits at once without one. Check `podman ps` and restart counts when a service does not become healthy. |
 
-Containers with an uplink can reach the host's loopback services through pasta
-at `169.254.1.2`. The router denies this for Tor's own traffic; Hermes and the
-executor have no uplink. teep has its direct uplink as on Docker.
+Pasta maps `169.254.1.2` to the host. In a test on a network without
+isolation, a container with an uplink reached a host service bound to all
+addresses there; with `isolate=strict`, teep did not reach a host service bound
+only to `127.0.0.1`, and the reachability of services bound to all addresses
+from teep, Tor or Tailscale is not tested. On Docker, these uplink containers
+reach the host through their gateway. The router denies `169.254.0.0/16` for
+Tor's own traffic; Hermes and the executor have no uplink.
 
 Bind data under `data/` is owned by subordinate user IDs on the host; use
 `podman unshare` for host-side copies (see [backup scope](configuration.md#backup-scope)).
+`tests/podman_paths_smoke.sh` checks the allowed and forbidden paths of a running
+Podman stack, including a client on a network without isolation.
 
 ## Images and other Hermes isolation choices
 

@@ -1,7 +1,8 @@
 # Rootless Podman support
 
-Status: G1 passed with conditions; this revision resolves them. P1 is merged.
-P2 and P4 are implemented; P3 qualification and G2 are pending.
+Status: G1 passed with conditions, resolved. P1 is merged. P2 and P4 are
+implemented; the first G2 review did not pass, and this revision resolves its
+findings (see Gates). P3 is partial; G2 is pending again.
 Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
 `main`, commit `f2a08e1`.
 Plan path: `docs/plans/rootless-podman.md`.
@@ -73,6 +74,7 @@ loading. Saved logs show F2, F4 and the started services.
 | F7 | Restart backoff | A container that exits at once restarts about every 0.3 s: teep without a provider key restarted 13,597 times in an hour while `make up --wait` waited | None |
 | F8 | Compose 2.36 | Compose 2.26.1 drops `gw_priority` and renders `create_host_path: false` as `bind: {}`, which fails `test_storage`. It keeps `stop_grace_period: -1s` in `config` output; whether it applies it is not known | None |
 | F9 | Docker drops forwarding between different bridge networks | Netavark forwards between two ordinary rootless networks: a client on one reached a listener on the other. With `-o isolate=strict` on both, the connection was blocked | None; the trial stack had this exposure |
+| F10 | Compose creates networks with the declared driver options | Podman's Docker-compatible network API sets `isolate=true` on every bridge and drops other options, including `isolate=strict` and `no_default_route`. On a stack created this way, a container on a user network without isolation reached teep at its uplink address on port 8337 and HAProxy's edge address | `ensure_networks()` creates the networks with the `podman` command first; Compose adopts networks that carry its labels |
 
 Network evidence from disposable experiments. Except for F9, these used
 networks with `-o isolate=strict` and `--disable-dns`. The trial Compose set
@@ -140,9 +142,18 @@ isolation. A Podman difference must not weaken a boundary on either engine.
    a shared helper.
 6. Docker gets no new file. The Podman files are selected only when the engine
    positively identifies as Podman (D1). A failed or uncertain detection selects
-   Docker; on Podman the Docker options then stay in the model, netavark rejects
-   them and startup stops with a visible error. No detection result can remove
-   Docker's options on Docker.
+   Docker; on Podman, Compose then refuses `healthcheck.start_interval` for
+   Podman's API version and startup stops with a visible error. (Podman's API
+   drops the Docker bridge options with a warning; it does not reject them.)
+   With `DOCKER_HOST` set, a Podman client selects the Podman files only when
+   that endpoint reports the `Podman Engine` component.
+6a. On Podman, `deployment.ensure_networks()` runs before each Compose `up` in
+   `stack.py`, the treasury controller and the smoke tests. It creates every
+   project network with `podman network create`, the overlay's options, the
+   model's subnet and `internal` flag, and Compose's project and network labels
+   (F10). An existing network without these options stops startup until
+   `make down` removes it. Preflight requires rootless Podman 5.4+, the `podman`
+   command, and a `DOCKER_HOST` that is unset or names the user's Podman socket.
 7. The `docker` and `docker compose` commands stay. On Podman, `podman-docker` or
    a `docker` shim and the user `podman.socket` provide them.
 
@@ -186,7 +197,10 @@ not a speculative option.
   with a documented reason; set pasta options in the user's `containers.conf`
   (user-wide, outside the repository); or add a deny in teep's namespace, which
   needs a namespace owner or `NET_ADMIN` and conflicts with the least-machinery
-  rules. Recommendation: test loopback-only reachability from teep first, with a
+  rules. Decision after P3: accept, as teep's direct uplink is an accepted
+  boundary on both engines; teep did not reach a host service bound only to
+  `127.0.0.1`. The guide states what is and is not tested. The earlier
+  recommendation was to test loopback-only reachability from teep first, with a
   host service bound only to `127.0.0.1`, at `169.254.1.2` and at the host's
   default gateway address as seen in the rootless namespace (pasta can map it to
   the host). Then decide. Hermes, the executor and Tor already deny
@@ -275,34 +289,36 @@ next to the Docker addresses:
 - Restart and recreation of `tor` and the network owners; stop with
   `--timeout -1` (D2); repeated `make init` and `make up`.
 
-Evidence so far, rootless Podman 5.4.2 with Compose 2.40.3, commit `4c50917`:
-`make up` started the stack with no manual change (treasury not initialized,
-Funnel off). A disposable check script gave 20 of 20 expected results:
+Evidence, rootless Podman 5.4.2 with Compose 2.40.3 (treasury not initialized,
+Funnel off):
 
-- Allowed: executor and Hermes public HTTPS through Tor (`"IsTor":true`), Hermes
-  to teep and to executor SSH, webapp through HAProxy (302 to login).
-- Refused or blocked: wrong `Host` (421); executor to teep; Hermes to
-  `10.203.85.3:9120`; a host service bound to `127.0.0.1`, at `169.254.1.2` and at
-  the host's default gateway, from the executor, Hermes and teep; teep to
-  HAProxy's edge address, teep to Tor's uplink address, Tor to teep's uplink
-  address; the executor and Hermes to aardvark-dns at `10.203.82.1:53`; executor
-  IPv6 egress.
+- First run, commit `4c50917`, networks created by Compose: a disposable script
+  gave 20 of 20 expected results, but the G2 review and a security audit found
+  F10. Run against that stack, `tests/podman_paths_smoke.sh` failed 12 checks: a
+  container on a user network without isolation reached teep's uplink address
+  on port 8337 and HAProxy's edge address, every network had `isolate=true`,
+  and HAProxy had a default route.
+- After item 6a, the same test on a stack recreated with `make down` and
+  `make up` gave 33 of 33 expected results: all of the above blocked, every
+  network `isolate=strict`, no default route for HAProxy, and the allowed and
+  forbidden paths of the first run unchanged. teep's direct HTTPS on its
+  isolated uplink works (`"IsTor":false`); the test now includes it.
 
-Limits of this evidence: teep to HAProxy's edge address is the check that shows
-`isolate: strict` working, because HAProxy accepts any source on that interface;
-the Tor checks would also be blocked by the router firewall. The teep result for
-the loopback-only host service does not show whether pasta's `169.254.1.2`
-mapping is reachable from teep at all under `isolate: strict`. The checks are
-not yet part of the smoke tests. Not yet run: Funnel, x402_treazury, storage and
-locking checks, restart and recreation, and Docker regression.
+Limits: the Tor checks would also be blocked by the router firewall, so the
+teep checks are the ones that show isolation. The teep result for the
+loopback-only host service does not show whether services bound to all host
+addresses are reachable from uplink containers under `isolate=strict`. Not yet
+run on Podman: `make test` and the other live targets, Funnel, x402_treazury,
+storage and locking, restart and recreation. Not yet run on Docker: everything
+in this phase.
 
 ### P4 — Guides
 
 - README requirements for both engines: `podman-docker` or a shim, the user
   `podman.socket`, the Compose version from D2.
-- Rootless operation: containers do not restart after a reboot without the user
-  `podman-restart.service`, and they stop at logout without linger, which may
-  need root to enable.
+- Rootless operation: containers stop at logout without linger, which may need
+  root to enable. After a reboot, run `make up`: `podman-restart.service` starts
+  only containers with `restart: always`, and the stack uses `unless-stopped`.
 - Backups: bind data under `data/` is owned by subordinate UIDs, so host-side
   backups need `podman unshare` (`docs/configuration.md` backup scope).
 - Engine differences in `docs/architecture.md`, including F6 and the
@@ -322,7 +338,27 @@ locking checks, restart and recreation, and Docker regression.
   rule against the webapp and Funnel frontends sharing port 8443. This revision
   resolves both (items 3–5, D7).
 - **G2, final gate after P4:** a fresh independent reviewer checks the combined
-  change, the P3 evidence on both engines and the guides.
+  change, the P3 evidence on both engines and the guides. First result on
+  `b0f6e83`: not pass. A security audit of the same snapshot agreed. Findings
+  and resolutions:
+  - The overlay's network options did not reach Podman (F10). Resolved by item
+    6a, and by `tests/podman_paths_smoke.sh`, which checks the engine's network
+    objects and a client on a network without isolation. The unit test of the
+    Compose model stays; it cannot show what the engine applies.
+  - x402_treazury startup read Podman's `StartedAt` wrongly: `logs --since`
+    refused it and its spaces split the restart count. Resolved by `log_since()`,
+    which turns either engine's format into a Unix timestamp.
+  - The README's reboot instruction did not apply (see P4). Corrected.
+  - The live tests named only the Docker files. They now use `compose_files()`
+    and `ensure_networks()`, and `tests/smoke.py` adds the Podman host targets
+    (pasta's address and each network gateway, including aardvark-dns).
+  - Detection trusted a Podman client while `DOCKER_HOST` named another engine,
+    and preflight did not check rootless operation. Resolved by D1 and item 6a.
+  - The proxy kept its edge-interface accept rule in loopback mode, which no
+    rootless connection uses. Removed; `firewall()` is now unit-tested.
+  - Guides: the Podman firewall case in `docs/webapp.md`, the key check and the
+    8443 rule on both engines, the Compose provider in the README, the pasta
+    statement, and the fail-closed mechanism.
 
 ## Relation to other plans
 
@@ -351,6 +387,8 @@ state format changes.
 ## Missing evidence
 
 - A recorded Docker Desktop run of P1.
+- Podman's handling of `stop_grace_period: -1s` (`.Config.StopTimeout` on the
+  treasury container) and `stop --timeout -1` (D2).
 - Compose 2.36+ against Podman 5.4: `create_host_path: false`, `gw_priority` and
   `start_interval` handling. The trial used Compose 2.26.1; P3 uses 2.40.3.
 - The Compose version with which `test_storage` passes: 2.26.1 and 2.40.3 both

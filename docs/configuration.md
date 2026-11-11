@@ -206,7 +206,8 @@ See [updates and plugins](updates-and-plugins.md) for the version-check/update
 workflow, persistent user plugins, and privacy defaults independent of notifications.
 
 The recommended provider is NearAI via teep's `neardirect` backend. Set
-`NEARAI_API_KEY` in `.env`. The native Hermes model picker has a **Teep** entry
+`NEARAI_API_KEY` in `.env`. `make up` refuses to start when no provider API key
+is set, because teep does not start without one. The native Hermes model picker has a **Teep** entry
 with these choices:
 
 - `neardirect:z-ai/glm-5.3-flash-long` (initial default)

@@ -135,8 +135,10 @@ are needed. Hermes remains attached only to its isolated backend; the executor
 is attached to neither ingress network.
 
 At startup the proxy installs default-deny IPv4/IPv6 firewall rules. It accepts
-local connections on the host-publication interface and Funnel connections only
-from the exact Tailscale address to port 8443. It can initiate connections only
+local connections on the host-publication interface (on rootless Podman, from
+the port forwarder over loopback; see [engine differences](architecture.md#rootless-podman))
+and Funnel connections only from the exact Tailscale address to port 8443. With
+Funnel enabled, `WEBAPP_PORT` must not be 8443. It can initiate connections only
 to Hermes at `10.203.85.2:9120`; established replies are permitted. New connections
 to the host/VM, LAN, Internet, DNS, or other stack services are blocked. IP
 forwarding is denied. The startup process then switches to UID 10005 and removes
