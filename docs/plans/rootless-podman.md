@@ -307,7 +307,7 @@ Funnel off):
   reachable; a container without the probe tool makes a check fail, not pass.
   This check first exposed that Hermes has no `nslookup`, so an earlier "blocked"
   result for Hermes was not evidence; the raw UDP probe replaced it. The final run
-  on commit `TBD` passed 35 of 35, and `make down` then left no project
+  on commit `fd0a165` (working tree equal to it) passed 35 of 35, and `make down` then left no project
   network.
 
 - `tests/smoke.py` (the `make test` suite, run as preflight plus the script,
