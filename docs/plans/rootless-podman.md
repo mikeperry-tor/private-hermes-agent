@@ -3,7 +3,7 @@
 Status: G1 passed. P1 is merged. P2 and P4 are implemented. P3 is partial
 (see Missing evidence). G2 is open.
 Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
-`main`, commit `d5287db`.
+`main`, commit `1d83657`.
 Plan path: `docs/plans/rootless-podman.md`.
 Follow the [planning workflow](../planning-workflow.md) before implementation.
 
@@ -296,7 +296,7 @@ next to the Docker addresses:
 Evidence, rootless Podman 5.4.2 with Compose 2.40.3 (treasury not initialized,
 Funnel off):
 
-- First run, commit `96f9c8e`, networks created by Compose: a disposable script
+- First run, commit `7ffdc31`, networks created by Compose: a disposable script
   gave 20 of 20 expected results, but a later check found F10: networks created
   through Podman's compatible API lose their options. Run against that stack, `tests/podman_paths_smoke.sh` failed 12 checks: a
   container on a user network without isolation reached teep's uplink address
@@ -311,7 +311,9 @@ Funnel off):
   reachable; a container without the probe tool makes a check fail, not pass.
   This check first exposed that Hermes has no `nslookup`, so an earlier "blocked"
   result for Hermes was not evidence; the raw UDP probe replaced it.
-- Final run, commit `36c94e6` with a clean working tree, 2026-11-12: `make up`
+- Final run, 2026-11-12, with a clean working tree on this branch before its
+  rebase onto `1d83657` (base `d5287db`, so without the executor desktop and
+  browser automation): `make up`
   exit 0; the path test passed 35 of 35; after `make down`, `podman network ls`
   listed only `podman`; `tests/smoke.py` then passed all six sections, and
   `podman network ls` again listed only `podman`, so network removal after
@@ -374,13 +376,13 @@ in this phase.
   Podman positively, the overlay's position in the file list, and stale P1
   status. This revision resolves them; F9 was tested after the review. The
   non-blocking findings are in D2, D4, D5, D7 and the P2 consumer list. A fresh
-  re-review of the amendment (`53f3c9c`) passed it with two conditions: a
+  re-review of the amendment (`dd9c8ed`) passed it with two conditions: a
   separate Podman file for Funnel, because one file fails without Funnel, and a
   rule against the webapp and Funnel frontends sharing port 8443. This revision
   resolves both (items 3–5, D7).
 - **G2, final gate after P4:** a fresh independent reviewer checks the combined
   change, the P3 evidence on both engines and the guides. First result on
-  `f5750c2`: not pass. A security audit of the same snapshot agreed. Findings
+  `6c6729c`: not pass. A security audit of the same snapshot agreed. Findings
   and resolutions:
   - The overlay's network options did not reach Podman (F10). Resolved by item
     6a, and by `tests/podman_paths_smoke.sh`, which checks the engine's network
@@ -427,6 +429,11 @@ state format changes.
 
 ## Missing evidence
 
+- Any live run after the rebase onto `1d83657`: the executor desktop
+  (`COMPUTER_USE_ENABLED=true`, with its seccomp profile) and browser
+  automation have not run on Podman, and the P3 runs above predate them. Unit
+  tests and both Podman Compose models, with the desktop off and on, pass on the
+  rebased branch.
 - Docker: every P3 item on Docker Desktop and Linux Docker, including the unit
   tests, `make check`, the live targets and a recorded Docker Desktop run of P1.
   No Docker engine was available for this work.
