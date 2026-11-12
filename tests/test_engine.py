@@ -193,6 +193,19 @@ class NetworkCreationTests(unittest.TestCase):
                 stack.main_unlocked()
                 self.assertEqual(ensure.called, creates)
 
+    def test_compose_down_passthrough_removes_leftover_networks(self):
+        with patch.object(sys, 'argv', ['stack.py', 'compose', 'down', '--remove-orphans']), \
+                patch.object(stack, 'remove_networks') as cleanup, patch.object(stack, 'run') as run, \
+                patch.dict(os.environ):
+            stack.main_unlocked()
+        self.assertEqual(run.call_args.args[0][-2:], ['down', '--remove-orphans'])
+        cleanup.assert_called_once()
+
+    def test_network_removal_reports_a_failed_model_query_without_raising(self):
+        with patch.object(deployment, 'engine', return_value='podman'), \
+                patch.object(deployment, '_output', side_effect=subprocess.CalledProcessError(1, 'docker')):
+            deployment.remove_networks(['docker', 'compose'])
+
     def test_docker_engine_creates_no_network(self):
         with patch.object(deployment, 'engine', return_value='docker'), \
                 patch.object(deployment, '_output', side_effect=AssertionError('no Compose call')):

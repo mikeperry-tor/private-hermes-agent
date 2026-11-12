@@ -63,7 +63,10 @@ def main_unlocked():
         run(['docker', 'compose', *compose_files(True), *args.arguments])
         return
     if args.action == 'compose' and maintenance_command(args.arguments):
-        run(maintenance_compose(all_ingress=True, executor_build=args.arguments[:1] == ['build']) + args.arguments)
+        command = maintenance_compose(all_ingress=True, executor_build=args.arguments[:1] == ['build'])
+        run(command + args.arguments)
+        if args.arguments[0] == 'down':
+            remove_networks(command)
         return
     config = settings()
     command = compose(config)
@@ -74,8 +77,6 @@ def main_unlocked():
         if args.arguments[0] in ('up', 'create', 'run', 'start'):
             ensure_networks(command)
         run(command + args.arguments)
-        if args.arguments[0] == 'down':
-            remove_networks(command)
     elif args.action == 'config':
         run(command + ['config', '--quiet'])
     else:

@@ -133,7 +133,7 @@ isolation. A Podman difference must not weaken a boundary on either engine.
    the intended model, with and without Funnel.
 4. The Podman files are always last: `compose.podman.yaml` after
    `compose.funnel.yaml` and any test overlay, then `compose.podman.funnel.yaml`
-   when Funnel is on. A review check showed that an overlay placed before
+   when Funnel is on. A test showed that an overlay placed before
    `compose.funnel.yaml` lets `funnel-link` get the Docker options back.
 5. `scripts/deployment.py` adds the Podman files to the commands it builds when
    the engine is Podman, and preflight checks the floors of that engine. Other
@@ -240,8 +240,8 @@ not a speculative option.
 ### P1 — Engine-neutral changes (pull request 1)
 
 GRE through netlink and the Tor control directory owner (F1, F2). Status:
-merged as `be62899` (merge `ce5b966`) after a check on Docker by the maintainer.
-The Docker Desktop result is not recorded here.
+merged as `be62899` (merge `ce5b966`). Its Docker
+results are not recorded here.
 
 ### P2 — Podman overlay, engine selection and ingress
 
@@ -293,8 +293,8 @@ Evidence, rootless Podman 5.4.2 with Compose 2.40.3 (treasury not initialized,
 Funnel off):
 
 - First run, commit `3329a49`, networks created by Compose: a disposable script
-  gave 20 of 20 expected results, but the G2 review and a security audit found
-  F10. Run against that stack, `tests/podman_paths_smoke.sh` failed 12 checks: a
+  gave 20 of 20 expected results, but a later check found F10: networks created
+  through Podman's compatible API lose their options. Run against that stack, `tests/podman_paths_smoke.sh` failed 12 checks: a
   container on a user network without isolation reached teep's uplink address
   on port 8337 and HAProxy's edge address, every network had `isolate=true`,
   and HAProxy had a default route.

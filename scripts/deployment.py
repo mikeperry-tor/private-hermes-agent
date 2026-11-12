@@ -65,7 +65,11 @@ def remove_networks(command):
     """
     if engine() != 'podman':
         return
-    config = json.loads(_output(*command, '--profile', '*', 'config', '--format', 'json'))
+    try:
+        config = json.loads(_output(*command, '--profile', '*', 'config', '--format', 'json'))
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+        print(f'Could not list the project networks to remove: {error}', file=sys.stderr, flush=True)
+        return
     for network in (config.get('networks') or {}).values():
         if network.get('external'):
             continue

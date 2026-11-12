@@ -35,6 +35,9 @@ s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind(("127.0.0.1", 11111)); s.listen()
 while True: s.accept()[0].close()
 ' >/dev/null 2>&1 & HOSTSVC=$!
+sleep 1
+python3 -I -c 'import socket; socket.create_connection(("127.0.0.1", 11111), timeout=3).close()' 2>/dev/null \
+  || { echo "FAIL  host listener on 127.0.0.1:11111 did not start"; exit 1; }
 PLAIN=private-hermes-paths-plain
 cleanup() {
   kill $HOSTSVC 2>/dev/null
@@ -85,7 +88,7 @@ try:
 except OSError: print(\"blocked\")"' 2>/dev/null)
   expect "$svc -> aardvark-dns at gateway 10.203.82.1:53" blocked "$r"
 done
-r=$(podman exec "$(c executor)" sh -c 'curl -6 -s --max-time 8 -o /dev/null https://check.torproject.org/ && echo open || echo blocked' 2>/dev/null)
+r=$(podman exec "$(c executor)" sh -c 'command -v curl >/dev/null || { echo "error (no curl)"; exit; }; curl -6 -s --max-time 8 -o /dev/null https://check.torproject.org/ && echo open || echo blocked' 2>/dev/null)
 expect "executor IPv6 egress" blocked "$r"
 
 # A container of the same user on a network without isolation (F9): Podman's
@@ -106,15 +109,16 @@ except OSError: print('blocked')" 2>/dev/null)
 expect "DNS probe control: Podman DNS answers on a plain network" open "$r"
 for target in "$teepup 8337 teep-uplink" "$edge 9120 HAProxy-edge" "10.203.83.3 8337 teep-inference"; do
   set -- $target
-  r=$(podman exec "$PLAIN" sh -c "nc -z -w 5 $1 $2 && echo open || echo blocked" 2>/dev/null)
+  r=$(podman exec "$PLAIN" sh -c "command -v nc >/dev/null || { echo 'error (no nc)'; exit; }; nc -z -w 5 $1 $2 && echo open || echo blocked" 2>/dev/null)
   expect "non-isolated network -> $3 $1:$2" blocked "$r"
 done
 for name in $(podman network ls --format '{{.Name}}' | grep "^${P}_"); do
   opt=$(podman network inspect "$name" --format '{{index .Options "isolate"}}')
   [ "$opt" = strict ] && expect "$name isolate=strict" open open || expect "$name isolate=strict" open "blocked (isolate=$opt)"
 done
-r=$(podman exec "$(c webapp-proxy)" ip route 2>/dev/null | grep -c '^default' || true)
-[ "$r" = 0 ] && expect "HAProxy has no default route" blocked blocked || expect "HAProxy has no default route" blocked open
+r=$(podman exec "$(c webapp-proxy)" sh -c 'command -v ip >/dev/null || { echo error; exit; }; ip route | grep -c "^default" || true' 2>/dev/null)
+case "$r" in 0) actual=blocked;; error) actual="error (no ip)";; *) actual=open;; esac
+expect "HAProxy has no default route" blocked "$actual"
 
 echo "== Totals: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
