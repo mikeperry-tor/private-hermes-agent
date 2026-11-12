@@ -1,8 +1,7 @@
 # Rootless Podman support
 
-Status: G1 passed with conditions, resolved. P1 is merged. P2 and P4 are
-implemented; the first G2 review did not pass, and this revision resolves its
-findings (see Gates). P3 is partial; G2 is pending again.
+Status: G1 passed. P1 is merged. P2 and P4 are implemented. P3 is partial
+(see Missing evidence). G2 is open.
 Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
 `main`, commit `d5287db`.
 Plan path: `docs/plans/rootless-podman.md`.
@@ -129,7 +128,7 @@ isolation. A Podman difference must not weaken a boundary on either engine.
      single file cannot hold these: without Funnel, the `tailscale` entry makes
      Compose fail (`service "tailscale" has neither an image nor a build context
      specified`).
-   Review checks with Compose 2.26.1 confirmed that `!reset` and `!override` give
+   Tests with Compose 2.26.1 confirmed that `!reset` and `!override` give
    the intended model, with and without Funnel.
 4. The Podman files are always last: `compose.podman.yaml` after
    `compose.funnel.yaml` and any test overlay, then `compose.podman.funnel.yaml`
