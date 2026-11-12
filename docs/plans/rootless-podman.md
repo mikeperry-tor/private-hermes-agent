@@ -1,9 +1,13 @@
 # Rootless Podman support
 
-Status: G1 passed. P1 is merged. P2 and P4 are implemented. P3 is partial
-(see Missing evidence). G2 is open.
+Status: original G1 passed; P1 is merged; original P2 and P4 are implemented.
+P3 is partial. Review of `86c74f9` found three open defects (R1–R3 below).
+P5–P7 describe the explicit-selection amendment and are not implemented.
+Amendment design gate G1A passed; final combined gate G2 remains open.
 Planning baseline: branch `main`, commit `4a08841`. Amendment baseline: branch
 `main`, commit `1d83657`.
+Explicit-selection amendment baseline: branch `rootless-podman-support`, commit
+`86c74f9c2d8089e7cae02e3bf7011e98b24cb085` (2026-11-12).
 Plan path: `docs/plans/rootless-podman.md`.
 Follow the [planning workflow](../planning-workflow.md) before implementation.
 
@@ -17,9 +21,12 @@ In scope:
 
 - Start, operate, back up and stop the current topology on rootless Podman with
   the same trust boundaries as on Docker.
-- Keep every Docker file and command unchanged. Docker Desktop, the qualified
-  Docker platform, stays the Docker regression target.
-- One Podman overlay that removes or replaces only the Docker-only settings.
+- Preserve the Docker topology, effective security settings and operator Make
+  workflow. Unify engine commands across helpers, Make targets and fixtures;
+  Docker Desktop remains the qualified Docker regression target.
+- Select Docker or local rootless Podman explicitly from root `.env`, with an
+  exported shell override for testing. Keep the two narrow Podman overlays.
+- Correct R1–R3 without changing persistent state, credentials or wallet identity.
 
 Out of scope:
 
@@ -31,7 +38,11 @@ Out of scope:
 
 ## Current behavior
 
-The stack supports Docker only:
+At the amendment baseline, automatic detection chooses Podman overlays but all
+ordinary engine/Compose calls still use the `docker` executable. Podman therefore
+requires a shim. Network creation/removal alone calls native `podman`. Preflight
+checks rootless mode and `DOCKER_HOST` only on some startup paths. The following
+list describes the original planning baseline, before P1–P4:
 
 - `scripts/preflight.py` requires Docker Engine 28+ and Compose 2.36+.
 - `compose.yaml` and `compose.funnel.yaml` use Docker bridge options: isolated
@@ -107,77 +118,67 @@ host, VM and private destinations, exact internal grants, ingress separate from
 egress, Teep's verification behavior and its accepted direct uplink, and wallet
 isolation. A Podman difference must not weaken a boundary on either engine.
 
-## Proposed approach
+## Review findings to resolve
 
-1. Engine-neutral changes go into the base files. F1 and F2 are merged (pull
-   request 1).
-2. `compose.yaml`, `compose.funnel.yaml` and all Docker consumers stay as they
-   are.
-3. Two Podman files remove or replace the Docker-only keys with Compose's
-   `!reset` and `!override` tags:
-   - `compose.podman.yaml`, always on Podman:
-     `driver_opts: !override {isolate: strict}` on every network of
-     `compose.yaml`, including the uplinks and `webapp-publish`. This replaces
-     Docker's gateway options and restores Docker's separation between networks
-     (F9). `webapp-publish` also gets `no_default_route: "true"`. It also holds
-     `start_interval: !reset null`, `gw_priority: !reset null` on teep, and an
-     environment value for HAProxy's startup (F6, D7).
-   - `compose.podman.funnel.yaml`, on Podman with Funnel only: the same
-     `isolate` override for `funnel-link` and `tailscale-uplink`, and
-     `gw_priority: !reset null` on `tailscale` (`compose.funnel.yaml:39`). A
-     single file cannot hold these: without Funnel, the `tailscale` entry makes
-     Compose fail (`service "tailscale" has neither an image nor a build context
-     specified`).
-   Tests with Compose 2.26.1 confirmed that `!reset` and `!override` give
-   the intended model, with and without Funnel.
-4. The Podman files are always last: `compose.podman.yaml` after
-   `compose.funnel.yaml` and any test overlay, then `compose.podman.funnel.yaml`
-   when Funnel is on. A test showed that an overlay placed before
-   `compose.funnel.yaml` lets `funnel-link` get the Docker options back.
-5. `scripts/deployment.py` adds the Podman files to the commands it builds when
-   the engine is Podman, and preflight checks the floors of that engine. Other
-   callers that name files (`stack.py:53`, `preflight.py:32-34`, the Makefile,
-   the smoke tests and unit tests) get the same file list from `deployment.py` or
-   a shared helper.
-6. Docker gets no new file. The Podman files are selected only when the engine
-   positively identifies as Podman (D1). A failed or uncertain detection selects
-   Docker; on Podman, Compose then refuses `healthcheck.start_interval` for
-   Podman's API version and startup stops with a visible error. (Podman's API
-   drops the Docker bridge options with a warning; it does not reject them.)
-   With `DOCKER_HOST` set, a Podman client selects the Podman files only when
-   that endpoint reports the `Podman Engine` component.
-6a. On Podman, `deployment.ensure_networks()` runs before each Compose `up` in
-   `stack.py`, the treasury controller and the smoke tests, and before `up`,
-   `create`, `run` and `start` through the `stack.py compose` passthrough. After
-   `make down`, `stack.py compose down` and a smoke test `down`,
-   `deployment.remove_networks()` removes the project's remaining labeled
-   networks, because `ensure_networks()` creates the networks of every profile
-   and Compose `down` removes only those of the services it manages. It creates every
-   project network with `podman network create`, the overlay's options, the
-   model's subnet and `internal` flag, and Compose's project and network labels
-   (F10). An existing network without these options stops startup until
-   `make down` removes it. Preflight requires rootless Podman 5.4+, the `podman`
-   command, and a `DOCKER_HOST` that is unset or names the user's Podman socket.
-7. The `docker` and `docker compose` commands stay. On Podman, `podman-docker` or
-   a `docker` shim and the user `podman.socket` provide them.
+A fresh independent read-only review of `86c74f9` against `main` (`1d83657`)
+confirmed these control-flow/reliability findings. Podman was unavailable for
+new runtime reproduction; F10 supplies prior evidence of the network consequence.
 
-Support for both engines is a stated requirement, so this engine selection is
-not a speculative option.
+| ID | Finding and consequence | Planned resolution |
+| --- | --- | --- |
+| R1 (P1) | `stack.py compose --profile x402_treazury up -d` and `compose -p another-project up -d` bypass network preparation because only the first argument is checked. API-created Podman networks can lose strict isolation. | P5: identify the real subcommand and provision the same effective model/project used by the launch, including global options. |
+| R2 (P1) | Docker-context detection can select a Podman endpoint while native `podman` provisions a different endpoint. `DOCKER_HOST`-only validation misses this, and passthrough/new-wallet startup bypasses preflight. | P5: explicit native commands, one local Podman endpoint policy, and scoped validation on every networked launch. |
+| R3 (P2) | The proxy's container sysctl does not lower the host privileged-port floor. `WEBAPP_PORT=80` can pass validation but fail rootless publication, contrary to the compatibility claim. | P6: document the host prerequisite and high-port recommendation; retain the container setting for its separate responsibility. |
+
+## Intended approach and simplifications
+
+1. Replace automatic selection with `CONTAINER_ENGINE=docker|podman` in root
+   `.env`; absent means `docker`, and an explicitly exported value takes
+   precedence. Invalid/empty values fail visibly. Remove client-brand selection,
+   raw socket HTTP probing and fallback selection; no automatic/legacy mode.
+2. Construct engine and Compose commands in small shared host helpers. Docker
+   uses `docker` / `docker compose`; Podman uses native local `podman` /
+   `podman compose`. Inspect, wait, logs, stop, run, volume operations, builds,
+   fixtures and network operations must all follow the same selection. A Docker
+   shim is no longer required. Do not add an adapter registry or command framework.
+3. Apply the endpoint policy in D9 to those commands. Check the selected engine's
+   actual requirements before network use. An engine selection is not evidence
+   of rootless operation, network isolation or correct Compose provider behavior.
+4. Share launch preparation at the existing host-helper boundary: required
+   engine checks followed by Podman network preparation, then the requested
+   Compose operation. Route managed stack startup, treasury startup, passthrough
+   and runtime fixtures through it. Keep explicit networkless maintenance paths
+   and read-only rendering separate; no generic dependency/lifecycle engine.
+5. Preserve native Docker network creation. Preserve Podman's native network
+   creation, option checks, Compose adoption labels and leftover-network cleanup:
+   F10 demonstrates why Compose cannot own those Podman options. Use the actual
+   effective project/model for both preparation and cleanup. Retain existing
+   ownership checks; do not add journals, readiness markers or parallel state.
+6. Keep base/Funnel topology and useful Docker settings. Keep
+   `compose.podman.yaml` and `compose.podman.funnel.yaml` as narrow engine deltas,
+   selected explicitly and appended after all applicable overlays. The second
+   file remains necessary because the Funnel-only service is undefined without
+   `compose.funnel.yaml`. Do not remove Docker healthcheck cadence or change GRE
+   merely to reduce overlay lines. Cosmetic YAML deduplication is not a phase.
+7. Unify Make/test command construction, including networkless custom fixture
+   models, while preserving each fixture's deliberate topology. Test both
+   effective deployment models with either selected Compose provider. All CLI
+   inspection/cleanup must address the engine that created the fixture.
+8. Correct low-port guidance under D10. Keep image/source pins, network grants,
+   external-content policy, provider verification and wallet authority unchanged.
 
 ## Decisions
 
-- **D1, engine identification.** The engine that matters is the one behind the
-  socket Compose uses. With `podman-docker`, `docker` runs `podman` directly and
-  `docker version --format json` has no server component list, so a check of the
-  component name `Podman Engine` does not work in that form. Decision: select the
-  overlay only on a positive Podman identification, in either form: the server
-  reports the `Podman Engine` component (the Docker CLI on a Podman socket), or
-  the `docker` command is Podman (`podman-docker` or a shim). Everything else is
-  Docker, with the Docker floors checked. The check follows the endpoint Compose
-  uses, including `DOCKER_HOST` and the current Docker context, which Docker
-  Desktop uses in place of `DOCKER_HOST`. The second form identifies the client;
-  it is enough because `podman compose` points Compose at the Podman socket. To
-  verify on Docker, Docker Desktop and Podman.
+- **D1, explicit engine selection (supersedes automatic detection).** Root
+  `.env` remains the unified operator input. Add `CONTAINER_ENGINE=docker` to
+  `.env.example`; only exact `docker` and `podman` are valid. An absent key/file
+  defaults to Docker; a present blank/invalid value is an error. Exported shell
+  values override the file, allowing `CONTAINER_ENGINE=podman make test` without
+  editing it. Resolve once for each invocation, before Compose construction;
+  validate backend identity before network use rather than using it to select
+  a backend. Missing tools, unavailable endpoints or an engine mismatch are
+  errors, never permission to switch engines. No container needs this host-only
+  selector, and no service receives the full `.env`.
 - **D2, Compose floor on Podman.** `make down` and the treasury controller pass
   `--timeout -1` (`stack.py:48`, `x402_treazury.py:186,206,242,278`), so
   `stop_grace_period` does not govern them. `gw_priority` leaves the Podman model
@@ -238,6 +239,57 @@ not a speculative option.
   configuration through `render()` (`stack.py:76`), and its startup through the
   overlay's environment value. Check local access with Funnel on, without live
   enrollment.
+- **D8, read the selector from normal `.env`.** Host Python may read this private
+  operator file; privacy is not a reason to move the selector elsewhere. Compose
+  still owns interpolation of service configuration. Use the small, standalone
+  upstream `python-dotenv` parser (initial reference: version 1.2.1
+  [parser.py](https://github.com/theskumar/python-dotenv/blob/v1.2.1/src/dotenv/parser.py)),
+  vendored unchanged under `scripts/` with its license and exact upstream revision
+  recorded. It uses the standard library and avoids a host package-install step,
+  a handwritten dotenv grammar, and an engine/Compose bootstrap cycle. Vendor
+  only the parser required for this read, not the package's CLI/configuration API.
+  Use parsed bindings solely to obtain `CONTAINER_ENGINE`; do not call an API
+  that exports all settings. Accept literal unquoted, single/double-quoted values,
+  whitespace, comments, optional `export`, CRLF and duplicate assignments (last
+  assignment wins). Consume unrelated multiline values correctly so embedded
+  selector-looking text is never interpreted as an assignment. Require the
+  decoded selector to be a literal enum: no variable interpolation or shell
+  evaluation is needed for this setting. Missing files differ from unreadable
+  files; I/O and parse errors identify the path/line without printing source
+  text or secret values. An exported valid selector can be read without parsing
+  `.env`; Compose will still validate any configuration it needs. Existing `.env`
+  bytes and permissions are never rewritten to introduce the selector. Test the
+  supported literal forms against native Compose parsing. This narrowly scoped
+  reader adds no general configuration layer or extra operator location.
+- **D9, one endpoint policy (R2).** Docker keeps native context/endpoint handling;
+  all Docker commands must share it. Networked operations verify that the endpoint
+  is Docker and meets the existing floor; a `docker` shim reaching Podman must
+  fail rather than silently selecting an overlay. Podman support is local,
+  rootless Linux only: explicitly select native local mode (`--remote=false`)
+  for both engine commands and `podman compose`, require the user API socket and
+  the supported Docker Compose provider, and ensure that provider uses that same
+  socket. Pass a consistent child environment that removes inherited endpoint
+  overrides such as `DOCKER_HOST`, `DOCKER_CONTEXT`, `CONTAINER_HOST` and
+  `CONTAINER_CONNECTION` from the Podman command path. Before a networked launch,
+  report conflicting ambient overrides with an actionable error (variable names,
+  no credential-bearing values); do not silently launch on a different endpoint.
+  Read-only inspection, repair, backup and shutdown still target the explicitly
+  selected local Podman instance using the same normalized commands, without
+  requiring startup readiness, valid serving policy or clearing those overrides.
+  Validate engine/rootless/provider/endpoint requirements at the network-use
+  boundary, including Compose passthrough and new-wallet initialization; keep
+  networkless saved-wallet inspection and shutdown available. No raw socket HTTP
+  client, remote-Podman support or daemon identity record is added.
+- **D10, low host ports (R3).** Keep `net.ipv4.ip_unprivileged_port_start=0` in
+  the proxy container: it permits unprivileged HAProxy to bind a low container
+  port when the host permits publication. It cannot grant the host forwarder
+  that permission. Recommend the default `WEBAPP_PORT=9120` or another high port;
+  document that low host ports require deliberate host configuration, subject
+  to the host's actual privileged-port floor. Correct the overlay comment and
+  architecture table; document the same limitation for a low `TEEP_HOST_PORT`.
+  Let native publication report its permission error; do not add an arbitrary
+  >=1024 ban, a duplicate permission check, privileged relay or automatic host
+  sysctl/capability change. Existing Docker publication behavior is preserved.
 
 ## Phases
 
@@ -249,7 +301,8 @@ results are not recorded here.
 
 ### P2 — Podman overlay, engine selection and ingress
 
-Implement the approach and D1–D7. Consumers:
+Original P2 is implemented at the amendment baseline; its automatic-selection
+contract is superseded by P5/D1/D8/D9. Original consumers:
 
 - `compose.podman.yaml`, `compose.podman.funnel.yaml`, `scripts/deployment.py`,
   `scripts/stack.py`, the Makefile, `.env.example`.
@@ -302,8 +355,8 @@ Funnel off):
   container on a user network without isolation reached teep's uplink address
   on port 8337 and HAProxy's edge address, every network had `isolate=true`,
   and HAProxy had a default route.
-- After item 6a, the same test on a stack recreated with `make down` and
-  `make up` gave all expected results: all of the above blocked, every network
+- After the native network creation fix, the same test on a stack recreated
+  with `make down` and `make up` gave all expected results: all of the above blocked, every network
   `isolate=strict`, no default route for HAProxy, the allowed and forbidden paths
   of the first run unchanged, and teep's direct HTTPS on its isolated uplink
   (`"IsTor":false`). The current test has 35 checks, including a positive
@@ -352,10 +405,25 @@ loopback-only host service does not show whether services bound to all host
 addresses are reachable from uplink containers under `isolate=strict`. Not yet
 run on Podman: the Firefox and WebKit content checks of `webapp-test` (host
 browser limits), and restart and recreation of `tor` and the network owners
-outside the tests that already restart services. Not yet run on Docker: everything
-in this phase.
+outside the tests that already restart services. Docker evidence follows below.
+
+Docker evidence at `86c74f9`, 2026-11-12: Docker Desktop ARM64, Engine
+29.9.3, Compose 5.7.0 passed `make test` (114 unit tests, effective Docker/Podman
+base/Funnel models, compilation, live SSH/MCP/forbidden-path checks, Tor outage
+and recovery), `make webapp-test` (24 content cases across Chromium, Firefox and
+WebKit; local/simulated HTTPS auth, ingress-policy refusal, Tor retrieval and
+unfunded treasury activation), `tests/storage_smoke.py` (retry/identity/locks and
+ordinary-down persistence), and `tests/endpoint_readiness_smoke.py` (cancellation,
+delayed readiness, terminal errors and corrected restart). `git diff --check`
+passed; disposable containers were cleaned up. No operator state or funds were
+used. These passes qualify the existing Docker paths, not the unimplemented
+amendment, Linux Docker, Podman or optional desktop runtime on Podman. R1–R3
+remain open despite these passes.
 
 ### P4 — Guides
+
+Original P4 is implemented; its shim/automatic-selection instructions are to be
+replaced with the P5 operating contract as that implementation lands.
 
 - README requirements for both engines: `podman-docker` or a shim, the user
   `podman.socket`, the Compose version from D2.
@@ -368,6 +436,91 @@ in this phase.
   `X-Forwarded-For` value, which is `10.203.85.3` for every client on Podman.
 - Checks in `docs/development.md`.
 
+### P5 — Explicit selection and unified engine operations (not implemented)
+
+Implement D1/D8/D9 and the simplifications together in a coherent new development
+commit, after G1A. Cover R1 and R2; no fixup/squash/rebase of existing history.
+Consumers: `.env.example`, `scripts/deployment.py`, `preflight.py`, `stack.py`,
+`provisioning.py`, `x402_treazury.py`, Makefile, and every direct engine call in
+`tests/` (including `hermes_build.py` and custom networkless fixture models).
+Existing helpers such as plugins/updates inherit the selected commands; trace
+those consumers too. Add the vendored parser/license with source/removal notes.
+Update README requirements/operation and maintained configuration, architecture,
+development, webapp, treasury and updates/plugin guides where their commands or
+engine assumptions change. Documentation must describe implemented behavior only.
+
+For passthrough, locate the actual Compose subcommand after supported global
+options; preserve the effective project name, project directory, files, env files
+and profiles in model rendering, launch and cleanup. Include `--option=value` and
+short forms accepted by the documented wrapper. Keep engine overlays last even
+with user-supplied files. Root `.env`/shell selects the host engine; passthrough
+`--env-file` selects Compose interpolation inputs and does not silently change
+engines. Publish the wrapper's supported global options; reject unsupported or
+ambiguous forms before mutation rather than guessing. Do not reimplement the
+whole Compose CLI. `config`, inspection and dry-run must not create networks;
+explicit existing networkless maintenance jobs must not require networking.
+Network-creating operations (`up`, `create`, networked `run`, `start`, and any
+supported watch/recreate entry point) must not bypass preparation.
+
+Focused acceptance:
+
+- Selector semantics, missing/unreadable/malformed files, blank/invalid/exported
+  values, duplicate/quoted/commented assignments, CRLF, unrelated multiline values,
+  and a value containing shell syntax; no evaluation, source-line leakage or
+  export of unrelated secrets. Match supported literal parsing with Compose.
+- Both executables present: selected Docker never invokes Podman and selected
+  Podman never invokes the Docker engine, including build/inspect/log/wait/cleanup.
+  Provider executable use is distinct from targeting Docker's daemon. A failed
+  selected engine does not query/use the other as a fallback.
+- Conflicting Docker contexts/hosts and Podman remote settings: demonstrate one
+  selected local Podman socket, or refusal before any network/container creation.
+  Docker contexts continue working for Docker. Unsupported/rootful Podman fails
+  before network use on managed, passthrough and new-wallet launch paths.
+- R1 reproductions with `--profile` and `-p`, plus file/env-file/project-directory
+  overrides and dry-run: prepared/adopted/removed networks belong to the actual
+  project and retain required options; read-only operations do not mutate them.
+- All four base/Funnel engine models, desktop off/on; preserve existing mounts,
+  capabilities, firewall grants and shutdown behavior. Native network creation
+  and cleanup remain minimal; no additional authoritative state is introduced.
+- Offline status/repair/backup/shutdown under invalid unrelated serving settings
+  and conflicting ambient Podman endpoint overrides; no provider keys, credentials
+  or wallets are rewritten. Repeated init retains the existing selector/config.
+
+### P6 — Accurate rootless publication guidance (not implemented)
+
+A separate focused new commit implements D10/R3: correct the Podman overlay
+comment, architecture table and configuration/webapp guidance. Preserve the
+container sysctl and the default port. If implementation discovers a concrete
+native-error deficiency, report it rather than adding enforcement speculatively.
+
+Acceptance: inspect effective models for default and low webapp/Teep ports, and
+on a disposable rootless host show default/high-port publication works while a
+port below the actual host floor fails visibly. A low port already allowed by
+host policy must not be rejected by a blanket wrapper rule. Do not change host
+policy to perform the check; no Docker runtime rerun is needed for comment/prose
+changes alone.
+
+### P7 — Amendment qualification and final combined review (not implemented)
+
+Run focused P5 checks, then repeat affected P3/runtime checks on Docker Desktop
+and a rootless Podman host with both engines installed. Serialize fixed-subnet
+fixtures. In addition to the live SSH/MCP/Tor/failure and storage tests, exercise
+Podman strict-isolation paths from a client on a non-isolated network, local plus
+simulated Funnel ingress/restart, and treasury endpoint diagnostics/stops without
+funds. Prove no cross-engine inspection/cleanup or accidental namespace creation
+on rejected launches. Use disposable projects; changing engines never migrates,
+recreates or deletes existing credentials/wallets. Engine storage is independent;
+shared bind data must not be used by concurrent deployments, and switching an
+existing deployment requires stopping it and accounting for ownership/backup.
+
+Record evidence by exact revision and engine/provider/platform. Reuse still-valid
+evidence; Docker-only results and mocked dispatch do not establish Podman runtime
+isolation. Preserve remaining qualification limits below, including the desktop
+and browser harness. Complete G2 only with the required evidence and no open
+material findings; otherwise keep the plan with explicit next checks. On final
+acceptance, move lasting evidence into maintained guides, reconcile inbound links
+and remove the completed plan under the planning workflow.
+
 ### Gates
 
 - **G1, design gate before P2:** a fresh independent reviewer checks this plan,
@@ -379,14 +532,27 @@ in this phase.
   re-review of the amendment (`dd9c8ed`) passed it with two conditions: a
   separate Podman file for Funnel, because one file fails without Funnel, and a
   rule against the webapp and Funnel frontends sharing port 8443. This revision
-  resolves both (items 3–5, D7).
-- **G2, final gate after P4:** a fresh independent reviewer checks the combined
-  change, the P3 evidence on both engines and the guides. First result on
+  resolved both through the separate overlay and port-conflict rule (D7).
+- **G1A, amendment design gate before P5:** a fresh read-only reviewer checks
+  R1–R3, D1/D8–D10, the reader/dependency tradeoff, endpoint normalization and
+  operation-scoped checks, actual Compose-option propagation, P5–P7 consumers,
+  acceptance evidence and deferrals. Result: pass with no material findings on
+  2026-11-12, reviewing `86c74f9` plus plan blob
+  `060cb81e324931b8e693d97b0071a95e2dea9458`; the only subsequent plan edit
+  records this acceptance. The reviewer accepted the standalone parser tradeoff,
+  endpoint policy, actual Compose-option propagation and R3 guidance. This gate
+  does not mark the amendment implemented or G2 accepted.
+- **G2, final combined gate after P7:** a fresh independent reviewer checks the
+  resulting branch against the baseline, R1–R3 corrections, affected P3/P5–P7
+  evidence on both engines, preservation of saved state, and maintained guides.
+  Meaningful P5 security changes also need independent read-only phase review;
+  one review may cover that phase and G2 when all evidence is available. The
+  original gate after P4 remains historical. First result on
   `6c6729c`: not pass. A security audit of the same snapshot agreed. Findings
   and resolutions:
-  - The overlay's network options did not reach Podman (F10). Resolved by item
-    6a, and by `tests/podman_paths_smoke.sh`, which checks the engine's network
-    objects and a client on a network without isolation. The unit test of the
+  - The overlay's network options did not reach Podman (F10). Resolved by
+    native network creation, and by `tests/podman_paths_smoke.sh`, which checks
+    the engine's network objects and a client on a network without isolation. The unit test of the
     Compose model stays; it cannot show what the engine applies.
   - x402_treazury startup read Podman's `StartedAt` wrongly: `logs --since`
     refused it and its spaces split the restart count. Resolved by `log_since()`,
@@ -396,7 +562,8 @@ in this phase.
     and `ensure_networks()`, and `tests/smoke.py` adds the Podman host targets
     (pasta's address and each network gateway, including aardvark-dns).
   - Detection trusted a Podman client while `DOCKER_HOST` named another engine,
-    and preflight did not check rootless operation. Resolved by D1 and item 6a.
+    and preflight did not check rootless operation. Original fixes were partial:
+    the later R2 review found context/entry-point gaps. P5 supersedes that design.
   - The proxy kept its edge-interface accept rule in loopback mode, which no
     rootless connection uses. Removed; `firewall()` is now unit-tested.
   - Guides: the Podman firewall case in `docs/webapp.md`, the key check and the
@@ -421,11 +588,38 @@ in this phase.
 - [Configurable MCP listeners](changing-mcp-listeners.md): MCP grants stay
   addresses in `10.203.84.0/24` on both engines.
 
+## Commit strategy and scope of this amendment
+
+Use ordinary focused commits: plan/design amendment, P5 implementation with tests
+and docs, P6 publication guidance, and qualification/corrections as warranted.
+Retain existing review history; do not autosquash or rewrite it without explicit
+user authorization. Commit only named intended files. This task updates the
+plan only; it does not authorize executing P5–P7, installing tools, changing host
+policy, enrolling Funnel, making payments or destroying private state.
+
+## Open assumptions and deferrals
+
+No user input is presently required for selector reading: D8 keeps it in normal
+root `.env` and defines a concrete parser approach. G1A must challenge whether
+vendoring the standalone parser is the smallest maintainable solution; if a
+materially simpler approach preserves these semantics, revise the design before
+implementation. No shell sourcing, alternate selector file or runtime dependency
+installation is an acceptable shortcut.
+
+Podman's actual provider environment and local-mode behavior must be qualified
+on the supported version, including inherited endpoint overrides; documentation
+alone is insufficient. Keep full remote/rootful Podman support, generic option
+parsing, topology/capability changes, extra relays and automatic state transfer
+out of scope. The capability-reduction and configurable-MCP-listener plans retain
+their existing responsibilities and require no design change for this amendment.
+
 ## Rollback
 
-Remove the two Podman files and the engine selection in `deployment.py` and
-preflight. Docker is not affected. Volumes, keys and configuration stay; no
-state format changes.
+If reverting implementation commits, restore the corresponding command/docs
+contract together; do not leave mixed engine selection and invocation paths.
+Never treat the known-defective automatic-selection baseline as qualified merely
+because it was restored. Engine changes do not change state formats or authorize
+volume deletion, wallet reinitialization or automatic cross-engine migration.
 
 ## Missing evidence
 
@@ -434,9 +628,10 @@ state format changes.
   automation have not run on Podman, and the P3 runs above predate them. Unit
   tests and both Podman Compose models, with the desktop off and on, pass on the
   rebased branch.
-- Docker: every P3 item on Docker Desktop and Linux Docker, including the unit
-  tests, `make check`, the live targets and a recorded Docker Desktop run of P1.
-  No Docker engine was available for this work.
+- P5–P7 are unimplemented/unqualified. No Podman is installed on the current
+  review host; obtain rootless runtime and dual-engine evidence on another host.
+- Docker: P3 items outside the recorded `86c74f9` Docker Desktop run, including
+  Linux Docker and any checks needed after the P5 command-path changes.
 - The x402_treazury lifecycle on Podman beyond `x402_treazury-test`:
   `make x402_treazury-init`, the preparation path up to funding, the live
   `serving_instance()` and `log_since()` path, `.Config.StopTimeout` for
@@ -448,9 +643,10 @@ state format changes.
   Podman, including adoption of pre-created networks, is not tested; P3 used
   2.40.3.
 - Live Funnel enrollment (only the simulated HTTPS path ran), the Firefox and
-  WebKit content checks, and other kernels and distributions, for example hosts
-  with `br_netfilter` loaded or restricted unprivileged user namespaces.
+  WebKit content checks on Podman, and other kernels/distributions, for example
+  hosts with `br_netfilter` loaded or restricted unprivileged user namespaces.
 - `research_config_smoke.py`, `endpoint_readiness_smoke.py`, `images_smoke.py`,
   `context_refs_smoke.py`, `desktop_tools_smoke.py` and `hermes_ui.py` were not
-  run on Podman. They are unchanged: they use their own fixture models,
-  `network_mode: none` or no network, so they do not depend on the overlays.
+  run on Podman. They use custom fixture models, `network_mode: none` or no
+  network and do not need deployment overlays, but P5 must route their engine
+  commands correctly and requalify affected behavior.
