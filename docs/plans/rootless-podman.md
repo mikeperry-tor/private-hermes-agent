@@ -148,7 +148,12 @@ isolation. A Podman difference must not weaken a boundary on either engine.
    With `DOCKER_HOST` set, a Podman client selects the Podman files only when
    that endpoint reports the `Podman Engine` component.
 6a. On Podman, `deployment.ensure_networks()` runs before each Compose `up` in
-   `stack.py`, the treasury controller and the smoke tests. It creates every
+   `stack.py`, the treasury controller and the smoke tests, and before `up`,
+   `create`, `run` and `start` through the `stack.py compose` passthrough. After
+   `make down`, `stack.py compose down` and a smoke test `down`,
+   `deployment.remove_networks()` removes the project's remaining labeled
+   networks, because `ensure_networks()` creates the networks of every profile
+   and Compose `down` removes only those of the services it manages. It creates every
    project network with `podman network create`, the overlay's options, the
    model's subnet and `internal` flag, and Compose's project and network labels
    (F10). An existing network without these options stops startup until
@@ -306,19 +311,25 @@ Funnel off):
   control that its DNS probe gets an answer where Podman's DNS server is
   reachable; a container without the probe tool makes a check fail, not pass.
   This check first exposed that Hermes has no `nslookup`, so an earlier "blocked"
-  result for Hermes was not evidence; the raw UDP probe replaced it. The final run
-  on commit `46bf0a1` (working tree equal to it) passed 35 of 35, and `make down` then left no project
-  network.
+  result for Hermes was not evidence; the raw UDP probe replaced it.
+- Final run, commit `36c94e6` with a clean working tree, 2026-11-12: `make up`
+  exit 0; the path test passed 35 of 35; after `make down`, `podman network ls`
+  listed only `podman`; `tests/smoke.py` then passed all six sections, and
+  `podman network ls` again listed only `podman`, so network removal after
+  `make down` and after a test `down` worked.
 
 - `tests/smoke.py` (the `make test` suite, run as preflight plus the script,
   because `make check` stops at `test_storage`) passed all six sections on
-  Podman: published teep port and host isolation, Tor versus direct egress,
+  Podman, first on an earlier commit and again in the final run: published teep port and host isolation, Tor versus direct egress,
   host/VM, rpcbind TCP/UDP and IPv6 blocks, the real Hermes terminal and
   `execute_code` over SSH, MCP streaming, and Tor outage. Two test-side
   differences were fixed first: the fixture binds port 111 without capabilities,
   which Podman refuses below `ip_unprivileged_port_start=1024`, and cleanup must
   return files to container UID 0, which is the host user under rootless Podman.
-- `storage-test`, `x402_treazury-test` and `plugins-test` passed on Podman.
+- `storage-test`, `x402_treazury-test` and `plugins-test` passed on Podman, on
+  the commit before network removal, the `compose` passthrough change and the
+  `log_since()` time zone fix; those later changes are covered by unit tests and
+  the final run above.
   `webapp-test` passed every ingress check, including capability-free HAProxy
   with separate local and Funnel listeners across restart, exact `Host`
   enforcement, browser login over local HTTP and the simulated Funnel HTTPS path,
@@ -334,7 +345,8 @@ Funnel off):
   test checkout with `chmod g-w`.
 
 Limits: the Tor checks would also be blocked by the router firewall, so the
-teep checks are the ones that show isolation. The teep result for the
+teep checks are the ones that show isolation. The x402_treazury lifecycle
+beyond `x402_treazury-test` did not run (see Missing evidence). The teep result for the
 loopback-only host service does not show whether services bound to all host
 addresses are reachable from uplink containers under `isolate=strict`. Not yet
 run on Podman: the Firefox and WebKit content checks of `webapp-test` (host
