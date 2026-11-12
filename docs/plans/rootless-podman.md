@@ -292,7 +292,7 @@ next to the Docker addresses:
 Evidence, rootless Podman 5.4.2 with Compose 2.40.3 (treasury not initialized,
 Funnel off):
 
-- First run, commit `3329a49`, networks created by Compose: a disposable script
+- First run, commit `96f9c8e`, networks created by Compose: a disposable script
   gave 20 of 20 expected results, but a later check found F10: networks created
   through Podman's compatible API lose their options. Run against that stack, `tests/podman_paths_smoke.sh` failed 12 checks: a
   container on a user network without isolation reached teep's uplink address
@@ -307,7 +307,7 @@ Funnel off):
   reachable; a container without the probe tool makes a check fail, not pass.
   This check first exposed that Hermes has no `nslookup`, so an earlier "blocked"
   result for Hermes was not evidence; the raw UDP probe replaced it. The final run
-  on commit `fd0a165` (working tree equal to it) passed 35 of 35, and `make down` then left no project
+  on commit `46bf0a1` (working tree equal to it) passed 35 of 35, and `make down` then left no project
   network.
 
 - `tests/smoke.py` (the `make test` suite, run as preflight plus the script,
@@ -363,13 +363,13 @@ in this phase.
   Podman positively, the overlay's position in the file list, and stale P1
   status. This revision resolves them; F9 was tested after the review. The
   non-blocking findings are in D2, D4, D5, D7 and the P2 consumer list. A fresh
-  re-review of the amendment (`659c560`) passed it with two conditions: a
+  re-review of the amendment (`53f3c9c`) passed it with two conditions: a
   separate Podman file for Funnel, because one file fails without Funnel, and a
   rule against the webapp and Funnel frontends sharing port 8443. This revision
   resolves both (items 3–5, D7).
 - **G2, final gate after P4:** a fresh independent reviewer checks the combined
   change, the P3 evidence on both engines and the guides. First result on
-  `695b141`: not pass. A security audit of the same snapshot agreed. Findings
+  `f5750c2`: not pass. A security audit of the same snapshot agreed. Findings
   and resolutions:
   - The overlay's network options did not reach Podman (F10). Resolved by item
     6a, and by `tests/podman_paths_smoke.sh`, which checks the engine's network
