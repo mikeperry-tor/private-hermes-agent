@@ -217,7 +217,7 @@ Podman stack, including a client on a network without isolation.
 - Hermes: derived from official v0.23.1, with base digest and explicit source
   checks in `components/hermes/`. Runtime and maintenance share the derived
   image; see [patch/build procedure](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance).
-- teep: built from commit `1bdd44955dcbc6378ef2a08be75406c90ddb3044`
+- teep: built from commit `6548996bb53ffa74e05d2b2f52e71534d1650149`
   with Go 1.26. It runs as UID 10002, read-only except temporary files, without
   `--offline`, `--force`, or debug tags. Upstream's default attestation policy
   (including allowed failures) is preserved. Health is not proof of attestation.
