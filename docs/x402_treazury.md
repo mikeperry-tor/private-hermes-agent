@@ -535,6 +535,37 @@ rerunning tests. Qualification containers, networks and volumes were removed;
 generated checkout configuration was cleared. Pre-existing named volumes and
 unrelated VM resources were preserved.
 
+The `ee92a067655d8d34d5cbc490ddbeb938635d0144` refresh in `a619eae` retains
+native exit status as preparation completion authority. Inspection of the new
+upstream diagnostics found no wallet-sync/warming message parser in the workflow,
+and both recognized terminal MCP endpoint diagnostics are unchanged. No log-message
+tests were added; the smoke fixture only updates its expected build revision.
+
+On 2026-11-14, this refresh passed all 174 existing unit tests, four Compose
+models, compilation, native treasury image builds, endpoint readiness, offline
+research configuration and the unfunded treasury smoke fixture on both Docker
+29.9.3 / Compose 5.7.0 and Debian 13 ARM64 rootless Podman 5.4.2 / Compose 5.7.1.
+Both runtime targets used Linux ARM64 images. Full treasury checks reused the
+successful `make check` result via `make -o check x402_treazury-test`.
+
+The Podman run reused the already-built ARM64 Teep dependency image after its
+ancillary Git fetch stalled. Docker-format native health metadata was restored
+from the unchanged Teep Dockerfile after import; the treasury itself was built
+natively on Podman. This does not qualify a new native Podman Teep build or
+provider attestation. Successful local fixture logs are
+`/tmp/x402-pin-ee92a067-docker-{endpoints,config,treasury}.log`; successful VM
+logs are `/tmp/x402-pin-ee92a067-podman-{check,treasury-build,endpoints,config,treasury-final}.log`
+on `debvm23`. Earlier dependency-build and
+import-metadata failures are retained separately and are not passing evidence.
+Live wallet sync, funded bootstrap and paid relay work were not exercised.
+
+Current qualification containers, networks and runtime volumes were removed.
+The normal Docker stack was shut down gracefully with operator approval and left
+stopped; its persistent state and unrelated working-tree changes were preserved.
+Independent final review accepted `a619eae` and this qualification evidence with
+no material findings, using source inspection and recorded results without
+rerunning tests.
+
 ## Pending live qualification
 
 The staged onboarding implementation is complete and has passed local fixture
