@@ -370,7 +370,7 @@ test coverage, see [development and qualification](docs/development.md).
 
 ## Near Hackathon Submission
 
-Private Hermes is the user-facing point-project in a three-repository
+Private Hermes is the judging entry-point repository in a three-repository
 submission for the [NEAR Hackaton](https://nearhackaton.com).
 
 Private Hermes was developed exclusively during the Hackathon's offical
@@ -382,69 +382,75 @@ Our official submission also covers
 significantly during the hackathon to improve their functionality and
 performance with Near ecosystem technologies for use in this stack.
 
-Together, these three repositories compose one submission (as
-team Hardened Minds) in the following [official hackathon tracks](https://nearhackathon.com/#tracks):
+Together, these three repositories compose one submission by Mike Perry and
+Bradley Erickson (as team Hardened Minds) in the following three
+[official hackathon tracks](https://nearhackathon.com/#tracks):
 
 1. **Private by design**
 
-Private Hermes is privacy-by-design end-to-end, starting with a local,
-sandboxed, hardened, and Tor-routed Hermes Agent (this repository).
-Best-in-class privacy technology is used for every connected component: Tor,
-Zcash, NearAI, and Near Intents swaps.
+   Private Hermes is privacy-by-design end-to-end, starting with a local,
+   sandboxed, hardened, and Tor-routed Hermes Agent (this repository).
+   Best-in-class privacy technology is used for every connected component: Tor,
+   Zcash, NearAI, and Near Intents swaps.
 
-Hermes Agent itself, chosen for its top-ranking spot on [multiple OpenRouter
-App Leaderboard Categories](https://openrouter.ai/apps), has been modified to
-disable analytics, improve component isolation, reduce service capabilities,
-support rootless Podman, and route everything through Tor, including
-agent-rendered image links. Anything that could not be safely sent through
-Tor is blocked.
+   Hermes Agent itself, chosen for its top-ranking spot on
+   [multiple OpenRouter App Leaderboard Categories](https://openrouter.ai/apps),
+   has been modified to disable analytics, improve component isolation, reduce
+   service capabilities, support rootless Podman, and route everything through
+   Tor, including agent-provided remote media elements. Anything that could not
+   be safely sent through Tor is blocked.
 
-NearAI's verified-private inference is actually verified, thoroughly,
-with TEE attestation checked by [TEE Proof](https://github.com/13rac1/teep)
-before each prompt is sent.
+   NearAI's verifiably-private inference is actually verified, thoroughly,
+   with TEE attestation checked by [TEE Proof](https://github.com/13rac1/teep)
+   before each prompt is sent. Attestation-pinned TLS and/or end-to-end
+   encryption is used and enforced (neardirect uses pinned TLS;
+   nearcloud uses both pinned TLS and end-to-end encryption to the inference
+   endpoint TEE).
 
 2. **Give AI a wallet**
 
-Private Hermes can be provided with tools to [send and recieve any
-cryptocurrency](#living-dangerously-full-wallet-access) supported by Near Intents
-swaps, as via single-use exact-input and exact-output swaps to and from its
-shielded Zcash reserve. These swaps are isolated over independent Tor circuits.
+   Private Hermes can be provided with tools to
+   [send and recieve any cryptocurrency](#living-dangerously-full-wallet-access)
+   supported by Near Intents, via single-use exact-input and exact-output
+   unique address swaps to and from its shielded Zcash reserve. These swaps are
+   isolated over independent Tor circuits.
 
-Private Hermes has also been given privacy enhanced access to Tor-routed x402
-research APIs via
-[x402_treazury](https://github.com/mikeperry-tor/x402_treazury/), which uses
-shielded ZCash swaps via Near Intents to fund rotating, small denomination, isolated
-USDC:Base wallets to pay these x402 APIs micropayments.
+   Private Hermes has also been given privacy enhanced access to Tor-routed x402
+   research APIs via
+   [x402_treazury](https://github.com/mikeperry-tor/x402_treazury/), which uses
+   shielded ZCash swaps via Near Intents to fund rotating, small denomination, isolated
+   USDC:Base wallets to pay these x402 APIs micropayments.
 
 2. **Trust, but verify**
 
-On the cryptocurrency side, per-transaction payment limits can be configured,
-and the agent is otherwise isolated from cryptocurrency keys through the
-hardened containerization of this stack.
+   On the cryptocurrency side, per-transaction payment limits can be configured,
+   and the agent is otherwise isolated from cryptocurrency keys through the
+   hardened containerization of this stack.
 
-The connected [x402_treazury Research
-Desk](https://github.com/mikeperry-tor/x402_treazury/blob/main/examples/deployments/research_desk.toml)
-provides numerous blockchain analysis, banking compliance, IP address analysis,
-phone number analysis, company financial data, customer review data, website
-technology stack assessment tools, and many, many other tools to help
-the agent know as much as possible about any entities it is interacting with,
-as well as any other topic it is directed to research.
+   The connected
+   [x402_treazury Research Desk](https://github.com/mikeperry-tor/x402_treazury/blob/main/examples/deployments/research_desk.toml)
+   provides numerous blockchain analysis, banking compliance, IP address analysis,
+   phone number analysis, company financial data, customer review data, website
+   technology stack assessment tools, and many, many other tools to help
+   the agent know as much as possible about any entities it is interacting with,
+   as well as any other topic it is directed to research.
 
 ## Work done in the hackathon
 
-- **This repository** is hackathon work: every commit is dated 2026-11-08 or
-  later ([commit history](https://github.com/mikeperry-tor/private-hermes-agent/commits/main)).
-- **Other Repositories:** these existed before the hackathon period, and the stack uses
-  them.
+- **This repository** is hackathon work: every commit is dated 2026-11-08 or later.
+- **Other Repositories:** these existed before the hackathon period, but
+  have qualifying patches and commits.
   - [Hermes Agent](https://github.com/NousResearch/hermes-agent) (MIT License),
-    Nous Research. The agent and webapp, built from the official image with local
+    Nous Research. The agent and webapp, built from the official release with local
     patches in [components/hermes/](https://github.com/mikeperry-tor/private-hermes-agent/tree/main/components/hermes)
   - [x402_treazury](https://github.com/mikeperry-tor/x402_treazury)
     (AGPL-3.0), a project of this team. Its NEAR Intents swap code dates from
     2026-10-02, but signficant work has been done since the official hackathon
     start date to improve the privacy and reliability of its USDC payments;
     these privacy properties rely heavily on the usage of Near Intents for
-    shielded Zcash swaps. Commit `b9efb0fc6692eb349e3143b2fa94ad159cd64858`
+    shielded Zcash swaps. Additionally, the native cryptocurrency send and
+    receive tools were created using Near Intents swaps specifically for this
+    competition. Repository commit `b9efb0fc6692eb349e3143b2fa94ad159cd64858`
     is the first commit within the hackathon timeframe.
   - [TEE Proof (teep)](https://github.com/13rac1/teep) (AGPL-3.0), a project of
     this team. Its repository was created on 2026-03-20, and its NEAR AI
@@ -452,9 +458,10 @@ as well as any other topic it is directed to research.
     [13rac1/teep#191](https://github.com/13rac1/teep/pull/191): teep reports
     the failed Sigstore lookup for one image that NEAR AI runs instead of
     blocking the request, and still enforces `compose_binding`. Eligible
-    commits begin at `a43d14166c130d8cb1a4937eca28984d93bf75b1`.
+    timeframe commits begin at `a43d14166c130d8cb1a4937eca28984d93bf75b1`.
+- **Non-Covered Repositories**: external independent work, not submitted for consideration.
   - Tor, HAProxy, Tailscale, Alpine and Debian images, as pinned in
-    `components/`; external independent work, not submitted for consideration.
+    `components/`
 
 **Other Submissions**: Separate from these repositories (which are a team
 effort of Mike Perry and Bradley Erickson), Bradley Erickson is also the
