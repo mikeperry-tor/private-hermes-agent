@@ -364,7 +364,7 @@ For exact grants and trust boundaries, see
 [architecture and isolation](docs/architecture.md). For build procedures and
 test coverage, see [development and qualification](docs/development.md).
 
-## Near Hackathon
+## Near Hackathon Submission
 
 Private Hermes is the user-facing point-project in a three-repository
 submission for the [NEAR Hackaton](https://nearhackaton.com).
@@ -386,13 +386,14 @@ team Hardened Minds) in the following [official hackathon tracks](https://nearha
 Private Hermes is privacy-by-design end-to-end, starting with a local,
 sandboxed, hardened, and Tor-routed Hermes Agent (this repository).
 Best-in-class privacy technology is used for every connected component: Tor,
-Zcash, NearAI, and ephemeral Near Intent swaps.
+Zcash, NearAI, and Near Intents swaps.
 
 Hermes Agent itself, chosen for its top-ranking spot on [multiple OpenRouter
 App Leaderboard Categories](https://openrouter.ai/apps), has been modified to
-disable analytics, improve component isolation, and route everything through
-Tor, including agent-rendered image links. Anything that could not be safely
-sent through Tor is blocked.
+disable analytics, improve component isolation, reduce service capabilities,
+support rootless Podman, and route everything through Tor, including
+agent-rendered image links. Anything that could not be safely sent through
+Tor is blocked.
 
 NearAI's verified-private inference is actually verified, thoroughly,
 with TEE attestation checked by [TEE Proof](https://github.com/13rac1/teep)
@@ -408,21 +409,22 @@ shielded Zcash reserve. These swaps are isolated over independent Tor circuits.
 Private Hermes has also been given privacy enhanced access to Tor-routed x402
 research APIs via
 [x402_treazury](https://github.com/mikeperry-tor/x402_treazury/), which uses
-shielded ZCash swaps via Near Intents to fund rotating, omall denomination, isolated
+shielded ZCash swaps via Near Intents to fund rotating, small denomination, isolated
 USDC:Base wallets to pay these x402 APIs micropayments.
 
 2. **Trust, but verify**
 
-On the cryptocurrency side, Per-transaction payment limits can be configured,
+On the cryptocurrency side, per-transaction payment limits can be configured,
 and the agent is otherwise isolated from cryptocurrency keys through the
 hardened containerization of this stack.
 
 The connected [x402_treazury Research
 Desk](https://github.com/mikeperry-tor/x402_treazury/blob/main/examples/deployments/research_desk.toml)
-provides numerous blockchain analysis, banking compliance, IP address analysis
-tools, phone number analysis tools, data breach record checks,
-website technology stack assessment tools, and many, many other tools to help
-the agent know as much as possible about any entities it is interacting with.
+provides numerous blockchain analysis, banking compliance, IP address analysis,
+phone number analysis, company financial data, customer review data, website
+technology stack assessment tools, and many, many other tools to help
+the agent know as much as possible about any entities it is interacting with,
+as well as any other topic it is directed to research.
 
 ## Work done in the hackathon
 
@@ -435,20 +437,22 @@ the agent know as much as possible about any entities it is interacting with.
     patches in [components/hermes/](https://github.com/mikeperry-tor/private-hermes-agent/tree/main/components/hermes)
   - [x402_treazury](https://github.com/mikeperry-tor/x402_treazury)
     (AGPL-3.0), a project of this team. Its NEAR Intents swap code dates from
-    2026-10-02, but signficant work has been done on this repository to
-    improve the privacy and reliability of its USDC payments; these privacy
-    properties rely heavily on the usage of Near Intents for shielded Zcash
-    swaps, for example `40e914c8` and `d69ce29b` (2026-10-29).
+    2026-10-02, but signficant work has been done since the official hackathon
+    start date to improve the privacy and reliability of its USDC payments;
+    these privacy properties rely heavily on the usage of Near Intents for
+    shielded Zcash swaps. Commit `b9efb0fc6692eb349e3143b2fa94ad159cd64858`
+    is the first commit within the hackathon timeframe.
   - [TEE Proof (teep)](https://github.com/13rac1/teep) (AGPL-3.0), a project of
     this team. Its repository was created on 2026-03-20, and its NEAR AI
     provider dates from 2026-03. Changes in the hackathon period include
     [13rac1/teep#191](https://github.com/13rac1/teep/pull/191): teep reports
     the failed Sigstore lookup for one image that NEAR AI runs instead of
-    blocking the request, and still enforces `compose_binding`.
+    blocking the request, and still enforces `compose_binding`. Eligible
+    commits begin at `a43d14166c130d8cb1a4937eca28984d93bf75b1`.
   - Tor, HAProxy, Tailscale, Alpine and Debian images, as pinned in
     `components/`; external independent work, not submitted for consideration.
 
-**Other Submissions**: Separate from these repositories which are a (team
+**Other Submissions**: Separate from these repositories (which are a team
 effort of Mike Perry and Bradley Erickson), Bradley Erickson is also the
 sole developer of his independent NEAR HACKATHON 2026 project,
 [BuildDeed](https://github.com/13rac1/builddeed). That submission shares no
