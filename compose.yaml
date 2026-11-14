@@ -11,6 +11,7 @@ x-deployment:
   funnel_enabled: "${TAILSCALE_FUNNEL_ENABLED:-false}"
   webapp_bind: "${WEBAPP_BIND:-127.0.0.1}"
   webapp_port: "${WEBAPP_PORT:-9120}"
+  terminal_environment: "${WEBAPP_TERMINAL_ENVIRONMENT-code}"
   external_content: "${WEBAPP_EXTERNAL_CONTENT-tor_proxied}"
   webapp_username: "${WEBAPP_USERNAME:-admin}"
   funnel_host: "${TAILSCALE_FUNNEL_HOST:-}"
@@ -215,7 +216,8 @@ services:
       setup: {condition: service_completed_successfully}
       executor-net: {condition: service_healthy}
     cap_drop: [ALL]
-    cap_add: [SETUID, SETGID, SYS_CHROOT]
+    # OpenSSH needs CHOWN to assign remote PTYs to runner; sessions drop capabilities.
+    cap_add: [CHOWN, SETUID, SETGID, SYS_CHROOT]
     read_only: true
     environment:
       ANONYMIZED_TELEMETRY: "false"
@@ -412,6 +414,7 @@ services:
       CUA_DRIVER_RS_TELEMETRY_ENABLED: "0"
       OPENAI_BASE_URL: http://10.203.83.3:8337/v1
       OPENAI_API_KEY: unused
+      WEBAPP_TERMINAL_ENVIRONMENT: ${WEBAPP_TERMINAL_ENVIRONMENT-code}
       TERMINAL_SSH_HOST: 10.203.82.3
       TERMINAL_SSH_PORT: "2222"
       TERMINAL_SSH_USER: runner

@@ -431,3 +431,13 @@ changed-host-key refusal, resize, Ctrl-C, replay/attach, explicit close/shell-ch
 cleanup, executor outage/restart and backend-loss recovery. Native shell exit also
 passed. The full principal WebApp suite and both-mode/desktop coverage remain in
 progress. Podman native coverage is unavailable, not a pass.
+
+Docker lean full `make webapp-test` passed after fixture-only corrections: use
+actual Hermes UID for model probes, observe Docker Desktop bind propagation before
+identity-failure checks, and use native offline setup mounts for rootless-owned
+fixture keys. Full TypeScript and 147 renderer tests passed after the error-close
+correction. Existing principal WebApp auth, three-browser content, credentials,
+policy mismatch, treasury fixture and teardown checks also passed. Rootless
+Podman is available through the existing Debian VM (5.4.2 / Compose 5.7.1), despite
+no local macOS podman command; its native suite and both desktop variants are in
+progress. This supersedes the earlier missing-target assumption.

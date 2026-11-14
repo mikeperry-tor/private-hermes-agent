@@ -37,6 +37,7 @@ COPY --from=webapp-build /opt/hermes/tools/computer_use/ /opt/hermes/tools/compu
 COPY --from=webapp-build /opt/hermes/tui_gateway/methods_display.py /opt/hermes/tui_gateway/methods_display.py
 COPY --from=webapp-build /opt/hermes/hermes_cli/web_routers/display.py /opt/hermes/hermes_cli/web_routers/display.py
 COPY --from=webapp-build /opt/hermes/apps/desktop/dist-webapp/ /opt/hermes/apps/desktop/dist-webapp/
+COPY components/hermes/code_terminal.py /opt/hermes/hermes_cli/private_code_terminal.py
 COPY components/hermes/external_content.py /opt/hermes/hermes_cli/private_external_content.py
 COPY components/hermes/public_images.py /opt/hermes/hermes_cli/private_public_images.py
 COPY components/hermes/browser_policy.py /opt/hermes/hermes_cli/private_browser_policy.py

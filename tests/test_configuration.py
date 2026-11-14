@@ -29,7 +29,7 @@ class OperatorConfigurationTests(unittest.TestCase):
             self.assertEqual(executor['build']['target'], 'executor-' + enabled)
             self.assertEqual(services['hermes']['environment']['COMPUTER_USE_ENABLED'], enabled)
             self.assertTrue(executor['read_only'])
-            self.assertEqual(set(executor['cap_add']), {'SETUID', 'SETGID', 'SYS_CHROOT'})
+            self.assertEqual(set(executor['cap_add']), {'CHOWN', 'SETUID', 'SETGID', 'SYS_CHROOT'})
             self.assertIn('no-new-privileges:true', executor['security_opt'])
             self.assertEqual(any(x.startswith('seccomp=') for x in executor['security_opt']), enabled == 'true')
             models[enabled] = executor
@@ -39,6 +39,25 @@ class OperatorConfigurationTests(unittest.TestCase):
                                 cwd=ROOT, env=dict(os.environ, COMPUTER_USE_ENABLED='invalid'),
                                 capture_output=True)
         self.assertNotEqual(result.returncode, 0)
+
+    def test_terminal_mode_maps_only_to_hermes_on_both_models(self):
+        for overlay in ([], ['-f', 'compose.podman.yaml']):
+            for mode in ('code', 'agent', ''):
+                env = dict(os.environ, WEBAPP_TERMINAL_ENVIRONMENT=mode)
+                result = subprocess.run([*compose_base(), '-f', 'compose.yaml', *overlay,
+                                         'config', '--format', 'json'], cwd=ROOT, env=env,
+                                        text=True, capture_output=True, check=True)
+                model = json.loads(result.stdout)
+                self.assertEqual(model['x-deployment']['terminal_environment'], mode)
+                recipients = {name: service['environment']['WEBAPP_TERMINAL_ENVIRONMENT']
+                              for name, service in model['services'].items()
+                              if 'WEBAPP_TERMINAL_ENVIRONMENT' in service.get('environment', {})}
+                self.assertEqual(recipients, {'hermes': mode})
+        result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml',
+                                 'config', '--format', 'json'], cwd=ROOT,
+                                env={k: v for k, v in os.environ.items() if k != 'WEBAPP_TERMINAL_ENVIRONMENT'},
+                                text=True, capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['services']['hermes']['environment']['WEBAPP_TERMINAL_ENVIRONMENT'], 'code')
 
     def seed(self, root):
         (root / '.env.example').write_text('VENICE_API_KEY=\n')

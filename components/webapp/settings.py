@@ -30,6 +30,8 @@ class Settings:
 
     @classmethod
     def read(cls, values):
+        if values.get('terminal_environment', 'code') not in ('code', 'agent'):
+            raise ValueError('WEBAPP_TERMINAL_ENVIRONMENT must be code or agent')
         external_content = values['external_content']
         if external_content not in ('tor_proxied', 'ask', 'off', 'browser_native'):
             raise ValueError('WEBAPP_EXTERNAL_CONTENT must be tor_proxied, ask, off or browser_native')

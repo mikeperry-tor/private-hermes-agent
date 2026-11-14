@@ -27,7 +27,7 @@ def values(**changes):
 
 class WebappTests(unittest.TestCase):
     def test_invalid_or_inconsistent_settings_refuse_activation(self):
-        for change in ({'external_content': ''}, {'external_content': 'invalid'}, {'funnel_enabled': '1'},
+        for change in ({'terminal_environment': ''}, {'terminal_environment': 'invalid'}, {'external_content': ''}, {'external_content': 'invalid'}, {'funnel_enabled': '1'},
                        {'webapp_bind': '0.0.0.0'}, {'webapp_port': '9120;evil'},
                        {'funnel_enabled': 'true'}, {'funnel_host': '*.example.ts.net'},
                        {'funnel_host': 'example.ts.net\nattack'}, {'funnel_port': '80'},

@@ -258,7 +258,7 @@ The test used the pinned desktop base index
 Debian OpenSSH `1:10.0p1-7+deb13u4`, a root listener, generated fixture keys,
 `UsePAM=no`, read-only root, writable `/run` and `/tmp`, and
 `no-new-privileges`. No host network, external connection or real credentials
-were involved. This establishes why the current listener retains these grants;
+were involved. This historical non-PTY test establishes why the listener retains those grants;
 it does not establish every alternative SSH design's minimum or qualify Alpine,
 AMD64 or Podman by inference. UID 997 is image-specific.
 
@@ -276,13 +276,22 @@ layers enabled; nested user-namespace root was unable to rejoin the parent-owned
 network namespace or create a raw socket in it.
 Keep effective/permitted capability evidence for runner processes distinct from
 the root listener's grants and from namespace-local browser sandbox capabilities.
-Both-engine Docker/Podman qualification measured authenticated runner sessions at
+Historical both-engine Docker/Podman qualification measured authenticated runner sessions at
 UID 10000 with empty effective, permitted, inheritable and ambient sets and
 bounding set `0x400c0`; that residual is not authority in the executor's original
 user namespace under `NoNewPrivs=1` with no file capabilities. `SYS_CHROOT`
 remains a functional desktop/Podman Chromium sandbox requirement and is not
 security-only cleanup. See [development checks](development.md#executor-desktop-qualification) and the
 [qualification record](development.md#qualification-and-maintenance).
+
+On 2026-11-14, the lean production WebApp fixture demonstrated that remote PTY
+allocation additionally requires daemon `CHOWN`: sshd otherwise exits after
+`chown(/dev/pts/0, 10000, 5) failed: Operation not permitted`. The shared executor
+grant now includes CHOWN for native PTY ownership setup. No network or runner
+effective capability is added; read-only root/key mounts and no-new-privileges
+remain. The inherited bounding set becomes `0x400c1`. The historical `0x400c0`
+evidence above predates interactive PTYs; current coverage and missing engines
+are recorded in [terminal qualification](development.md#code-terminal-qualification).
 
 ### Hermes capability boundary
 
@@ -309,3 +318,23 @@ can broker additional SDK credentials and enforce HTTP destination policies;
 its default host-proxy wiring is not enabled here. Cloud microVM backends and
 an external VM executor offer stronger kernel separation, but introduce a
 separate runtime/provider. No newly identified mode replaces this SSH design.
+
+## Ordinary WebApp terminals
+
+`WEBAPP_TERMINAL_ENVIRONMENT` selects Code (default, SSH executor) or Agent
+(native Hermes shell) at process bootstrap, before profile dotenv loading.
+The code-terminal patch changes only the ordinary-terminal preparation branch,
+retaining native tickets, identity/profile ownership, PTY registry, replay,
+resize, explicit close and expiry. Saved gateway shells retain their own path.
+A remote cwd probe runs outside the registry lock; local PTY spawn uses the
+profile home while metadata reports the remote launch cwd.
+
+Code shells use the existing captured SSH connection inputs and private key with
+strict pinned host verification, batch authentication and forwarding disabled.
+OpenSSH transports terminal resize and input/signals through a remote PTY. The
+same runner filesystem, process namespace and Tor/private-destination policy
+apply to human and model commands, including both executor image variants.
+No additional network grant, mount or service is introduced. Native PTY setup
+requires the daemon-only CHOWN grant described above. Selecting
+Code does not revoke the authenticated operator's administrative WebApp authority.
+See [terminal operation](webapp.md#terminal-environment).

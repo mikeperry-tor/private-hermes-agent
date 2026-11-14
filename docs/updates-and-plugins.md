@@ -265,3 +265,13 @@ that setting applies only to the qualification compiler, not runtime containers.
 `make webapp-test` rebuilds Hermes and the proxy before fixture startup, and
 `make images-test` rebuilds Hermes, preventing stale local tags from bypassing
 changed startup or fetch behavior.
+
+The code-terminal patch and `private_code_terminal` helper target the same pinned
+v0.23.1 source. They select ordinary host-terminal preparation using early-captured
+deployment inputs, preserving native saved gateways and the authenticated PTY
+lifecycle. The helper owns remote cwd validation and shell/SSH argument construction;
+the browser bootstrap carries the mode for labeling, stale-page refusal and local
+tab restoration. No compiled bundles are edited. Remove them when the selected
+upstream provides equivalent executor terminals with this connection policy,
+authentication, cwd handling and lifecycle, qualified on both supported engines.
+See [terminal qualification](development.md#code-terminal-qualification).

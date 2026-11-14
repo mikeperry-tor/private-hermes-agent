@@ -32,6 +32,9 @@ def main():
     run(*engine_command(), 'run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
         '--entrypoint', 'node', '--workdir', WORKSPACE, IMAGE,
         'node_modules/vitest/vitest.mjs', 'run', '--project', 'ui',
+        'src/lib/browser-terminal.test.ts', 'src/lib/browser-desktop-bridge-saved-connections.test.ts',
+        'src/app/right-sidebar/terminal/terminals.test.ts',
+        'src/app/right-sidebar/terminal/use-terminal-session.test.tsx',
         'src/hooks/use-media-image.test.tsx', 'src/lib/media.remote.test.ts',
         'src/app/chat/right-rail/preview-pane.test.tsx')
     print('PASS: full renderer TypeScript check and focused native media/preview tests')

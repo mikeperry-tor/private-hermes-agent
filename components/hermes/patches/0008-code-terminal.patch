@@ -1,0 +1,259 @@
+--- a/hermes_bootstrap.py
++++ b/hermes_bootstrap.py
+@@ -36,6 +36,11 @@
+ _HAPPY_EYEBALLS_DELAY_SECONDS = 0.25
+ _URLLIB3_CONNECTION_MODULE = "urllib3.util.connection"
+
++
++# Deployment-owned terminal selection, captured before profile dotenv loading.
++PRIVATE_HERMES_TERMINAL_ENVIRONMENT = os.environ.get("WEBAPP_TERMINAL_ENVIRONMENT", "code")
++PRIVATE_HERMES_TERMINAL_SSH = tuple(os.environ.get(key, "") for key in (
++    "TERMINAL_SSH_HOST", "TERMINAL_SSH_PORT", "TERMINAL_SSH_USER", "TERMINAL_SSH_KEY"))
+
+ def _interleave_addrinfos(addrinfos: list[tuple]) -> list[tuple]:
+     """Round-robin the resolved address families (deduped), preserving resolver order within each."""
+--- a/hermes_cli/web_server.py
++++ b/hermes_cli/web_server.py
+@@ -62,6 +62,9 @@
+             "Web UI requires fastapi and uvicorn.\n"
+             "Run hermes pm repair, then restart Hermes."
+         )
++
++from hermes_cli.private_code_terminal import environment as _terminal_environment
++_terminal_environment()
+
+ WEB_DIST = Path(os.environ["HERMES_WEB_DIST"]) if "HERMES_WEB_DIST" in os.environ else Path(__file__).parent / "web_dist"
+ _log = logging.getLogger(__name__)
+--- a/hermes_cli/web_host_terminal_sessions.py
++++ b/hermes_cli/web_host_terminal_sessions.py
+@@ -24,6 +24,7 @@
+     _VIEWER_SEND_ERRORS, _VIEWER_SEND_TIMEOUT_SECONDS, WS_CLOSE_VIEWER_STALLED,
+     WS_CLOSE_VIEWER_STALLED_REASON, PtySession, PtySessionRegistry, RegistryFull, _close_ws, run_reaper,
+ )
++from hermes_cli.private_code_terminal import CodeTerminalError
+ from hermes_cli.web_host_terminal import META_PREFIX
+ from hermes_constants import assert_named_profile_home_live, get_hermes_home
+
+@@ -134,10 +135,18 @@
+         raise RegistryFull()
+
+     async def create(self, ws: WebSocket, identity: tuple[str, str]):
+-        from hermes_cli.web_host_terminal import query_dimension, resolve_argv
++        from hermes_cli.web_host_terminal import query_dimension
+         from hermes_cli.web_server_chat import PtyBridge
+         token = secrets.token_urlsafe(32)
+         owner = None
++        prepared = None
++        if getattr(ws.state, "ssh_terminal", None) is None:
++            from hermes_cli.private_code_terminal import prepare
++            home = _request_home(ws.query_params.get("profile"))
++            if not await asyncio.to_thread(_home_live, home):
++                raise TerminalExpired()
++            # Remote preparation must never hold the PTY registry's spawn lock.
++            prepared = await asyncio.to_thread(prepare, home, ws.query_params.get("cwd"))
+
+         def spawn():
+             nonlocal owner
+@@ -148,8 +157,8 @@
+                 home = _request_home(ws.query_params.get("profile"))
+                 if not _home_live(home):
+                     raise TerminalExpired()
+-                argv, cwd, env, shell = resolve_argv(home=home, requested_cwd=ws.query_params.get("cwd"))
+-                owner = HostOwner(identity, home, shell, cwd)
++                argv, cwd, env, shell, terminal_cwd = prepared
++                owner = HostOwner(identity, home, shell, terminal_cwd)
+             bridge = PtyBridge.spawn(
+                 argv, cwd=cwd, env=env,
+                 cols=query_dimension(ws.query_params.get("cols"), 80, 2000),
+@@ -280,7 +289,9 @@
+
+
+ def _metadata(token, owner, registry, *, reconnected, truncated):
++    from hermes_cli.private_code_terminal import environment
+     return META_PREFIX + json.dumps({
++        **({"environment": environment()} if isinstance(owner, HostOwner) else {}),
+         "shell": owner.shell, "terminalId": token, "cwd": owner.cwd,
+         "reconnected": reconnected, "retentionSeconds": registry._ttl,
+         "truncated": truncated,
+@@ -298,6 +309,10 @@
+     Returns None once a ``close`` request has been served. Raises the ``Terminal*``
+     errors ``host_terminal`` maps to close codes.
+     """
++    if getattr(ws.state, "ssh_terminal", None) is None:
++        from hermes_cli.private_code_terminal import environment, CodeTerminalError
++        if ws.query_params.get("environment", environment()) != environment():
++            raise CodeTerminalError("Terminal environment changed; reload the WebApp")
+     token = ws.query_params.get("attach")
+     action = ws.query_params.get("action")
+     identity = _request_identity(ws)
+@@ -571,6 +586,8 @@
+                 await _close_ws(ws, WS_CLOSE_VIEWER_STALLED, WS_CLOSE_VIEWER_STALLED_REASON)
+             return
+         await _pump_input(ws, registry, token, session, owner)
++    except CodeTerminalError as exc:
++        await ws.close(code=4411, reason=str(exc))
+     except TerminalDenied:
+         await ws.close(code=4403, reason="Terminal belongs to another identity or profile")
+     except TerminalExited:
+--- a/hermes_cli/web_server_dashboard.py
++++ b/hermes_cli/web_server_dashboard.py
+@@ -205,12 +205,15 @@
+         # none, so a tab on any other profile names that profile on every request.
+         from hermes_cli.web_server_profiles import serving_profile_name as _serving_profile_name
+         serving_profile_js = json.dumps(_serving_profile_name()).replace("</", "<\\/")
++        from hermes_cli.private_code_terminal import environment as terminal_environment
++        terminal_environment_js = json.dumps(terminal_environment())
+         bootstrap_script = (
+             f"<script>{token_js}"
+             f"window.__HERMES_DASHBOARD_EMBEDDED_CHAT__={chat_js};"
+             f'window.__HERMES_BASE_PATH__="{prefix}";'
+             f"window.__HERMES_AUTH_REQUIRED__={'true' if gated else 'false'};"
+             f"window.__HERMES_INITIAL_PROFILE__={initial_profile_js};"
++            f"window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__={terminal_environment_js};"
+             f"{surface_js}"
+             f"window.__HERMES_DASHBOARD_PROFILE__={serving_profile_js};"
+             f"</script>"
+--- a/apps/desktop/src/global.d.ts
++++ b/apps/desktop/src/global.d.ts
+@@ -33,6 +33,7 @@
+
+ declare global {
+   interface Window {
++    __PRIVATE_HERMES_TERMINAL_ENVIRONMENT__?: 'code' | 'agent'
+     hermesDesktop: {
+       // Resolve a backend connection. Omit `profile` (or pass the primary) for
+       // the window's backend; pass a named profile to dial/reuse that profile's
+--- a/apps/desktop/src/lib/browser-desktop-bridge.ts
++++ b/apps/desktop/src/lib/browser-desktop-bridge.ts
+@@ -208,7 +208,11 @@
+       // The host terminal of the gateway the terminal started on, relayed when it is not the serving one.
+       websocketUrl: async (profile, connectionId) => {
+         if (!relays || connectionId === LOCAL_CONNECTION_ID) {
+-          return ticketedWebsocketUrl(bootstrap, '/api/host-terminal', profile)
++          const url = new URL(await ticketedWebsocketUrl(bootstrap, '/api/host-terminal', profile))
++          if (window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__) {
++            url.searchParams.set('environment', window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__)
++          }
++          return url.toString()
+         }
+
+         // A tab restored before this page read its saved connections.
+@@ -219,7 +223,9 @@
+         return relays.socketUrl(connectionId, '/api/host-terminal', profile)
+       },
+       defaultCwd: async (profile, connectionId) =>
+-        (await activeApi<{ cwd?: string }>({ connectionId, path: '/api/fs/default-cwd', profile })).cwd || '',
++        connectionId === LOCAL_CONNECTION_ID && window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ === 'code'
++          ? '/workspace'
++          : (await activeApi<{ cwd?: string }>({ connectionId, path: '/api/fs/default-cwd', profile })).cwd || '',
+       // The chat's sign-in view for a launch-link tab. Behind the sign-in gate the next ticket
+       // request already takes the tab to the login page.
+       onSignedOut: () => {
+--- a/apps/desktop/src/app/right-sidebar/terminal/terminals.ts
++++ b/apps/desktop/src/app/right-sidebar/terminal/terminals.ts
+@@ -227,7 +227,10 @@
+     const record = parsed as Record<string, unknown>
+
+     const terminals = Array.isArray(record.terminals)
+-      ? record.terminals.map(sanitizePersistedTerminal).filter((term): term is PersistedTerminalEntry => Boolean(term))
++      ? record.terminals.map(sanitizePersistedTerminal).filter((term): term is PersistedTerminalEntry =>
++          term !== null && (!window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ ||
++            Boolean(term.connectionId && term.connectionId !== 'local') ||
++            record.terminalEnvironment === window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__))
+       : []
+
+     const active =
+@@ -267,7 +270,8 @@
+   }
+
+   const active = terminals.some(term => term.id === activeTerminalId) ? activeTerminalId : (terminals[0]?.id ?? null)
+-  writeKey(TERMINALS_STORAGE_KEY, JSON.stringify({ activeTerminalId: active, terminals }))
++  writeKey(TERMINALS_STORAGE_KEY, JSON.stringify({ activeTerminalId: active, terminals,
++    terminalEnvironment: window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ }))
+ }
+
+ const restored = loadPersistedTerminals()
+@@ -396,7 +400,7 @@
+ // Compare-ready form of a directory path: trimmed, trailing separators dropped
+ // (keeping a bare root intact) so `/repo/` and `/repo` are the same place.
+ const normalizePath = (value: string) => {
+-  const trimmed = value.trim()
++  const trimmed = window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ === 'code' ? value : value.trim()
+
+   return trimmed.length > 1 ? trimmed.replace(/[\\/]+$/, '') || trimmed : trimmed
+ }
+@@ -590,7 +594,7 @@
+  *  restart the PTY there instead of the original launch dir. User tabs only;
+  *  no-ops when the value is empty or unchanged to avoid redundant persistence. */
+ export function updateTerminalRestoreCwd(id: string, restoreCwd: string): void {
+-  const next = restoreCwd.trim()
++  const next = (window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ === 'code' ? restoreCwd : restoreCwd.trim())
+
+   if (!next) {
+     return
+--- a/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.ts
++++ b/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.ts
+@@ -66,7 +66,7 @@
+   { getSessionId, lastObservedCwdRef, term, terminalApi }: TerminalCwdTrackerOptions
+ ): { dispose: () => void; probe: () => void } {
+   const recordCwd = (next: string | null | undefined) => {
+-    const value = (next ?? '').trim()
++    const value = window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ === 'code' ? (next ?? '') : (next ?? '').trim()
+
+     if (!value || value === lastObservedCwdRef.current) {
+       return
+--- a/apps/desktop/src/lib/browser-terminal.ts
++++ b/apps/desktop/src/lib/browser-terminal.ts
+@@ -63,7 +63,7 @@
+
+ // 4401 is what sign-out closes a tab's sockets with; no redial succeeds until the tab signs in again.
+ const CLOSE_SIGNALS: Record<number, string> = {
+-  4401: 'signed-out', 4403: 'denied', 4409: 'superseded', 4410: 'expired', 1013: 'capacity'
++  4401: 'signed-out', 4403: 'denied', 4409: 'superseded', 4410: 'expired', 4411: 'unavailable', 1013: 'capacity'
+ }
+
+ class TerminalConnectionError extends Error {
+@@ -173,7 +173,8 @@
+       reject(error)
+     }
+
+-    const timer = window.setTimeout(() => {
++    const timer = state.connectionId === LOCAL_CONNECTION_ID && window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ === 'code'
++      ? undefined : window.setTimeout(() => {
+       fail(new TerminalConnectionError('Host terminal did not provide startup metadata'))
+       socket.onclose = null
+       socket.close(1000, 'startup timeout')
+--- a/apps/desktop/src/app/right-sidebar/terminal/terminals.test.ts
++++ b/apps/desktop/src/app/right-sidebar/terminal/terminals.test.ts
+@@ -16,7 +16,31 @@
+ describe('terminal store persistence', () => {
+   beforeEach(() => {
+     window.localStorage.clear()
++    delete window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__
+     vi.resetModules()
++  })
++
++  it.each(['code', 'agent'] as const)('drops local tabs from the other mode but retains gateways: %s', async mode => {
++    window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ = mode
++    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
++      terminalEnvironment: mode === 'code' ? 'agent' : 'code', activeTerminalId: 'local-shell',
++      terminals: [
++        {id: 'local-shell', cwd: '/wrong-environment', restoreCwd: '/wrong-cwd', title: 'old', persistent: true},
++        {id: 'gateway-shell', connectionId: 'nas', cwd: '/remote', title: 'remote', persistent: true}
++      ]
++    }))
++    const {$terminals} = await loadTerminalStore()
++    expect($terminals.get().map(tab => tab.id)).toEqual(['gateway-shell'])
++  })
++
++  it('preserves code cwd whitespace across persistence and relaunch', async () => {
++    window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__ = 'code'
++    const first = await loadTerminalStore()
++    const id = first.createTerminal('/workspace')
++    first.updateTerminalRestoreCwd(id, '/workspace/trailing space ')
++    vi.resetModules()
++    const {$terminals} = await loadTerminalStore()
++    expect($terminals.get().find(tab => tab.id === id)?.restoreCwd).toBe('/workspace/trailing space ')
+   })
+
+   it('restores user tabs, active tab, and history on module load', async () => {

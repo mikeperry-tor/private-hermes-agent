@@ -858,3 +858,42 @@ scope below.
 Qualification remains limited to the tested Docker Desktop ARM64 and Debian 13
 ARM64 rootless Podman setup. Other kernels/distributions/architectures, live
 Funnel, provider attestation and funded settlement remain outside this evidence.
+
+## Code terminal qualification
+
+The ordinary WebApp terminal defaults to the SSH executor; `agent` retains the
+native local shell. Implementation is the pinned `0008-code-terminal.patch` plus
+`components/hermes/code_terminal.py`. The shared native `resolve_argv` remains
+unchanged because saved gateway terminals use it for their local environment.
+Remote cwd preparation runs before the registry spawn lock; it does not serialize
+unrelated lifecycle work behind an SSH probe. No native session limits change.
+
+`make check` includes strict mode parsing, Hermes-only effective Compose mappings
+for Docker/Podman overlays, remote cwd path data and agent preparation without SSH
+readiness. `make hermes-ui-test` includes terminal transport, saved gateways,
+mode-specific local-tab restoration, cwd whitespace persistence and native terminal
+session tests, plus the renderer TypeScript check.
+
+`make webapp-test` uses production images and the native entrypoint with disposable
+identities. Its terminal checks cover both modes over local and simulated HTTPS,
+placement and backend-file parity, identity/mount separation, remote cwd/file
+parents and shell metacharacters, replay/reattach, resize, Ctrl-C, explicit close,
+SSH identity/host-key failures, executor outage and fresh-shell recovery. Mode
+changes use ordinary Compose reconciliation to demonstrate serving recreation.
+For focused reruns, use the same browser environment with
+`python3 tests/webapp_smoke.py --terminal-only`. Repeat with
+`COMPUTER_USE_ENABLED=true` after building that executor to cover desktop SSH shell
+behavior; this focused option avoids unrelated desktop/browser/content suites.
+
+Current qualification has passed the full lean `make webapp-test` on Docker
+Desktop 29.9.3 / Compose 5.7.0, with a Linux ARM64 VM, including both modes and
+ordinary environment-change recreation. `make check` passes 172 tests plus the
+four effective models/compilation; renderer TypeScript and 147 tests pass.
+Desktop shell checks and native Debian 13 ARM64 rootless Podman 5.4.2 / Compose
+5.7.1 qualification are in progress. The Podman target uses an existing VM and a
+disposable source copy; effective models alone are not native runtime evidence.
+Identity-failure fixtures use the networkless setup mount, preserving private key
+bytes without printing them and respecting rootless bind ownership. Model-tool
+probes run as UID 10000, matching the serving Hermes process.
+No live Funnel enrollment, paid research, funded-wallet operations or inference
+provider attestation is part of these terminal fixtures.

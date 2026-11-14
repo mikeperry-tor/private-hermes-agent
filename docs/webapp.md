@@ -223,8 +223,8 @@ visitors by ingress address, so this deployment does not claim independent
 per-Internet-client throttling. Supplied client-address headers are discarded.
 
 An authenticated webapp user is an administrator of the agent container. The
-browser terminal runs there and can access agent state; it is separate from
-model-generated terminal/Python execution over SSH. The browser file API is
+default Code terminal runs in the SSH executor alongside model execution; the
+optional Agent terminal runs in Hermes and can access agent state. The browser file API is
 backend-aware: workspace paths use SSH, while staged host-side files can remain
 in the agent container. These UI capabilities must not be treated as executor
 sandboxing. The executor has neither ingress network membership nor webapp or
@@ -379,9 +379,9 @@ the executor; gateway-local driver fallback and package installation are refused
 With the optional desktop enabled, the native Bot Screen APIs carry screenshots
 and RFB pixels over authenticated same-origin connections and the existing SSH
 stream. Viewing those pixels does not make the viewing browser fetch the desktop's
-websites, and does not require `browser_native`. The separate browser interactive
-terminal still runs in Hermes with administrative authority; a terminal opened
-inside the executor's screen runs as runner in the executor.
+websites, and does not require `browser_native`. The ordinary browser Code terminal and a terminal opened inside the executor’s
+screen both run as runner in the executor. The optional Agent terminal runs in
+Hermes with administrative authority.
 
 Native takeover leases fence computer-use tools and viewer input, not arbitrary
 code running as runner. Screens and browser profiles share the executor account.
@@ -455,7 +455,7 @@ prefetch. Every separately served active document is covered. These browser
 controls do not change agent/executor networks or grant extra internal access.
 
 The image has an empty agent-side `/workspace` to satisfy native browser session
-cwd validation. It shares no mount or files with the SSH executor. Browser-terminal
+cwd validation. It shares no mount or files with the SSH executor. Agent-terminal
 files there are ephemeral across recreation; durable agent state belongs under
 `/opt/data`. Model terminal/code execution and workspace file APIs continue using
 the separate durable executor workspace.
@@ -509,3 +509,40 @@ Fixture HTTPS is not live Funnel qualification. Tor image retrieval has separate
 exit-control/transparent-route evidence; successful same-origin bytes alone
 are not proof of Tor routing. Provider attestation and funded settlement remain
 outside these browser checks.
+
+## Terminal environment
+
+The ordinary browser terminal is labeled **Code** by default. It opens an
+interactive bash shell as runner in the SSH executor, alongside model-created
+projects and tools. With computer use enabled it uses the desktop executor, but
+does not attach to an existing graphical terminal or automatically inherit a
+running desktop's DISPLAY/session variables.
+
+Set `WEBAPP_TERMINAL_ENVIRONMENT=agent` for a terminal labeled **Agent** using
+Hermes's native local shell and cwd behavior. Apply with `make up`, then reload
+the browser. This is a deployment choice shared by profiles; browser input and
+profile configuration cannot change its target. Saved gateway terminals keep
+their native remote-Hermes behavior.
+
+Code cwd defaults to `/workspace`; explicit project paths resolve in the executor.
+Existing files select their parent. Nonexistent/inaccessible paths fail rather
+than silently changing directory elsewhere. Bash prompt OSC messages report `cd`
+changes, preserving spaces, Unicode and shell metacharacters for restoration.
+Control-character paths are unsupported. User/system bash rc files and prompt
+commands remain active. A local SSH process's cwd is never used as remote cwd.
+
+Refresh can reattach to a surviving shell and replay bounded output. Explicit tab
+close ends the shell through native PTY cleanup and SSH remote hangup. Ordinary
+foreground children receive the remote hangup; deliberately detached jobs are
+not promised cleanup. Backend or executor restarts do not promise shell survival.
+After an executor outage or SSH identity/host-key failure, restore the existing
+configuration and open a fresh terminal. There is no agent-shell fallback.
+Changing modes clears saved serving-local tabs/cwd/history on reload and stale
+pages refuse terminal attachment until reloaded. Saved gateway tabs are retained.
+
+The authenticated operator retains administrative agent authority through other
+WebApp capabilities and optional Agent shells. Code placement does not sandbox
+the whole WebApp, separate profiles/users or isolate human work from model work.
+The workspace file API follows the model backend in both modes; in Agent mode its
+executor files can differ from local shell files. Agent-side `/workspace` is
+separate and ephemeral; `/opt/data` contains durable agent state.

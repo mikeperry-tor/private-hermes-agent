@@ -253,7 +253,7 @@ def maintenance_compose(all_ingress=False, executor_build=False, extra=()):
     # These operations must not start ingress, inference or the agent with
     # placeholders. Actual treasury policy remains in its mounted configuration.
     # Compose still interpolates unused services and publications.
-    os.environ.update(TOR_ONION_ENABLED='false', TAILSCALE_FUNNEL_ENABLED='false', WEBAPP_EXTERNAL_CONTENT='off',
+    os.environ.update(WEBAPP_TERMINAL_ENVIRONMENT='code', TOR_ONION_ENABLED='false', TAILSCALE_FUNNEL_ENABLED='false', WEBAPP_EXTERNAL_CONTENT='off',
                       WEBAPP_BIND='127.0.0.1', WEBAPP_PORT='9120', WEBAPP_USERNAME='admin',
                       TAILSCALE_FUNNEL_HOST='', TAILSCALE_FUNNEL_PORT='443',
                       TAILSCALE_HOSTNAME='private-hermes', TEEP_HOST_PORT='8337', TEEP_SERVE_ARGS='')

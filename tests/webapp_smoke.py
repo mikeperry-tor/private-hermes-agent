@@ -116,6 +116,7 @@ def run_suite():
         os.environ.update(WEBAPP_PORT='19120', WEBAPP_USERNAME='admin',
                           TAILSCALE_FUNNEL_ENABLED='true', TAILSCALE_FUNNEL_HOST='webapp-test.example.ts.net',
                           TAILSCALE_FUNNEL_PORT='10000', TS_AUTHKEY='',
+                          WEBAPP_TERMINAL_ENVIRONMENT='code',
                           WEBAPP_TEST_CONFIG=str(folder), WEBAPP_TEST_PROXY=str(folder / 'proxy.cfg'),
                           WEBAPP_TEST_TLS=str(tls))
         resources.enter_context(smoke.storage_fixture())
@@ -129,7 +130,7 @@ def run_suite():
                 live_egress_checks(folder)
                 failed = False
                 return
-            if os.environ.get('COMPUTER_USE_ENABLED', 'false') == 'true':
+            if os.environ.get('COMPUTER_USE_ENABLED', 'false') == 'true' and '--terminal-only' not in sys.argv:
                 origins = ('http://127.0.0.1:19120', 'https://webapp-test.example.ts.net:10000')
                 for origin in origins:
                     subprocess.run([browser_python, str(ROOT / 'tests/computer_use_browser.py'),
@@ -173,6 +174,22 @@ else: raise AssertionError('Funnel reached localhost frontend')
             for host in ('attacker.invalid', 'localhost:1', 'localhost:19120.attacker.invalid'):
                 assert http('/login', headers={'Host': host})[0] == 421, host
             print('PASS: real native auth guards API/file/ticket routes; exact Host enforcement rejects forged authorities', flush=True)
+            # Mode changes use ordinary Compose environment reconciliation, without force-recreate.
+            previous_mode = 'code'
+            for terminal_mode in ('code', 'agent', 'code'):
+                before = smoke.compose('ps', '-q', 'hermes').stdout.strip()
+                os.environ['WEBAPP_TERMINAL_ENVIRONMENT'] = terminal_mode
+                smoke.compose('up', '-d', '--no-deps', 'hermes')
+                wait_ready()
+                after = smoke.compose('ps', '-q', 'hermes').stdout.strip()
+                if terminal_mode != previous_mode:
+                    assert before != after, 'Terminal environment did not recreate Hermes'
+                previous_mode = terminal_mode
+                subprocess.run([browser_python, str(ROOT / 'tests/code_terminal_browser.py'),
+                                str(folder / 'password'), terminal_mode], check=True)
+            if '--terminal-only' in sys.argv:
+                failed = False
+                return
             browser_checks(folder / 'password')
             smoke.compose('restart', 'hermes')
             wait_ready()
@@ -185,8 +202,8 @@ else: raise AssertionError('Funnel reached localhost frontend')
             smoke.compose('restart', 'hermes')
             wait_ready()
             browser_checks(folder / 'password', 'rotation')
-            smoke.python('hermes', "from pathlib import Path; assert Path('/tmp/webapp-browser-proof').read_text().strip()=='browser-terminal'")
-            smoke.python('executor', "from pathlib import Path; assert not Path('/tmp/webapp-browser-proof').exists(); assert Path('/workspace/webapp-browser-file.txt').read_text()=='browser file proof'")
+            smoke.python('hermes', "from pathlib import Path; assert not Path('/tmp/webapp-browser-proof').exists()")
+            smoke.python('executor', "from pathlib import Path; assert Path('/tmp/webapp-browser-proof').read_text().strip()=='browser-terminal'; assert Path('/workspace/webapp-browser-file.txt').read_text()=='browser file proof'")
             smoke.python('executor', """import pathlib,socket
 for path in ('/run/webapp/auth.json','/opt/data/config.yaml','/run/tailscale/tailscaled.sock'):
  assert not pathlib.Path(path).exists(),path
@@ -195,7 +212,7 @@ for host,port in (('10.203.85.2',9120),('10.203.85.3',8080),('10.203.85.3',19120
  except OSError: pass
  else: raise AssertionError('Executor reached private ingress')
 """)
-            print('PASS: browser terminal executes in agent container; file API uses SSH; executor cannot reach private ingress or credentials', flush=True)
+            print('PASS: default browser terminal and file API use SSH; executor cannot reach private ingress or credentials', flush=True)
             # Seed real native history and SSH files; no inference is invoked.
             content_fixture = (ROOT / 'tests/fixtures/content-session.py').read_text()
             smoke.python('hermes', content_fixture)

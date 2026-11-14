@@ -125,6 +125,10 @@ Builds need Internet access, and use your host's default networking for this pur
 Once the stack is up, open **http://127.0.0.1:9120** and log in as `admin` with
 the password saved in the file `config/webapp/password`.
 
+The browser’s Code terminal opens in the same executor workspace as the agent.
+For an agent administration shell, set `WEBAPP_TERMINAL_ENVIRONMENT=agent`, run
+`make up` and reload the browser. See [terminal operation](docs/webapp.md#terminal-environment).
+
 If you prefer terminal use, you can use the terminal client with:
 
 ```sh

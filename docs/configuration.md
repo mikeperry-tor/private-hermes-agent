@@ -27,6 +27,7 @@ Compose explicitly selects each service's environment variables:
 | `TEEP_SERVE_ARGS` | Compose command arguments for `teep serve` |
 | `COMPUTER_USE_ENABLED` | Executor build/security selection and Hermes's captured computer/browser tool policy |
 | `TS_AUTHKEY` | Optional Tailscale container |
+| `WEBAPP_TERMINAL_ENVIRONMENT` | Deployment validation and Hermes only |
 | `WEBAPP_EXTERNAL_CONTENT` | Deployment validation, Hermes, offline setup and ingress proxy |
 | Funnel enablement, local webapp port and hostname | Deployment workflow and selected ingress components |
 | `TOR_ONION_ENABLED` (default `false`) | Deployment validation, Tor and HAProxy; no conditional overlay |
@@ -516,3 +517,28 @@ role requires that authority. Servers needing public access can be given a
 separately reviewed Tor route; they do not inherit the agent's egress. Powerful
 MCP tools remain explicitly granted capabilities available through Hermes.
 The twelve x402_treazury MCP servers activate after preparation; this allowlist is for additional servers.
+
+## WebApp terminal environment
+
+`WEBAPP_TERMINAL_ENVIRONMENT=code` is the default when unset. `code` opens an
+interactive runner shell in the SSH executor, using its persistent `/workspace`.
+`agent` opens the native shell in Hermes with administrative access to agent
+state. Empty or unknown values fail serving validation; inspection, backup,
+repair and shutdown remain available.
+
+After editing root `.env`, run `make up` and reload browser tabs. Compose recreates
+Hermes when the setting changes; credentials and executor projects survive.
+Local terminal tabs, saved cwd and scrollback from the other environment are
+cleared on reload. Existing processes never move between environments.
+
+Code terminals default to `/workspace`. Requested absolute directories are
+validated in the executor; files use their parent. Missing/inaccessible paths,
+control characters and invalid UTF-8 are refused. Spaces, Unicode and shell
+metacharacters remain path data. SSH failure gives an error without falling back
+to Hermes. Restore the executor/identity/known-host configuration and open a fresh
+terminal; do not replace saved identities as a shortcut.
+
+In `agent`, native cwd selection remains local. Workspace file APIs still use
+the executor, so their files may not exist in the agent shell. Agent-side
+`/workspace` is ephemeral and separate; persistent agent state is under `/opt/data`.
+See [terminal lifecycle and authority](webapp.md#terminal-environment).

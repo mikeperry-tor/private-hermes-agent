@@ -19,7 +19,7 @@ import stack
 import private_files
 from x402_treazury import Controller, operation_lock
 
-BAD = dict(WEBAPP_EXTERNAL_CONTENT='invalid', TEEP_HOST_PORT='invalid', TEEP_SERVE_ARGS='"',
+BAD = dict(WEBAPP_TERMINAL_ENVIRONMENT='invalid', WEBAPP_EXTERNAL_CONTENT='invalid', TEEP_HOST_PORT='invalid', TEEP_SERVE_ARGS='"',
            TAILSCALE_FUNNEL_ENABLED='invalid', WEBAPP_BIND='invalid', WEBAPP_PORT='invalid',
            COMPUTER_USE_ENABLED='invalid')
 
