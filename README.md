@@ -110,7 +110,7 @@ make init
 
 Set `NEARAI_API_KEY` in the generated root `.env` for the default NearAI
 `neardirect` inference route through Teep. The default model is
-`neardirect:z-ai/glm-5.3-flash-long`. Set `HERMES_DEFAULT_MODEL` in `.env` and
+`neardirect:z-ai/glm-5.3-flash`. Set `HERMES_DEFAULT_MODEL` in `.env` and
 run `make up` to choose another default. See [inference configuration](docs/configuration.md#host-inference-access)
 for model selection and the local OpenAI-compatible endpoint.
 

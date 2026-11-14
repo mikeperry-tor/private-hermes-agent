@@ -3,7 +3,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import time
 
-MODEL = 'neardirect:z-ai/glm-5.3-flash-long'
+MODEL = 'neardirect:z-ai/glm-5.3-flash'
 
 
 class Handler(BaseHTTPRequestHandler):
