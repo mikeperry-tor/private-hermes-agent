@@ -403,9 +403,9 @@ Bradley Erickson (as team Hardened Minds) in the following three
    NearAI's verifiably-private inference is actually verified, thoroughly,
    with TEE attestation checked by [TEE Proof](https://github.com/13rac1/teep)
    before each prompt is sent. Attestation-pinned TLS and/or end-to-end
-   encryption is used and enforced (neardirect uses pinned TLS;
-   nearcloud uses both pinned TLS and end-to-end encryption to the inference
-   endpoint TEE).
+   encryption is used and enforced (neardirect uses pinned TLS to the
+   TEE-generated TLS key; nearcloud uses both cloud-pinned TLS and end-to-end
+   OpenAPI field-level encryption to the inference endpoint TEE).
 
 2. **Give AI a wallet**
 
