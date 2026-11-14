@@ -98,7 +98,8 @@ Preserve these contracts:
   no agent state, WebApp credentials, provider secrets, wallet data or SSH key.
 - Reuse the exact existing SSH grant, private key and strict known-host checks
   in `components/hermes/ssh-client.conf`. No forwarding, extra listener, engine
-  socket, host networking, privilege increase or wider network grant is needed.
+  socket, host networking, additional network grant is needed. The native PTY correction below adds only
+  CHOWN to the root executor sshd daemon, not runner’s effective capabilities.
 - Executor egress remains governed by its existing Tor and private-destination
   policy. A human's interactive commands get no additional network authority.
 - Existing authentication, socket tickets, exact host/origin enforcement,
@@ -384,3 +385,49 @@ Canonical probe targets also receive path-representation validation. Preserve
 code-path whitespace through OSC tracking and restored cwd consumers; do not trim
 path data. Native bootstrap CSP hashes final rendered HTML, including the mode.
 Runtime claims remain pending CT-2 qualification. No suites were rerun by review.
+
+### CT-2 native PTY design correction (2026-11-14)
+
+Docker lean production-image fixture reproduced remote PTY failure: ordinary
+non-PTY SSH cwd probes succeed, but both `ssh -tt ... id` and the native local
+PtyBridge wrapper exit 255. Executor sshd logs the specific failure:
+`chown(/dev/pts/0, 10000, 5) failed: Operation not permitted`.
+Current executor grants SETUID/SETGID/SYS_CHROOT qualify non-PTY model commands,
+not PTY allocation. This disproves the initial no-grant-needed assumption.
+
+Proposed correction: add only CHOWN to executor sshd's existing Compose capability
+set on both engines/image variants. OpenSSH owns PTY setup and subsequent native
+UID/capability drop; verify runner has zero effective/permitted/inheritable/ambient
+capabilities in both ordinary interactive and model shells. No application gets
+NET_ADMIN/NET_RAW, forwarding, additional mounts or additional network access.
+The root daemon can change ownership within its existing writable mounts; read-only
+root and key mounts stay read-only. A custom runner-side PTY relay or alternate
+sshd identity would replace native SSH lifecycle with unnecessary machinery.
+Update the architecture capability table and effective-model expectation, then
+qualify PTY behavior and runner capability drop on available engines. Native
+Podman remains missing. Independent review of this reproduced need is required
+before applying the grant.
+
+Fresh independent focused design review accepted the CHOWN correction on
+2026-11-14 without material findings. Runtime qualification must verify PTYs and
+runner effective/permitted/inheritable/ambient sets; inherited bounding set is
+expected to be 0x400c1. This explicitly supersedes the initial no-grant-needed
+assumption; no native Podman acceptance is claimed.
+
+CT-2 evidence so far: production Hermes image builds reproducibly; make check
+passes 172 tests and effective Docker/Podman overlay models. Initial renderer
+TypeScript and 147 focused native tests passed. Source implementation review
+found no material findings, including captured mode/SSH inputs, ordinary-only
+preparation, quoting, off-lock probe, ownership and mode restoration. It did not
+claim runtime acceptance. Fixed nonprivate startup errors now reach native UI
+through close code 4411, instead of being lost as premetadata output.
+
+After the independently accepted CHOWN correction, retained Docker Desktop
+29.9.3/Compose 5.7.0 linux/arm64 lean production fixture passed code terminals on
+local and simulated HTTPS: placement/file API/model parity, zero runner capability
+sets in interactive/model commands, denied private destinations, path data/file
+parents/OSC, real browser bridge startup and errors, missing/rejected identity and
+changed-host-key refusal, resize, Ctrl-C, replay/attach, explicit close/shell-child
+cleanup, executor outage/restart and backend-loss recovery. Native shell exit also
+passed. The full principal WebApp suite and both-mode/desktop coverage remain in
+progress. Podman native coverage is unavailable, not a pass.
