@@ -1,6 +1,8 @@
 # WebApp code terminal in the SSH executor
 
-Status: proposed; planning only, no implementation or runtime qualification yet.
+Status: CT-1 accepted; CT-2 implementation and qualification in progress.
+Implementation baseline: branch `code-terminal`, commit
+`3fb188167125ba0874a6ff89353d5060a4c474bf`.
 Planning baseline: branch `main`, commit
 `4f6e0cae6e3b50d4af31251c1801c199b78a74f8`.
 Follow the [planning workflow](../planning-workflow.md).
@@ -319,3 +321,66 @@ reviewer inspected the revised plan against `38aacd9`, relevant guides and
 terminal/browser/Compose consumers; no material findings. This covers planning
 readiness for both startup modes, not completion of CT-1 or runtime acceptance.
 Local link and whitespace checks passed; no runtime tests were run.
+
+## CT-1 selected implementation
+
+The reference revision matches the packaged source. Patch only the ordinary-host branch of `HostTerminalRegistry.create`: code
+mode returns the existing OpenSSH client argv, agent mode retains native
+`resolve_argv` unchanged. Saved-gateway preparation also calls `resolve_argv`
+for local environment setup, so branching inside that shared function would
+incorrectly make saved gateways depend on the code executor. A focused `private_code_terminal.py`
+helper calls native `resolve_argv` for profile-scoped env and owns SSH command
+construction and remote cwd validation, keeping these
+stack-specific details out of the pinned native lifecycle. Capture mode and the
+existing injected TERMINAL_SSH_HOST/PORT/USER/KEY at bootstrap, before profile
+dotenv and runtime scopes; do not use mutable profile backend configuration.
+Native saved-gateway `prepare_shell` remains untouched.
+
+Resolve code cwd through an authenticated, non-PTY `python3` SSH probe returning
+JSON (Python exists in both executor images). Reject nonabsolute paths, NUL and
+line/control characters, which cannot be represented reliably by native cwd OSC
+and browser restoration. Preserve spaces, Unicode and metacharacters. No supplied
+path means /workspace; files use their parent; missing/inaccessible paths fail.
+Use shlex quoting across the remote shell boundary, fixed SSH options, batch auth,
+strict known-host checks, disabled forwarding and an establishment-only timeout.
+Then run the interactive bash shell through `ssh -tt` under the native local PTY;
+report the probe's canonical remote cwd in metadata while spawning the local SSH
+process in the profile home. Source native system/user bash rc files through a
+small inline rcfile and append an OSC-7 cwd hook without replacing existing prompt
+commands. Both images have bash/python3; desktop sshd already supplies its native
+runtime/browser environment. No new desktop/display integration is required.
+
+Keep registry ownership, tickets, attach/close and replay unchanged. Add selected
+mode to ordinary metadata and Code/Agent shell labels. Native PTY resize signals
+reach OpenSSH, which sends SSH window-change messages; Ctrl-C travels as terminal
+input. Closing the local SSH transport causes sshd's remote PTY hangup; qualify
+ordinary shell/foreground-child cleanup rather than promising cleanup of deliberately
+detached jobs. Backend/executor restart does not promise process survival.
+
+Inject the captured mode into the existing HTML bootstrap. Persist it alongside
+the native terminal tab layout; discard only serving-local tab/cwd/history entries
+when modes differ, preserving saved gateway tabs. Add the mode to local terminal
+socket requests and refuse stale-page mode mismatches before ordinary create or
+attach. Remote gateway requests retain native behavior. New code terminals default
+to /workspace rather than a profile backend's default; explicit project cwd stays
+remote. Keep the empty Hermes /workspace for independent chat-session validation.
+
+Host validation uses existing x-deployment/Settings consumers and maintenance
+placeholder handling; no proxy enforcement or new state marker. Compose maps the
+new input only to Hermes and changes its effective environment, triggering native
+Compose recreation. Docker Desktop is available (Engine 29.9.3, Compose 5.7.0,
+linux/arm64 VM on macOS); no local Podman command is installed. Podman native
+coverage must be reported as missing unless another qualified target is available.
+
+Design review corrections: use the ordinary-only registry branch, since saved
+gateway preparation shares native resolve_argv. Perform remote preparation in
+asyncio.to_thread before attach_or_spawn (outside its registry lock), analogous
+to native warm_tunnel. Recheck profile liveness at spawn and native admission.
+This keeps a slow executor probe from blocking other terminal lifecycle work.
+
+CT-1 independent review accepted the baseline-plus-plan snapshot on 2026-11-14
+after resolving the shared resolve_argv seam and registry-lock findings above.
+Canonical probe targets also receive path-representation validation. Preserve
+code-path whitespace through OSC tracking and restored cwd consumers; do not trim
+path data. Native bootstrap CSP hashes final rendered HTML, including the mode.
+Runtime claims remain pending CT-2 qualification. No suites were rerun by review.
