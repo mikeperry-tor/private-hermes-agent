@@ -75,38 +75,40 @@ wallets, with usage assigned by x402 API endpoint topic. These wallets rotate
 independently. See the [x402_treazury guide](docs/x402_treazury.md) for funding,
 wallet groups, and operation.
 
-## Get started
+## Prerequisites
 
 You need a container engine, Compose 2.36+, `make`, and Python 3. Use either:
 
 - **Docker Engine 28+** with Linux containers, or
 - **rootless Podman 5.4+** on Linux, with the user API socket enabled:
-  `systemctl --user enable --now podman.socket`. Set `CONTAINER_ENGINE=podman`
-  in `.env`. Rootless Podman runs no root daemon, and container root maps to
-  your unprivileged user. No `docker` command is needed.
+  `systemctl --user enable --now podman.socket`.
+  Rootless Podman runs no root daemon, and container root maps to
+  your unprivileged user.
 
-`CONTAINER_ENGINE` in `.env` selects the engine (`docker` when absent); an
-exported value overrides it. The stack adds the Podman overlay files itself. It requires isolated
-bridge networking and Linux GRE support; startup checks reject unsupported
-setups. Its fixed `10.203.80.0/24` through `10.203.84.0/24` networks, local
-ingress `10.203.85.0/24`, onion ingress `10.203.86.0/24`, and optional Funnel `10.203.87.0/24` must not overlap
-your existing networks.
+### Using Rootless Podman
 
 On rootless Podman, Compose 2.36+ must be the provider of `podman compose`;
 Debian 13's `docker-compose` package is older. Install the Compose release binary
 for your user and set `PODMAN_COMPOSE_PROVIDER` to its path, or name it in
-`compose_providers` in `~/.config/containers/containers.conf`. Containers stop
-when you log out unless lingering is enabled for your user (`loginctl
-enable-linger`, which may need an administrator). After a reboot, run `make up`
-to start the stack again. Keep the default `WEBAPP_PORT=9120` or another port
-of 1024 or above: a rootless user can publish a lower port only if the host
-allows it. See [engine differences](docs/architecture.md#rootless-podman).
+`compose_providers` in `~/.config/containers/containers.conf`.
 
-Initialize your local settings:
+Containers stop when you log out unless lingering is enabled for your user
+(`loginctl enable-linger`, which may need an administrator). After a reboot, run
+`make up` to start the stack again.
+
+## Getting Started
+
+If you use Docker, .env will be copied into place for you during initialization:
 
 ```sh
 make init
 ```
+
+For Podman, use `CONTAINER_ENGINE=podman make init` instead, then set
+`CONTAINER_ENGINE=podman` in the generated `.env` for subsequent commands.
+Initialization uses the selected engine's Compose command to render configuration,
+so that command must already be installed. Existing settings are preserved when
+you rerun initialization.
 
 Set `NEARAI_API_KEY` in the generated root `.env` for the default NearAI
 `neardirect` inference route through Teep. The default model is
@@ -141,8 +143,7 @@ The stack includes [x402_treazury](https://github.com/mikeperry-tor/x402_treazur
 which gives Hermes Agent a full set of x402 APIs to conduct web searches, web page access,
 and access a large collection of data services using privacy-enhanced [x402 micropayments](https://x402.org/).
 
-to create a
-treasury and back it up before depositing ZEC:
+To create a treasury and back it up before depositing ZEC:
 
 ```sh
 make x402_treazury-init
