@@ -929,3 +929,46 @@ qualified ARM64 targets and Chromium terminal checks; unrelated GUI and browser
 harness suites were not repeated for shell placement.
 No live Funnel enrollment, paid research, funded-wallet operations or inference
 provider attestation is part of these terminal fixtures.
+
+## Security and ingress pin refresh
+
+On 2026-11-14, implementation `d28f856` updated Tor to 0.4.9.17, Teep to
+`1bdd44955dcbc6378ef2a08be75406c90ddb3044`, HAProxy to the 3.4.7-alpine digest
+and Tailscale to 1.104.7. The desktop version checker now selects the sandbox
+image in the executor Dockerfile, with a regression assertion covering the
+shared Hermes helper stage. Anonymous registry/default-branch metadata matched
+all seven runtime pins after the update.
+
+Docker Desktop 29.9.3 / Compose 5.7.0 and Debian 13 ARM64 rootless Podman 5.4.2 /
+Compose provider 5.7.1 passed all 174 unit tests, four effective models and Python
+compilation, and built all four changed artifacts. Tor and Teep compatibility
+review and dedicated runtime qualification were explicitly waived by the operator;
+their build success does not claim provider attestation or broader compatibility.
+The ingress fixture uses deterministic local inference and Tor as a prerequisite.
+
+On both engines, `python3 tests/webapp_smoke.py --terminal-only` passed native
+authentication, exact-host rejection, capability dropping, fixed-backend egress
+and separate local/Funnel listeners across HAProxy restart. All six browser
+cases passed: Code→Agent→Code over local HTTP and simulated HTTPS, including
+placement, replay, resize, cancellation, close and executor outage/recovery.
+Podman build, check and ingress logs remain at
+`/tmp/private-hermes-pin-update-podman-{build,check,ingress}.log` on `debvm23`;
+its offline Tailscale result is in the corresponding `-tailscale.log` file.
+
+Tailscale checks ran in disposable networkless, read-only containers without
+capabilities, credentials or persistent state. The packaged wrapper refused
+both disabled Funnel and missing enrollment authority. The native 1.104.7 daemon
+started in userspace mode, answered Unix-socket status with `NeedsLogin`, and
+refused forwarding publication and reset without an enrolled network map.
+Upstream changes from 1.104.4 to 1.104.7 leave containerboot and serving
+configuration/CLI files unchanged; the inspected LocalAPI changes do not alter
+the serving configuration contract. This is limited offline evidence: no real
+node was enrolled, no public Funnel was published and live Funnel behavior is
+unqualified.
+
+Current qualification containers, networks and runtime volumes were removed on
+both engines. Two older Docker fixture volumes created on 2026-11-09 and
+pre-existing VM state were preserved.
+Independent review accepted the pin transcription, checker correction, ingress
+consumer paths and recorded evidence with no material findings. Review did not
+rerun tests or extend the waived Tor/Teep compatibility scope.
