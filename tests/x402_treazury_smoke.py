@@ -38,7 +38,7 @@ def run_suite():
         }.items():
             assert all(production['servers'][name]['wallet'] == wallet for name in names)
         identity = json.loads(subprocess.check_output(command + ['build-info'], text=True))
-        assert identity['source_revision'] == '7ee0f5e89b5413b8ae55e18ee939c9d26df3652d'
+        assert identity['source_revision'] == 'cb4cfd32bc12e3eeab643a7bf4f555175939a3b7'
         assert identity['source_dirty'] is False
         gate = subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none', '--entrypoint', 'python3',
                                'private-hermes-x402_treazury:local', '-c',
@@ -170,7 +170,8 @@ config=config.replace('spec="/tmp/tor-check.json"','spec="https://raw.githubuser
 config+='\n[treasury]\nstate_dir="/var/lib/x402/catalog-fixture"\n'
 path=pathlib.Path('/tmp/catalog-warm.toml'); path.write_text(config)
 summary=json.loads(subprocess.check_output(['x402_treazury','catalog','warm','--config',str(path)],text=True))
-assert summary['direct'] is False and len(summary['sources'])==1, summary
+assert summary['direct'] is False and summary['outcome']=='ok' and len(summary['sources'])==1, summary
+assert summary['sources'][0]['status']=='ready',summary
 assert summary['sources'][0]['catalog_cache']=='fresh',summary
 assert any((root/'http-cache').iterdir())
 """)
@@ -183,12 +184,16 @@ else: raise AssertionError('Stopped Tor still accepted a SOCKS connection')
 """)
         smoke.python('x402_treazury', """import json,subprocess
 forced=subprocess.run(['x402_treazury','catalog','warm','--config','/tmp/catalog-warm.toml'],capture_output=True,text=True)
-assert forced.returncode != 0, 'Explicit warm unexpectedly reused a cached catalog'
+assert forced.returncode == 0, forced.stderr
+summary=json.loads(forced.stdout)
+assert summary['direct'] is False and summary['outcome']=='degraded',summary
+assert len(summary['sources'])==1 and summary['sources'][0]['status']=='unavailable',summary
+assert summary['sources'][0]['failure']['reason'],summary
 inventory=json.loads(subprocess.check_output(['x402_treazury','catalog','tools','--config','/tmp/catalog-warm.toml'],text=True))
 assert len(inventory)==12, inventory
 assert all(len(server['tools'])==1 for server in inventory), inventory
 """)
-        print('PASS: explicit warm requires fresh acquisition while ordinary inspection reuses the persisted catalog with Tor stopped', flush=True)
+        print('PASS: Tor outage completes warming with unavailable coverage and no direct fallback; offline inspection retains the accepted cache', flush=True)
         assert smoke.curl('hermes', 'https://check.torproject.org/api/ip', check=False).returncode != 0
         assert json.loads(smoke.curl('hermes', 'http://10.203.83.3:8337/health').stdout)['status']=='ok'
         failed = False

@@ -44,7 +44,9 @@ def main():
         def compose(*args):
             result = subprocess.run([*command, *args], text=True, capture_output=True)
             if result.returncode:
-                raise RuntimeError('Fixture Compose ' + args[0] + ' failed: ' + result.stderr)
+                logs = subprocess.run([*command, 'logs', '--tail', '30', 'x402_treazury'],
+                                      text=True, capture_output=True)
+                raise RuntimeError('Fixture Compose ' + args[0] + ' failed: ' + result.stderr + logs.stdout)
             return result
 
         code = ('import sys; sys.path.insert(0,' + repr(str(ROOT / 'scripts')) + '); '
@@ -85,7 +87,7 @@ def main():
 
             (flags / 'broken').write_text('web')
             compose('stop', 'hermes')
-            compose('restart', 'x402_treazury')
+            compose('restart', '--no-deps', 'x402_treazury')
             compose('up', '-d', '--no-deps', '--force-recreate', 'hermes')
             result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=120)
             assert result.returncode and 'catalog startup failed' in result.stderr, result.stderr
@@ -110,7 +112,7 @@ asyncio.run(check())
 
             (flags / 'broken').unlink()
             compose('stop', 'hermes')
-            compose('restart', 'x402_treazury')
+            compose('restart', '--no-deps', 'x402_treazury')
             compose('up', '-d', '--no-deps', '--force-recreate', 'hermes')
             result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=120)
             assert result.returncode == 0 and 'ENDPOINTS_READY' in result.stdout, result.stderr
@@ -120,6 +122,19 @@ asyncio.run(check())
             processes = compose('exec', '-T', 'hermes', 'ps', '-eo', 'args').stdout
             assert '--watch-stdin' not in processes, processes
             print('PASS: corrected restart ignores prior-lifetime endpoint errors; remote probe processes are cleaned up')
+
+            (flags / 'empty').touch()
+            compose('stop', 'hermes')
+            compose('restart', '--no-deps', 'x402_treazury')
+            compose('up', '-d', '--no-deps', '--force-recreate', 'hermes')
+            result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=120)
+            assert result.returncode == 0 and 'ENDPOINTS_READY' in result.stdout, result.stderr
+            empty_peer = peer.replace('127.0.0.1:3010', '127.0.0.1:3011').replace(
+                'assert (await session.list_tools()).tools', 'assert not (await session.list_tools()).tools')
+            compose('exec', '-T', 'hermes', '/opt/hermes/.venv/bin/python', '-c',
+                    'TOKEN=' + repr(token) + '\n' + empty_peer)
+            assert 'ERROR' in result.stderr, result.stderr
+            print('PASS: reduced coverage ERROR diagnostics and an empty endpoint do not block authenticated activation')
         finally:
             if child and child.poll() is None:
                 child.communicate(timeout=120)

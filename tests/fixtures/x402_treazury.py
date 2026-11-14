@@ -41,12 +41,18 @@ prefix="torcheck"
 allow_http1=true
 '''
 if broken:
-    Path('/tmp/failed-catalog.json').write_text(json.dumps({
-        'paths': {'/read': {'get': {'parameters': [{'name': 'Cookie', 'in': 'header'}]}}},
-    }))
-    config += '''\n[sources.failure]
-spec="/tmp/failed-catalog.json"
-base_url="https://unused.example"
+    # This branch runs only in the networkless endpoint fixture. A required
+    # remote acquisition failure disables its endpoint after deferred loading;
+    # local malformed files now stop the entire process before it can serve.
+    with socket.socket() as unused:
+        unused.bind((ADDRESS, 0))
+        port = unused.getsockname()[1]
+    config = config.replace('mode="tor"', 'mode="direct"')
+    config = '\n'.join(line for line in config.splitlines() if not line.startswith('socks_')) + '\n'
+    config += f'''\n[sources.failure]
+spec="https://{ADDRESS}:{port}/catalog.json"
+base_url="https://{ADDRESS}:{port}"
+allow_http1=true
 '''
 for name, port in ENDPOINTS.items():
     config += f'''\n[servers.{name}]
@@ -56,6 +62,8 @@ bearer_token_env="X402_TREAZURY_MCP_TOKEN"
 wallet="fixture"
 sources=["{'failure' if name == broken else 'torcheck'}"]
 '''
+    if (flags / 'empty').exists() and name == 'web':
+        config += 'include_tools=["torcheck_missing_operation"]\n'
 Path('/tmp/x402_treazury-test.toml').write_text(config)
 os.environ['X402_TREAZURY_MCP_TOKEN'] = Path('/run/x402_treazury-auth/token').read_text().strip()
 os.environ['RESEARCH_TEST_KEY'] = secrets.token_hex(32)

@@ -55,6 +55,7 @@ x402_treazury-prepare:
 
 .PHONY: x402_treazury-test
 x402_treazury-test: check
+	$(COMPOSE) -f compose.yaml build x402_treazury
 	python3 scripts/preflight.py private-hermes-x402-treazury-test
 	python3 -u tests/x402_treazury_smoke.py
 

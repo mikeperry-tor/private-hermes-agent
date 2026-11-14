@@ -68,7 +68,8 @@ class PreparationTests(unittest.TestCase):
             return {'schema_version': 3, 'captured_completed_groups': ['general'],
                     'incomplete_captured_jobs': [], 'balance_estimates': []}
         if args == ['catalog', 'warm']:
-            return {'direct': False, 'sources': [{'source': n, 'catalog_cache': 'fresh'} for n in self.config['sources']]}
+            return {'direct': False, 'outcome': 'ok', 'sources': [
+                {'source': n, 'status': 'ready', 'catalog_cache': 'fresh'} for n in self.config['sources']]}
         if args == ['wallet', 'init']:
             self.state.mkdir()
             (self.state / 'wallet.key').write_text('test-only key placeholder')
@@ -93,6 +94,24 @@ class PreparationTests(unittest.TestCase):
             onboarding.prepare()
         self.assertTrue(onboarding.inspect()['prepared'])
         self.assertNotIn('result', json.loads(onboarding.RECORD.read_text()))
+
+    def test_degraded_warming_completes_even_with_every_source_unavailable(self):
+        original = self.native
+        def degraded(args, phase, **kwargs):
+            if phase == 'catalogs':
+                self.calls.append(args)
+                self.assertFalse(kwargs.get('structured', False))
+                return {'direct': False, 'outcome': 'degraded', 'sources': [
+                    {'source': n, 'status': 'unavailable', 'failure': {
+                        'stage': 'headers', 'reason': 'connection_failed',
+                        'message': 'Could not connect to the catalog server or configured proxy'}}
+                    for n in self.config['sources']]}
+            return original(args, phase, **kwargs)
+        with patch.object(onboarding, 'native', side_effect=degraded):
+            onboarding.prepare()
+        self.assertTrue(onboarding.inspect()['prepared'])
+        self.assertEqual(onboarding.inspect()['record']['completed'], ['bootstrap', 'catalogs'])
+        self.assertEqual(self.calls.count(['wallet', 'bootstrap', '--json']), 1)
 
     def test_implementation_changes_preserve_completion_and_serving(self):
         onboarding.prepare()
@@ -284,6 +303,20 @@ class PreparationTests(unittest.TestCase):
 
 
 class NativeExecutionTests(unittest.TestCase):
+    def test_success_streams_summary_and_coverage_diagnostics_without_parsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'native'
+            executable.write_text('#!' + sys.executable + '\nimport sys\n'
+                                  'print("native summary presentation")\n'
+                                  'print("ERROR: source unavailable; coverage reduced",file=sys.stderr)\n')
+            executable.chmod(0o700)
+            with patch.object(onboarding, 'BINARY', str(executable)), \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                onboarding.native(['catalog', 'warm'], 'catalogs')
+            self.assertIn('native summary presentation', stdout.getvalue())
+            self.assertIn('source unavailable; coverage reduced', stderr.getvalue())
+
     def test_failure_retains_native_exit_and_redacts_environment_secret(self):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / 'native'

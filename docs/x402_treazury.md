@@ -76,7 +76,7 @@ Startup runs cached image builds, including treasury, before setup or service
 changes. Use `make build` separately to build ahead of startup if desired.
 
 The image builds unmodified upstream commit
-`7ee0f5e89b5413b8ae55e18ee939c9d26df3652d` using its Rust 1.99.1 toolchain and
+`cb4cfd32bc12e3eeab643a7bf4f555175939a3b7` using its Rust 1.99.1 toolchain and
 locked dependencies. The renderer changes only the Tor SOCKS endpoint, persistent
 state path, and HTTP Host allowlists. Wallet groups, rotation, funding, payment
 caps, source selection, and tool selection retain upstream policy. Provider
@@ -87,7 +87,7 @@ serving schedules independent refill opportunities per group, nominally every
 30–120 seconds, and can rotate low active payers into funded reserves. Restart
 redraws that wait; downtime or pending work can extend it. Explicit bootstrap
 retains prompt allocation of its captured claims. See the pinned upstream
-[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/7ee0f5e89b5413b8ae55e18ee939c9d26df3652d/docs/wallet-rotation.md)
+[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/cb4cfd32bc12e3eeab643a7bf4f555175939a3b7/docs/wallet-rotation.md)
 for selection and rotation details.
 
 New packaged policy has `[wallet_bootstrap]` with `bootstrap_group = "general"`
@@ -221,7 +221,7 @@ including by an empty group created during an earlier startup. Simply changing
 a name in TOML creates a different group on startup; the old group and its funds
 remain saved but are no longer selected by the renamed references. Renaming a
 group also preserves its historical payer correlation. See the pinned upstream
-[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/7ee0f5e89b5413b8ae55e18ee939c9d26df3652d/docs/wallet-cli.md#rename-a-managed-wallet-group).
+[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/cb4cfd32bc12e3eeab643a7bf4f555175939a3b7/docs/wallet-cli.md#rename-a-managed-wallet-group).
 
 ## Create the wallet and deposit when ready
 
@@ -280,7 +280,7 @@ Preview reports saved metadata and requested policy differences, not live
 balances or cryptographic verification. The upstream `wallet rename` command is
 also available for deliberate offline administration; it requires exclusive store
 ownership and a backup first. This update does not rename groups automatically.
-See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/7ee0f5e89b5413b8ae55e18ee939c9d26df3652d/docs/wallet-cli.md)
+See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/cb4cfd32bc12e3eeab643a7bf4f555175939a3b7/docs/wallet-cli.md)
 for its constraints. Deployment policy remains packaged in the image; renaming a
 saved group alone does not change the configured wallet references.
 
@@ -308,8 +308,11 @@ Hermes activation directly. Otherwise it runs, in order:
    is present, otherwise every declared managed group. This can spend ZEC under
    the configured policy; existing accepted jobs retain their native ownership.
 3. Run `catalog warm` over Tor. Configured paid relay fallback can spend USDC.
-   Native command success establishes phase completion; printed summaries are
-   diagnostics, not a second schema/source-count eligibility gate.
+   Zero exit establishes completed attempts, including degraded coverage or
+   every remote source being unavailable. Native stdout and stderr are displayed;
+   the wrapper does not parse the summary or require a source/tool count, all-ready
+   statuses or fresh cache storage. Degradation does not repeat bootstrap or
+   authorize another paid attempt.
 4. Start `serve`, then initialize and list tools on all twelve authenticated MCP
    endpoints without making research calls.
 5. Register the managed MCP entries and call Hermes's native `reload.mcp` RPC.
@@ -326,6 +329,13 @@ A native terminal catalog-startup or endpoint-tool-selection error fails activat
 with its diagnostic visible, even if the process and other endpoints remain up.
 Retryable native errors, such as SOCKS reachability checks with recovery remaining,
 do not become terminal endpoint failures merely because their log level is ERROR.
+Missing selections, unsupported operations and empty inventories also report
+reduced coverage without failing activation when initialize/list succeeds.
+The packaged remote sources opt into `allow_catalog_failure = true`, retaining
+available sibling tools through acquisition failures. Existing operator TOML is
+preserved: compare the new defaults and deliberately apply that policy where
+desired. Required sources retain their stricter startup behavior. Keep
+`wait_for_catalogs = true` for endpoints that should publish settled inventories.
 Service exit/restart/replacement or loss of the diagnostic observer also fails
 activation visibly. Research remains disconnected, Hermes remains available, and
 preparation history is preserved. Correct the cause and retry activation with
@@ -365,7 +375,8 @@ bootstrap/catalog phases. Source, build and ordinary configuration changes do no
 invalidate that historical completion. Actual deployment policy is checked before
 preparing, activating or serving; a policy failure does not invalidate the wallet
 or its preparation history. The record contains no full deployment configuration.
-Only successful bootstrap and complete Tor catalog warming authorize serving.
+Only successful bootstrap and completed Tor catalog warming authorize serving;
+catalog completion does not certify coverage, cache persistence or working APIs.
 The entrypoint checks this even when the serving profile is started manually.
 
 Serving and MCP activation are tracked separately. If preparation succeeds but
@@ -386,8 +397,8 @@ expire or be refreshed, and serving continues native synchronization,
 replacement funding, and discovery under its policy. Startup does not rerun
 explicit bootstrap/warming.
 
-`catalog warm` unconditionally re-downloads selected catalogs and configured
-pricing documents, then stores cache data under the configured treasury's
+`catalog warm` attempts to re-download selected catalogs and configured
+pricing documents, storing accepted cache data under the configured treasury's
 `http-cache/` directory in the same persistent directory. It never uses `--direct`.
 Normal startup and offline catalog inspection can reuse a fresh entry, but entries
 remain subject to native provenance and revalidation rules and the packaged
@@ -459,10 +470,13 @@ python3 tests/research_config_smoke.py
 make test
 ```
 
-The focused endpoint-startup check uses networkless containers, local catalogs and
-ephemeral unfunded static keys. It checks delayed readiness, a real native terminal
+The focused endpoint-startup check uses networkless containers, local catalogs,
+a refused HTTPS loopback connection and ephemeral unfunded static keys. The
+required-acquisition failure case uses direct mode inside that networkless
+fixture; it does not qualify Tor transport. It checks delayed readiness, a real native terminal
 endpoint error while a peer remains available, corrected restart without replaying
-old errors, and remote probe cleanup. It performs no research or payment calls and
+old errors, empty-inventory activation despite coverage ERROR diagnostics, and
+remote probe cleanup. It performs no research or payment calls and
 mounts no wallet state. Unit tests exercise prolonged waiting/reporting with a fake
 clock, transient versus terminal outcomes, cancellation and helper failure.
 
@@ -478,7 +492,8 @@ against invalid ingress settings and credentials in an isolated public-code copy
 initialization display the same address without starting services or requiring
 preparation. It does not run funding, warming or successful rename of a saved group.
 
-The x402_treazury test uses a disposable project and the real Rust server, twelve
+`make x402_treazury-test` builds the pinned treasury image before its fixture runs.
+The test uses a disposable project and the real Rust server, twelve
 local MCP listeners, an ephemeral unfunded static key, local catalog fixtures,
 and a free Tor-check API. It checks bearer enforcement, actual authenticated
 MCP initialization/listing, a Rust HTTPS call through the Unix SOCKS socket,
@@ -488,10 +503,13 @@ make paid research calls. The main test uses the same unfunded x402_treazury fix
 and checks host/VM isolation and normal SSH, inference, and transparent Tor
 behavior separately.
 
-The `7ee0f5e89b5413b8ae55e18ee939c9d26df3652d` pin update passed all
-167 unit tests, Compose model validation, image build, and the native endpoint
+The `cb4cfd32bc12e3eeab643a7bf4f555175939a3b7` pin update passed all
+174 unit tests, Compose model validation, image build, and the native endpoint
 readiness, research configuration and treasury smoke fixtures on Docker 29.9.3
-(Linux arm64, Compose 5.7.0). Independent source review found no material
+(Linux arm64, Compose 5.7.0). Treasury qualification used
+`make -o check x402_treazury-test`, reusing the successful `make check` result.
+It confirmed degraded zero-exit warming with Tor stopped while offline inspection
+retained the accepted cache. Independent source review found no material
 integration issues. Rootless Podman was unavailable for this update; these
 results do not establish native runtime coverage on that engine.
 

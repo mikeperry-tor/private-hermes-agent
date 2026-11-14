@@ -212,6 +212,8 @@ def prepare():
             write_record(record)
             print(f'Starting {phase}; native network/funding policy applies.', flush=True)
             try:
+                # Warming zero-exit includes degraded coverage, even total
+                # remote loss. Stream native output; do not gate on inventory.
                 native(arguments, phase)
                 record['completed'].append(phase)
                 write_record(record)
