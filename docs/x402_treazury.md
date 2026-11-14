@@ -76,7 +76,7 @@ Startup runs cached image builds, including treasury, before setup or service
 changes. Use `make build` separately to build ahead of startup if desired.
 
 The image builds unmodified upstream commit
-`e493b88d364cac25ed84922ae162c3f6a5d22452` using its Rust 1.99.1 toolchain and
+`7ee0f5e89b5413b8ae55e18ee939c9d26df3652d` using its Rust 1.99.1 toolchain and
 locked dependencies. The renderer changes only the Tor SOCKS endpoint, persistent
 state path, and HTTP Host allowlists. Wallet groups, rotation, funding, payment
 caps, source selection, and tool selection retain upstream policy. Provider
@@ -87,7 +87,7 @@ serving schedules independent refill opportunities per group, nominally every
 30–120 seconds, and can rotate low active payers into funded reserves. Restart
 redraws that wait; downtime or pending work can extend it. Explicit bootstrap
 retains prompt allocation of its captured claims. See the pinned upstream
-[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/e493b88d364cac25ed84922ae162c3f6a5d22452/docs/wallet-rotation.md)
+[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/7ee0f5e89b5413b8ae55e18ee939c9d26df3652d/docs/wallet-rotation.md)
 for selection and rotation details.
 
 New packaged policy has `[wallet_bootstrap]` with `bootstrap_group = "general"`
@@ -221,7 +221,7 @@ including by an empty group created during an earlier startup. Simply changing
 a name in TOML creates a different group on startup; the old group and its funds
 remain saved but are no longer selected by the renamed references. Renaming a
 group also preserves its historical payer correlation. See the pinned upstream
-[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/e493b88d364cac25ed84922ae162c3f6a5d22452/docs/wallet-cli.md#rename-a-managed-wallet-group).
+[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/7ee0f5e89b5413b8ae55e18ee939c9d26df3652d/docs/wallet-cli.md#rename-a-managed-wallet-group).
 
 ## Create the wallet and deposit when ready
 
@@ -280,7 +280,7 @@ Preview reports saved metadata and requested policy differences, not live
 balances or cryptographic verification. The upstream `wallet rename` command is
 also available for deliberate offline administration; it requires exclusive store
 ownership and a backup first. This update does not rename groups automatically.
-See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/e493b88d364cac25ed84922ae162c3f6a5d22452/docs/wallet-cli.md)
+See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/7ee0f5e89b5413b8ae55e18ee939c9d26df3652d/docs/wallet-cli.md)
 for its constraints. Deployment policy remains packaged in the image; renaming a
 saved group alone does not change the configured wallet references.
 
@@ -487,6 +487,13 @@ and Tor failure without direct fallback. It does not initialize a treasury or
 make paid research calls. The main test uses the same unfunded x402_treazury fixture
 and checks host/VM isolation and normal SSH, inference, and transparent Tor
 behavior separately.
+
+The `7ee0f5e89b5413b8ae55e18ee939c9d26df3652d` pin update passed all
+167 unit tests, Compose model validation, image build, and the native endpoint
+readiness, research configuration and treasury smoke fixtures on Docker 29.9.3
+(Linux arm64, Compose 5.7.0). Independent source review found no material
+integration issues. Rootless Podman was unavailable for this update; these
+results do not establish native runtime coverage on that engine.
 
 ## Pending live qualification
 

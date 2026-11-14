@@ -38,7 +38,7 @@ def run_suite():
         }.items():
             assert all(production['servers'][name]['wallet'] == wallet for name in names)
         identity = json.loads(subprocess.check_output(command + ['build-info'], text=True))
-        assert identity['source_revision'] == 'e493b88d364cac25ed84922ae162c3f6a5d22452'
+        assert identity['source_revision'] == '7ee0f5e89b5413b8ae55e18ee939c9d26df3652d'
         assert identity['source_dirty'] is False
         gate = subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none', '--entrypoint', 'python3',
                                'private-hermes-x402_treazury:local', '-c',
