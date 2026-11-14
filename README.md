@@ -438,7 +438,8 @@ Bradley Erickson (as team Hardened Minds) in the following three
 
 ## Work done in the hackathon
 
-- **This repository** is hackathon work: every commit is dated 2026-11-08 or later.
+- **This repository** is hackathon work: every commit is dated 2026-11-08 or
+  later; tag nearhackathon2026 marks the submission entry version.
 - **Other Repositories:** these existed before the hackathon period, but
   have qualifying patches and commits.
   - [Hermes Agent](https://github.com/NousResearch/hermes-agent) (MIT License),
@@ -452,14 +453,16 @@ Bradley Erickson (as team Hardened Minds) in the following three
     shielded Zcash swaps. Additionally, the native cryptocurrency send and
     receive tools were created using Near Intents swaps specifically for this
     competition. Repository commit `b9efb0fc6692eb349e3143b2fa94ad159cd64858`
-    is the first commit within the hackathon timeframe.
+    is the first commit within the hackathon timeframe; tag nearhackathon2026
+    marks the submission entry version.
   - [TEE Proof (teep)](https://github.com/13rac1/teep) (AGPL-3.0), a project of
     this team. Its repository was created on 2026-03-20, and its NEAR AI
     provider dates from 2026-03. Changes in the hackathon period include
     [13rac1/teep#191](https://github.com/13rac1/teep/pull/191): teep reports
     the failed Sigstore lookup for one image that NEAR AI runs instead of
     blocking the request, and still enforces `compose_binding`. Eligible
-    timeframe commits begin at `a43d14166c130d8cb1a4937eca28984d93bf75b1`.
+    timeframe commits begin at `a43d14166c130d8cb1a4937eca28984d93bf75b1`;
+    tag nearhackathon2026 marks the submission entry version.
 - **Non-Covered Repositories**: external independent work, not submitted for consideration.
   - Tor, HAProxy, Tailscale, Alpine and Debian images, as pinned in
     `components/`
