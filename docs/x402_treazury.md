@@ -510,8 +510,24 @@ readiness, research configuration and treasury smoke fixtures on Docker 29.9.3
 `make -o check x402_treazury-test`, reusing the successful `make check` result.
 It confirmed degraded zero-exit warming with Tor stopped while offline inspection
 retained the accepted cache. Independent source review found no material
-integration issues. Rootless Podman was unavailable for this update; these
-results do not establish native runtime coverage on that engine.
+integration issues.
+
+On 2026-11-14, the same affected checks passed on `debvm23`: Debian 13 ARM64,
+kernel `6.12.116+deb13-arm64`, rootless Podman 5.4.2 with overlay storage and
+Docker Compose provider 5.7.1. Runtime fixtures used a normal-permission source
+export of `1511b28` in `~/private-hermes-agent`, with freshly built treasury,
+Hermes, executor, Tor and Teep images. Endpoint readiness, offline research
+configuration and `make -o check x402_treazury-test` passed, including empty
+endpoint activation, Tor catalog persistence, degraded warming during Tor outage,
+retained accepted cache and executor isolation. No funds or paid APIs were used.
+A fresh, uninitialized export of `4a88f52` passed all 174 unit tests, four Compose
+models and compilation after isolating two startup-ordering tests from real
+operator bind state. The runtime implementation was unchanged by that test fix.
+Logs remain on the VM at `/tmp/x402-pin-cb4cfd32-{build,endpoints,config,treasury,clean-check}.log`.
+Independent source and recorded-evidence review found no material issues without
+rerunning tests. Qualification containers, networks and volumes were removed;
+generated checkout configuration was cleared. Pre-existing named volumes and
+unrelated VM resources were preserved.
 
 ## Pending live qualification
 

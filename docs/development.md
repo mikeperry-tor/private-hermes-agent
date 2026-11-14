@@ -156,7 +156,9 @@ References: [Hermes backends](https://hermes-agent.nousresearch.com/docs/user-gu
 [teep](https://github.com/13rac1/teep).
 
 `make check` validates the Docker and Podman Compose models with the selected
-engine's Compose; `tests/test_engine.py` covers the `CONTAINER_ENGINE` selector,
+engine's Compose and runs without initialized operator state. Startup-ordering
+unit tests isolate bind-source validation; `tests/test_bind_sources.py` covers
+that validation separately. `tests/test_engine.py` covers the `CONTAINER_ENGINE` selector,
 the engine checks, the `stack.py compose` option parsing, Podman network creation,
 the proxy firewall rules and the engine floors, without a running engine. The
 live tests use the same Compose files and engine commands as the stack. Run
