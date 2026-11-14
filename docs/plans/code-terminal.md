@@ -441,3 +441,36 @@ policy mismatch, treasury fixture and teardown checks also passed. Rootless
 Podman is available through the existing Debian VM (5.4.2 / Compose 5.7.1), despite
 no local macOS podman command; its native suite and both desktop variants are in
 progress. This supersedes the earlier missing-target assumption.
+
+### Desktop PTY audit requirement (2026-11-14)
+
+Both retained production desktop and a networkless pinned-desktop-image sshd
+probe reproduce a second PTY-only failure: authentication succeeds, then sshd
+logs `linux_audit_write_entry failed: Operation not permitted` and exits 255.
+The otherwise identical probe with AUDIT_WRITE succeeds as runner UID 10000.
+Debian's OpenSSH audit integration is absent from the lean Alpine requirement.
+
+Proposed native correction: use existing `compose.executor.yaml` inheritance to
+add AUDIT_WRITE only to executor-true, leaving the shared CHOWN/SETUID/SETGID/
+SYS_CHROOT grants and lean variant intact. No new setting, overlay or topology.
+Runner effective/permitted/inheritable/ambient sets must remain zero. The root
+daemon can submit audit records, not change audit rules (AUDIT_CONTROL remains
+absent). Native rootless Podman audit behavior needs a focused probe before any
+claim of success; a user-namespace grant may differ from Docker's audit authority.
+Do not bypass a failed native audit check or add privileged/host access.
+Independent focused design review is required before the production mapping.
+
+Fresh focused design review accepted desktop-only AUDIT_WRITE on 2026-11-14,
+using the existing executor-true inheritance. It required native runner drop
+evidence and correction of earlier no-capability-needed desktop claims. No
+tests were rerun by review. Docker probe establishes native need; rootless
+Podman audit behavior and production desktop acceptance remain pending.
+
+Native rootless Podman networkless desktop probe also passed UID 10000 and PTY
+commands with the scoped audit grant. Docker production desktop retained fixture
+now passes Code and Agent local/simulated-HTTPS cases, including effective runner
+capability drop and recovery; final switch-back cases remain underway. Final
+`make check` after the variant cap mapping passed 172 tests, four effective models
+and compilation. A minor final-review correction restricts environment metadata
+to exact HostOwner, preserving native saved-gateway subclass metadata. A stale
+CHOWN comment was corrected; no desktop startup behavior changed.

@@ -4,6 +4,8 @@ services:
   executor-false:
     security_opt: [no-new-privileges:true]
   executor-true:
+    # Debian OpenSSH requires audit-record submission for native PTY login.
+    cap_add: [AUDIT_WRITE]
     security_opt:
       - no-new-privileges:true
       - seccomp=./components/executor/seccomp-desktop.json

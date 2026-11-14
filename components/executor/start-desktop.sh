@@ -4,7 +4,7 @@ set -eu
 mkdir -p /run/sshd /tmp/.X11-unix
 chmod 0755 /run/sshd
 chmod 1777 /tmp/.X11-unix
-# Create the user-owned bus/runtime directory without granting sshd CHOWN.
+# Create the bus/runtime directory as runner; sshd's CHOWN is for PTY setup.
 setpriv --reuid=10000 --regid=10000 --clear-groups \
     sh -c 'set -e
         mkdir -p /tmp/hermes-runtime

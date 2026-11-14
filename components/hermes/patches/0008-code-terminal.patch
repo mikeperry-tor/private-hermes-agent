@@ -71,7 +71,7 @@
  def _metadata(token, owner, registry, *, reconnected, truncated):
 +    from hermes_cli.private_code_terminal import environment
      return META_PREFIX + json.dumps({
-+        **({"environment": environment()} if isinstance(owner, HostOwner) else {}),
++        **({"environment": environment()} if type(owner) is HostOwner else {}),
          "shell": owner.shell, "terminalId": token, "cwd": owner.cwd,
          "reconnected": reconnected, "retentionSeconds": registry._ttl,
          "truncated": truncated,

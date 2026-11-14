@@ -224,7 +224,7 @@ Podman stack, including a client on a network without isolation.
 - Executor: lean Alpine by default, or a pinned Debian desktop sandbox selected
   by `COMPUTER_USE_ENABLED`. Both have Python, Node, Git, SSH, curl, read-only root
   and separate writable home/workspace. The desktop adds Xvnc/Xfce, Chromium and
-  cua-driver and an isolated browser-harness environment, with no new container capabilities. Base tags and OS packages can
+  cua-driver and an isolated browser-harness environment, with no GUI-specific container capabilities. Base tags and OS packages can
   change on rebuild; review/pin further when qualifying upgrades.
 
 Browser automation's trusted gateway helper starts an SSH stdio launcher for each
@@ -262,7 +262,8 @@ were involved. This historical non-PTY test establishes why the listener retains
 it does not establish every alternative SSH design's minimum or qualify Alpine,
 AMD64 or Podman by inference. UID 997 is image-specific.
 
-Desktop software adds no container capability requirement. Its Chromium sandbox
+Desktop GUI software adds no container capability requirement; Debian sshd’s
+PTY audit requirement is described below. Its Chromium sandbox
 needs user-namespace syscalls allowed by the desktop seccomp profile; those are
 distinct from capability grants. A non-root process can gain capabilities within
 a new child user namespace without acquiring authority over the parent-owned
@@ -292,6 +293,16 @@ effective capability is added; read-only root/key mounts and no-new-privileges
 remain. The inherited bounding set becomes `0x400c1`. The historical `0x400c0`
 evidence above predates interactive PTYs; current coverage and missing engines
 are recorded in [terminal qualification](development.md#code-terminal-qualification).
+
+Debian OpenSSH additionally needs `AUDIT_WRITE` for PTY login: without it,
+authentication succeeds but `linux_audit_write_entry` fails with EPERM and the
+session exits. A networkless pinned-desktop probe succeeded after adding only
+that grant. The existing `executor-true` Compose inheritance supplies it only to
+the desktop root daemon; the lean Alpine executor retains the four shared grants.
+It permits audit-record submission, not audit-policy changes (`AUDIT_CONTROL` is
+absent). Expected desktop bounding set is `0x200400c1`; runner effective,
+permitted, inheritable and ambient sets remain zero. Native rootless behavior
+must be qualified rather than inferred from an effective model.
 
 ### Hermes capability boundary
 

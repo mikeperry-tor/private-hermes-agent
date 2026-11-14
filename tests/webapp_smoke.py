@@ -381,7 +381,7 @@ else: raise AssertionError('Missing authentication provider did not refuse start
         except subprocess.CalledProcessError as error:
             # Logs may include gateway metadata, but test credentials are never printed.
             print((error.stdout or '')[-4000:], (error.stderr or '')[-4000:], flush=True)
-            print(smoke.compose('logs','--tail','12','hermes','webapp-proxy','setup','tls-fixture',check=False).stdout, flush=True)
+            print(smoke.compose('logs','--tail','12','hermes','executor','webapp-proxy','setup','tls-fixture',check=False).stdout, flush=True)
             raise
         finally:
             if failed and os.getenv('KEEP_FAILED_TEST_STACK') == '1':

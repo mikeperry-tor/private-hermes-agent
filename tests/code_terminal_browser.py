@@ -52,7 +52,11 @@ def command(page, command):
     token = secrets.token_hex(10)
     page.evaluate("args => testShell.ws.send(args.command + \"; printf '\\n__DONE_%s__\\n' '\" + args.token + \"'\\n\")",
                   {'command': command, 'token': token})
-    page.wait_for_function('token => testShell.output.includes("__DONE_"+token+"__")', arg=token, timeout=30000)
+    try:
+        page.wait_for_function('token => testShell.output.includes("__DONE_"+token+"__")', arg=token, timeout=30000)
+    except Exception:
+        print(page.evaluate('({output:testShell.output,closed:testShell.closed})'), flush=True)
+        raise
     return page.evaluate('testShell.output')
 
 
