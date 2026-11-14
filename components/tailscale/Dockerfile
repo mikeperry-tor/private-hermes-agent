@@ -1,5 +1,5 @@
-# Official stable image inspected as Tailscale 1.104.4, Go 1.27.3.
-FROM tailscale/tailscale@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
+# Official stable image: Tailscale 1.104.7.
+FROM tailscale/tailscale@sha256:72c1e19e0aedca96b8533bbb0b4368564410ff20b17e53b804eb6c1f04a31be4
 RUN apk add --no-cache python3
 COPY components/tailscale/funnel.py /opt/funnel.py
 ENTRYPOINT ["python3", "/opt/funnel.py"]

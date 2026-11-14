@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26-bookworm AS build
-ARG TEEP_REV=eecd7e41a6d9f0b5a8324f2c174e25c831b9c941
+ARG TEEP_REV=1bdd44955dcbc6378ef2a08be75406c90ddb3044
 WORKDIR /src
 RUN git init . \
     && git remote add origin https://github.com/13rac1/teep.git \

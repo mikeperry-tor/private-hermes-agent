@@ -26,6 +26,9 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual({row['name'] for row in inventory['sources']}, {'teep', 'x402_treazury'})
         for row in inventory['images']:
             self.assertRegex(row['pinned'], r'@sha256:[a-f0-9]{64}$')
+        desktop = next(row for row in inventory['images'] if row['name'] == 'Executor desktop')
+        self.assertTrue(desktop['pinned'].startswith('nousresearch/hermes-sandbox@sha256:'))
+        self.assertNotEqual(desktop['pinned'], inventory['images'][0]['pinned'])
         self.assertIn('alpine:3.24', inventory['unpinned_bases'])
 
     def test_platform_digest_matches_without_claiming_an_update(self):

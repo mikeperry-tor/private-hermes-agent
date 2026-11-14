@@ -18,7 +18,9 @@ def inventory(root=ROOT):
                                       ('HAProxy', 'webapp/proxy', None),
                                       ('Tailscale', 'tailscale', 'tailscale/tailscale:stable')]:
         path = root / 'components' / (component + '.Dockerfile' if '/' in component else component + '/Dockerfile')
-        pinned = re.search(r'^FROM (\S+@sha256:[a-f0-9]{64})', path.read_text(), re.M).group(1)
+        # The executor also copies helpers from a pinned Hermes source stage.
+        reference = 'nousresearch/hermes-sandbox' if component == 'executor' else r'\S+'
+        pinned = re.search(r'^FROM (' + reference + r'@sha256:[a-f0-9]{64})', path.read_text(), re.M).group(1)
         images.append({'name': name, 'pinned': pinned, 'channel': channel or pinned.split('@')[0]})
     sources = []
     for name, component, variable in [('teep', 'teep', 'TEEP_REV'), ('x402_treazury', 'x402_treazury', 'X402_REV')]:

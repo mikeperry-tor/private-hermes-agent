@@ -208,7 +208,7 @@ Podman stack, including a client on a network without isolation.
 
 ## Images and other Hermes isolation choices
 
-- Tor: `dockurr/tor:0.4.9.16`, pinned by digest in
+- Tor: `dockurr/tor:0.4.9.17`, pinned by digest in
   `components/network/Dockerfile`. The derived image adds our firewall/route setup
   and local authenticated bootstrap health check. Tor runs as UID 101 after
   initialization with empty capability sets; there is no TCP control API, TCP
@@ -217,7 +217,7 @@ Podman stack, including a client on a network without isolation.
 - Hermes: derived from official v0.23.1, with base digest and explicit source
   checks in `components/hermes/`. Runtime and maintenance share the derived
   image; see [patch/build procedure](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance).
-- teep: built from commit `eecd7e41a6d9f0b5a8324f2c174e25c831b9c941`
+- teep: built from commit `1bdd44955dcbc6378ef2a08be75406c90ddb3044`
   with Go 1.26. It runs as UID 10002, read-only except temporary files, without
   `--offline`, `--force`, or debug tags. Upstream's default attestation policy
   (including allowed failures) is preserved. Health is not proof of attestation.
