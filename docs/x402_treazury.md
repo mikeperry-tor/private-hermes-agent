@@ -76,7 +76,7 @@ Startup runs cached image builds, including treasury, before setup or service
 changes. Use `make build` separately to build ahead of startup if desired.
 
 The image builds unmodified upstream commit
-`cb4cfd32bc12e3eeab643a7bf4f555175939a3b7` using its Rust 1.99.1 toolchain and
+`ee92a067655d8d34d5cbc490ddbeb938635d0144` using its Rust 1.99.1 toolchain and
 locked dependencies. The renderer changes only the Tor SOCKS endpoint, persistent
 state path, and HTTP Host allowlists. Wallet groups, rotation, funding, payment
 caps, source selection, and tool selection retain upstream policy. Provider
@@ -87,7 +87,7 @@ serving schedules independent refill opportunities per group, nominally every
 30–120 seconds, and can rotate low active payers into funded reserves. Restart
 redraws that wait; downtime or pending work can extend it. Explicit bootstrap
 retains prompt allocation of its captured claims. See the pinned upstream
-[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/cb4cfd32bc12e3eeab643a7bf4f555175939a3b7/docs/wallet-rotation.md)
+[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-rotation.md)
 for selection and rotation details.
 
 New packaged policy has `[wallet_bootstrap]` with `bootstrap_group = "general"`
@@ -221,7 +221,7 @@ including by an empty group created during an earlier startup. Simply changing
 a name in TOML creates a different group on startup; the old group and its funds
 remain saved but are no longer selected by the renamed references. Renaming a
 group also preserves its historical payer correlation. See the pinned upstream
-[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/cb4cfd32bc12e3eeab643a7bf4f555175939a3b7/docs/wallet-cli.md#rename-a-managed-wallet-group).
+[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md#rename-a-managed-wallet-group).
 
 ## Create the wallet and deposit when ready
 
@@ -280,7 +280,7 @@ Preview reports saved metadata and requested policy differences, not live
 balances or cryptographic verification. The upstream `wallet rename` command is
 also available for deliberate offline administration; it requires exclusive store
 ownership and a backup first. This update does not rename groups automatically.
-See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/cb4cfd32bc12e3eeab643a7bf4f555175939a3b7/docs/wallet-cli.md)
+See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md)
 for its constraints. Deployment policy remains packaged in the image; renaming a
 saved group alone does not change the configured wallet references.
 
@@ -345,6 +345,12 @@ stopping the serving treasury or replaying any accepted financial work.
 
 Each phase streams native output. A failure stops the sequence, reports the
 native exit status and recent redacted output, and leaves Hermes available.
+Default INFO diagnostics on stderr now show catalog warming start, per-source
+results and the final `ok` or `degraded` outcome after native cleanup. Stdout
+remains the native JSON summary. The wrapper neither parses warming output nor
+matches wallet-sync progress messages to determine completion. Warming's message
+that new funding is disabled applies only to that command; it does not change
+the saved deployment policy.
 The private preparation record retains the failed phase and recent output.
 Retry the same command to resume through native wallet journals and cache policy;
 never delete the state directory to retry. Bootstrap and paid warming require

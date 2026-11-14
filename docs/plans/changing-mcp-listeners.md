@@ -24,7 +24,7 @@ Registration rejects changed managed URLs rather than applying operator edits.
 
 The earlier inspected reference revision was
 `424f36a814711d542fbff27f139842c9d08d5b76`; the current treasury Dockerfile pins
-`cb4cfd32bc12e3eeab643a7bf4f555175939a3b7`. Reinspect native inventory, validation
+`ee92a067655d8d34d5cbc490ddbeb938635d0144`. Reinspect native inventory, validation
 and serving diagnostics against the packaged revision before implementation.
 The earlier inspection found native support for named listeners, validation of
 identifiers, references and address uniqueness, and a requirement for at least
