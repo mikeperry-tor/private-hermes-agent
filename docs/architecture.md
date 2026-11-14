@@ -224,8 +224,8 @@ Podman stack, including a client on a network without isolation.
 - Executor: lean Alpine by default, or a pinned Debian desktop sandbox selected
   by `COMPUTER_USE_ENABLED`. Both have Python, Node, Git, SSH, curl, read-only root
   and separate writable home/workspace. The desktop adds Xvnc/Xfce, Chromium and
-  cua-driver and an isolated browser-harness environment, with no GUI-specific container capabilities. Base tags and OS packages can
-  change on rebuild; review/pin further when qualifying upgrades.
+  cua-driver and an isolated browser-harness environment, with no GUI-specific
+  container capabilities. Base tags and OS packages can change on rebuild; review/pin further when qualifying upgrades.
 
 Browser automation's trusted gateway helper starts an SSH stdio launcher for each
 harness identity. The launcher and native harness daemon live in the executor;
@@ -258,8 +258,8 @@ The test used the pinned desktop base index
 Debian OpenSSH `1:10.0p1-7+deb13u4`, a root listener, generated fixture keys,
 `UsePAM=no`, read-only root, writable `/run` and `/tmp`, and
 `no-new-privileges`. No host network, external connection or real credentials
-were involved. This historical non-PTY test establishes why the listener retains those grants;
-it does not establish every alternative SSH design's minimum or qualify Alpine,
+were involved. This historical non-PTY test establishes why the listener retains those
+grants; it does not establish every alternative SSH design's minimum or qualify Alpine,
 AMD64 or Podman by inference. UID 997 is image-specific.
 
 Desktop GUI software adds no container capability requirement; Debian sshd’s
@@ -277,8 +277,8 @@ layers enabled; nested user-namespace root was unable to rejoin the parent-owned
 network namespace or create a raw socket in it.
 Keep effective/permitted capability evidence for runner processes distinct from
 the root listener's grants and from namespace-local browser sandbox capabilities.
-Historical both-engine Docker/Podman qualification measured authenticated runner sessions at
-UID 10000 with empty effective, permitted, inheritable and ambient sets and
+Historical both-engine Docker/Podman qualification measured authenticated runner
+sessions at UID 10000 with empty effective, permitted, inheritable and ambient sets and
 bounding set `0x400c0`; that residual is not authority in the executor's original
 user namespace under `NoNewPrivs=1` with no file capabilities. `SYS_CHROOT`
 remains a functional desktop/Podman Chromium sandbox requirement and is not
@@ -290,19 +290,20 @@ allocation additionally requires daemon `CHOWN`: sshd otherwise exits after
 `chown(/dev/pts/0, 10000, 5) failed: Operation not permitted`. The shared executor
 grant now includes CHOWN for native PTY ownership setup. No network or runner
 effective capability is added; read-only root/key mounts and no-new-privileges
-remain. The inherited bounding set becomes `0x400c1`. The historical `0x400c0`
-evidence above predates interactive PTYs; current coverage and missing engines
+remain. The expected lean bounding set is `0x400c1`. The historical `0x400c0`
+evidence above predates interactive PTYs; current coverage and platform limits
 are recorded in [terminal qualification](development.md#code-terminal-qualification).
 
 Debian OpenSSH additionally needs `AUDIT_WRITE` for PTY login: without it,
 authentication succeeds but `linux_audit_write_entry` fails with EPERM and the
-session exits. A networkless pinned-desktop probe succeeded after adding only
-that grant. The existing `executor-true` Compose inheritance supplies it only to
+session exits. Networkless probes and production desktop fixtures on both supported
+engines succeeded after adding only that grant. The existing `executor-true` Compose inheritance supplies it only to
 the desktop root daemon; the lean Alpine executor retains the four shared grants.
 It permits audit-record submission, not audit-policy changes (`AUDIT_CONTROL` is
 absent). Expected desktop bounding set is `0x200400c1`; runner effective,
-permitted, inheritable and ambient sets remain zero. Native rootless behavior
-must be qualified rather than inferred from an effective model.
+permitted, inheritable and ambient sets remain zero. The native rootless result is qualified in the
+[terminal evidence](development.md#code-terminal-qualification), rather than
+inferred from an effective model.
 
 ### Hermes capability boundary
 

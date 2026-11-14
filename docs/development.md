@@ -885,15 +885,45 @@ For focused reruns, use the same browser environment with
 `COMPUTER_USE_ENABLED=true` after building that executor to cover desktop SSH shell
 behavior; this focused option avoids unrelated desktop/browser/content suites.
 
-Current qualification has passed the full lean `make webapp-test` on Docker
-Desktop 29.9.3 / Compose 5.7.0, with a Linux ARM64 VM, including both modes and
-ordinary environment-change recreation. `make check` passes 172 tests plus the
-four effective models/compilation; renderer TypeScript and 147 tests pass.
-Desktop shell checks and native Debian 13 ARM64 rootless Podman 5.4.2 / Compose
-5.7.1 qualification are in progress. The Podman target uses an existing VM and a
-disposable source copy; effective models alone are not native runtime evidence.
+On 2026-11-14, qualification covered Linux ARM64 images on these targets:
+
+| Runtime | Lean executor | Desktop executor |
+| --- | --- | --- |
+| Docker Desktop 29.9.3 / Compose 5.7.0 on macOS ARM64 | Full `make webapp-test` passed | Six focused terminal cases passed |
+| Debian 13 ARM64 rootless Podman 5.4.2 / Compose 5.7.1 | Full `make webapp-test` passed | Six focused terminal cases passed |
+
+Each terminal lane exercises Code→Agent→Code over local and simulated HTTPS,
+including ordinary environment-change recreation. `make check` passes 172 tests,
+four effective models and compilation on both engines. Renderer TypeScript and
+147 tests passed in the disposable Docker build stage; both engines built the
+same pinned patched frontend/runtime. A final networkless native-image probe
+checks captured profile-home ownership across a remap and unchanged saved-gateway
+metadata. Nine relevant public source/test hashes match the native Podman checkout.
+A fresh independent combined review accepted implementation `86d4a81` and
+corrections through `2d2b5bd` against baseline `3fb1881`, with the maintained
+evidence above and no remaining material findings. Review inspected source and
+recorded results without rerunning suites. All current fixture containers,
+networks and volumes were removed on both engines; two unrelated Docker fixture
+volumes created on 2026-11-09 were preserved.
+
+The native PTY requirements are demonstrated daemon grants: shared CHOWN for PTY
+ownership, and desktop-only AUDIT_WRITE for Debian OpenSSH audit submission.
+Networkless probes and both engines’ production desktop fixtures confirm
+the latter; no AUDIT_CONTROL or new network grant is supplied. Interactive and
+model runner commands retain empty effective/permitted/inheritable/ambient sets
+under no-new-privileges. Existing network/Tor and GUI sandbox evidence above is
+reused where its implementation is unchanged; these terminal checks additionally
+exercise denial of agent inference, MCP, ingress and private destinations.
+
+Disposable VM source exports use `git -c tar.umask=0022 archive` so tracked SSH
+config retains normal 0644 permissions; default archive group-write modes are
+correctly rejected by native OpenSSH system-include checks.
 Identity-failure fixtures use the networkless setup mount, preserving private key
 bytes without printing them and respecting rootless bind ownership. Model-tool
-probes run as UID 10000, matching the serving Hermes process.
+probes run as UID 10000, matching the serving Hermes process. Explicit close
+checks ordinary shell/foreground-child cleanup; intentionally detached jobs and
+survival across backend/executor restart are not promised. Scope remains the
+qualified ARM64 targets and Chromium terminal checks; unrelated GUI and browser
+harness suites were not repeated for shell placement.
 No live Funnel enrollment, paid research, funded-wallet operations or inference
 provider attestation is part of these terminal fixtures.
