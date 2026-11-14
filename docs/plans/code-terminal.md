@@ -474,3 +474,13 @@ capability drop and recovery; final switch-back cases remain underway. Final
 and compilation. A minor final-review correction restricts environment metadata
 to exact HostOwner, preserving native saved-gateway subclass metadata. A stale
 CHOWN comment was corrected; no desktop startup behavior changed.
+
+Full lean `make webapp-test` now passes on both native engines, including final
+cleanup. Docker desktop Code→Agent→Code matrix passes all six local/simulated-
+HTTPS cases with the accepted audit grant, then retained fixture cleanup passed.
+Final review suggested pairing spawn ownership with the already captured profile
+home rather than resolving it again after preparation. The one-line correction
+removes redundant resolution; a networkless native-image probe passed concurrent
+profile-remap pairing and native saved-gateway metadata checks. No broad runtime
+rerun is needed for this platform-independent consistency correction. Podman
+production desktop matrix is the remaining native acceptance lane.
