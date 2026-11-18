@@ -1,0 +1,57 @@
+--- a/tools/environments/ssh.py
++++ b/tools/environments/ssh.py
+@@ -88,6 +88,12 @@
+     return Path(tempfile.mkdtemp(prefix="hssh-", dir=min(roots, key=len))), True
+
+
++_PINNED_SSH_OPTIONS = (
++    "-F", "/etc/ssh/ssh_config.d/99-private-hermes.conf",
++    "-o", "StrictHostKeyChecking=yes", "-o", "BatchMode=yes",
++)
++
++
+ class SSHEnvironment(BaseEnvironment):
+     """Run commands on a remote machine over SSH.
+
+@@ -119,7 +125,7 @@
+         # limit (raw user@host:port + SSH's 16-byte suffix under a deep $TMPDIR exceeds it), and
+         # stability across reconnects keeps ControlMaster reuse working. A probe gets its own
+         # per-instance socket so its cleanup() can never close the agent's shared master.
+-        socket_key = f"{user}@{host}:{port}"
++        socket_key = f"{user}@{host}:{port}:pinned:{key_path!r}"
+         if probe_only:
+             socket_key = f"{socket_key}:probe:{self._session_id}"
+         _socket_id = hashlib.sha256(socket_key.encode()).hexdigest()[:16]
+@@ -170,11 +176,11 @@
+
+     def _build_ssh_command(self, extra_args: list | None = None, send_env: Iterable[str] = ()) -> list:
+         send_env = tuple(sorted(send_env))
+-        cmd = ["ssh"]
++        cmd = ["ssh", *_PINNED_SSH_OPTIONS]
+         if _SSH_MULTIPLEX:
+             cmd.extend(["-o", f"ControlPath={self._control_socket_for(send_env)}",
+                         "-o", "ControlMaster=auto", "-o", "ControlPersist=300"])
+-        cmd.extend(["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10"])
++        cmd.extend(["-o", "ConnectTimeout=10"])
+         # Names only; values ride the ssh client's own environment (never the remote command text).
+         cmd.extend(arg for name in send_env for arg in ("-o", f"SendEnv={name}"))
+         cmd.extend(self._target_flags("-p"))
+@@ -226,7 +232,7 @@
+     def _scp_upload(self, host_path: str, remote_path: str) -> None:
+         """Upload a single file via scp over ControlMaster."""
+         self._run_ssh(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}", timeout=10)
+-        scp_cmd = ["scp"] + (["-o", f"ControlPath={self.control_socket}"] if _SSH_MULTIPLEX else [])
++        scp_cmd = ["scp", *_PINNED_SSH_OPTIONS] + (["-o", f"ControlPath={self.control_socket}"] if _SSH_MULTIPLEX else [])
+         scp_cmd += self._target_flags("-P") + [host_path, f"{self.user}@{self.host}:{remote_path}"]
+         result = run_capture(scp_cmd, timeout=30)
+         if result.returncode != 0:
+@@ -363,7 +369,8 @@
+             if not socket.exists():
+                 continue
+             with contextlib.suppress(OSError, subprocess.SubprocessError):
+-                cmd = ["ssh", "-o", f"ControlPath={socket}", "-O", "exit", f"{self.user}@{self.host}"]
++                cmd = ["ssh", *_PINNED_SSH_OPTIONS, "-o", f"ControlPath={socket}", "-O", "exit",
++                       f"{self.user}@{self.host}"]
+                 subprocess.run(cmd, capture_output=True, timeout=5, stdin=subprocess.DEVNULL, check=False)
+             with contextlib.suppress(OSError):
+                 socket.unlink()
