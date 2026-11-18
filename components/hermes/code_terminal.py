@@ -1,8 +1,8 @@
 """Stack-owned placement for ordinary WebApp terminals; native PTYs own lifecycle."""
+import asyncio
 import json
 from pathlib import Path
 import shlex
-import subprocess
 
 from hermes_bootstrap import PRIVATE_HERMES_TERMINAL_ENVIRONMENT, PRIVATE_HERMES_TERMINAL_SSH
 
@@ -43,8 +43,10 @@ def ssh_argv():
 
 
 # The probe changes directory too: is_dir alone does not prove search permission.
-_PROBE = '''import json, os, sys
+_PROBE = '''import json, os, shutil, sys
 from pathlib import Path
+if not shutil.which('bash'):
+    sys.exit(3)
 try:
     p = Path(sys.argv[1]).resolve(strict=True)
     if p.is_file(): p = p.parent
@@ -70,26 +72,44 @@ fi
 '''
 
 
-def prepare(home, requested_cwd=None):
+async def prepare(home, requested_cwd=None):
+    from hermes_cli.config_backend import ConfigBackendUnavailable
     from hermes_cli.web_host_terminal import resolve_argv
 
     mode = environment()
     # Keep native profile-scoped environment and the agent shell selection ladder.
-    argv, local_cwd, env, shell = resolve_argv(home=home, requested_cwd=requested_cwd if mode == 'agent' else None)
+    try:
+        argv, local_cwd, env, shell = await asyncio.to_thread(
+            resolve_argv, home=home, requested_cwd=requested_cwd if mode == 'agent' else None,
+            use_profile_cwd=mode == 'agent')
+    except ConfigBackendUnavailable:
+        raise CodeTerminalError('Code terminal: configuration backend is unavailable') from None
     if mode == 'agent':
         return argv, local_cwd, env, 'Agent · ' + shell, local_cwd
 
     requested = validate_path('/workspace' if requested_cwd is None else requested_cwd)
     ssh = ssh_argv()
-    probe = subprocess.run([ssh[0], '-n', *ssh[1:], 'python3 -c ' + shlex.quote(_PROBE) + ' ' + shlex.quote(requested)],
-                           env=env, capture_output=True, text=True)
+    probe = await asyncio.create_subprocess_exec(
+        ssh[0], '-n', *ssh[1:], 'python3 -c ' + shlex.quote(_PROBE) + ' ' + shlex.quote(requested),
+        env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+    try:
+        output, _ = await probe.communicate()
+    except BaseException:
+        if probe.returncode is None:
+            probe.kill()
+        await probe.wait()
+        raise
     if probe.returncode:
         # Do not echo raw SSH diagnostics (paths, targets or startup-file output).
-        reason = ('cwd is missing or inaccessible' if probe.returncode == 2 else
-                  'SSH connection failed; check executor availability, client identity and pinned host key')
+        if probe.returncode == 2:
+            reason = 'cwd is missing or inaccessible'
+        elif probe.returncode == 3:
+            reason = 'Bash is unavailable on the executor'
+        else:
+            reason = 'SSH connection or remote Python failed; check executor availability, client identity and pinned host key'
         raise CodeTerminalError('Code terminal: ' + reason)
     try:
-        remote_cwd = validate_path(json.loads(probe.stdout))
+        remote_cwd = validate_path(json.loads(output))
     except (ValueError, RuntimeError):
         raise CodeTerminalError('Code terminal: executor returned an invalid cwd') from None
     command = 'cd -- ' + shlex.quote(remote_cwd) + ' && exec bash --rcfile <(printf %s ' + shlex.quote(_RC) + ') -i'

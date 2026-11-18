@@ -38,6 +38,7 @@ def main():
         'src/plugins/hermes-bots/screen-portal-status-request.test.tsx',
         'src/lib/browser-terminal.test.ts', 'src/lib/browser-desktop-bridge-saved-connections.test.ts',
         'src/app/right-sidebar/terminal/terminals.test.ts',
+        'src/app/right-sidebar/terminal/terminal-ownership.test.ts',
         'src/app/right-sidebar/terminal/use-terminal-session.test.tsx',
         'src/hooks/use-media-image.test.tsx', 'src/lib/media.remote.test.ts',
         'src/app/chat/right-rail/preview-pane.test.tsx')

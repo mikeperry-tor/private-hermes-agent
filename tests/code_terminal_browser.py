@@ -23,22 +23,34 @@ def model_check(code):
     return smoke.execute('hermes', '/opt/hermes/.venv/bin/python', '-c', code, user='10000:10000')
 
 
-def open_shell(page, cwd=None, attach=None, environment=None):
+def open_shell(page, cwd=None, attach=None, environment=None, *, action=None, startup=False, acknowledge=True):
     return page.evaluate('''async (args) => {
       const response = await fetch('/api/webapp/socket-ticket?socket=host-terminal',{method:'POST'});
       if (!response.ok) throw new Error('ticket '+response.status);
       const url = new URL('/api/host-terminal', location.origin.replace(/^http/,'ws'));
       url.searchParams.set('ticket',(await response.json()).ticket);
-      for (const [key,value] of Object.entries(args)) if(value!==null) url.searchParams.set(key,value);
-      const state = window.testShell = {output:'', meta:null, closed:null};
-      const ws = state.ws = new WebSocket(url); ws.binaryType='arraybuffer';
+      const {acknowledge, ...query} = args;
+      for (const [key,value] of Object.entries(query)) if(value!==null) url.searchParams.set(key,value);
+      const state = window.testShell = {output:'', meta:null, closed:null, preparing:false, ackStartup:false};
+      const ws = state.ws = new WebSocket(url);
+      ws.binaryType='arraybuffer';
       ws.onmessage = e => {
         if(typeof e.data==='string' && e.data.startsWith('\\0HERMES_TERMINAL_META:')) {
-          state.meta=JSON.parse(e.data.slice('\\0HERMES_TERMINAL_META:'.length));
+          const frame=JSON.parse(e.data.slice('\\0HERMES_TERMINAL_META:'.length));
+          if(frame.preparing) {
+            state.preparing=true;
+            state.ackStartup=frame.ackStartup===true;
+          } else {
+            state.meta=frame;
+            if (state.ackStartup && acknowledge && frame.terminalId) {
+              ws.send('\\0HERMES_TERMINAL_META:'+JSON.stringify({attached:true}));
+            }
+          }
         } else state.output += typeof e.data==='string' ? e.data : new TextDecoder().decode(e.data);
       };
       ws.onclose=e=>state.closed={code:e.code,reason:e.reason};
-    }''', {'cwd': cwd, 'attach': attach, 'environment': environment})
+    }''', {'cwd': cwd, 'attach': attach, 'environment': environment, 'action': action,
+           'startup': '1' if startup else None, 'acknowledge': acknowledge})
 
 
 def metadata(page):
@@ -79,6 +91,82 @@ def denied(page, cwd=None):
     assert state['closed']['code'] == 4411 and 'Code terminal' in state['closed']['reason'], state
 
 
+def cancel_unacknowledged_code_shell(page):
+    """Drop the socket after metadata was sent but before confirming receipt."""
+    open_shell(page, environment='executor', startup=True, acknowledge=False)
+    meta = metadata(page)
+    assert page.evaluate('testShell.ackStartup')
+    marker = '/tmp/terminal-receipt-' + secrets.token_hex(8)
+    command(page, f"printf '%s' $$ > {marker}")
+    pid = int(smoke.python('executor', f'from pathlib import Path; print(Path({marker!r}).read_text())').stdout)
+    page.evaluate('testShell.ws.close()')
+    page.wait_for_function('() => testShell.closed !== null')
+    smoke.eventually(lambda: smoke.python('executor',
+        f"import os; assert not os.path.exists('/proc/{pid}'), 'unacknowledged terminal is still alive'"))
+    open_shell(page, attach=meta['terminalId'])
+    page.wait_for_function('() => testShell.closed !== null')
+    assert page.evaluate('testShell.meta === null && testShell.closed.code === 4410')
+    print('PASS: Code socket loss before acknowledging the token reaps the terminal', flush=True)
+
+
+def cancel_starting_code_tab(page):
+    """Hold the remote cwd probe after SSH login, then close through the real bridge."""
+    marker = 'terminal-probe-' + secrets.token_hex(8)
+    probe = '/tmp/' + marker
+    fixture_home = '/home/runner/.bashrc'
+    gate = (
+        f'\nif [[ $BASH_EXECUTION_STRING == *{marker}* ]]; then\n'
+        f'  touch {probe}/entered\n'
+        f'  until [[ -f {probe}/release ]]; do sleep 0.05; done\n'
+        '  exit 2\n'
+        'fi\n'
+    )
+    smoke.python('executor', f"""from pathlib import Path
+root = Path({probe!r})
+root.mkdir()
+bashrc = Path({fixture_home!r})
+original = bashrc.read_bytes() if bashrc.exists() else None
+if original is not None:
+    (root / 'original-bashrc').write_bytes(original)
+bashrc.write_bytes({gate.encode()!r} + (original or b''))
+""")
+    try:
+        page.evaluate("""path => {
+          const api = window.hermesDesktop.terminal;
+          window.fixtureTerminalStartup = api.start({cwd:path, restoreKey:'held-code-startup'})
+            .then(() => 'published', error => error.message);
+        }""", probe)
+        smoke.eventually(lambda: smoke.python('executor',
+            f'from pathlib import Path; assert (Path({probe!r}) / "entered").is_file()'))
+        find_probe = rf"""from pathlib import Path
+live = []
+for process in Path('/proc').glob('[0-9]*/cmdline'):
+    try:
+        argv = process.read_bytes().split(b'\0')
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        continue
+    if argv[0] == b'/usr/bin/ssh' and any({marker.encode()!r} in arg for arg in argv[1:]):
+        live.append(process.parent.name)
+"""
+        smoke.python('hermes', find_probe + 'assert live')
+        assert page.evaluate("() => window.hermesDesktop.terminal.closeSaved('held-code-startup')")
+        assert 'cancelled' in page.evaluate('window.fixtureTerminalStartup')
+        smoke.eventually(lambda: smoke.python('hermes', find_probe + 'assert not live'))
+    finally:
+        smoke.python('executor', f"""from pathlib import Path
+root = Path({probe!r})
+(root / 'release').touch()
+bashrc = Path({fixture_home!r})
+backup = root / 'original-bashrc'
+if backup.exists():
+    bashrc.write_bytes(backup.read_bytes())
+    backup.unlink()
+else:
+    bashrc.unlink()
+""")
+    print('PASS: closing a starting Code tab reaps its connected SSH probe', flush=True)
+
+
 def change_identity(action):
     """Mutate only nonce-marked fixture keys through the native offline setup mount.
 
@@ -101,6 +189,8 @@ elif action in ('restore','finish'):
         backup=p.with_name(p.name+'.terminal-test-backup')
         p.write_bytes(backup.read_bytes())
         if action=='finish': backup.unlink()
+elif action=='host-missing':
+    known.unlink()
 elif action in ('rejected','host'):
     with tempfile.TemporaryDirectory() as tmp:
         wrong=Path(tmp)/'key'
@@ -126,6 +216,22 @@ print(json.dumps({p.name:hashlib.sha256(p.read_bytes()).hexdigest() if p.exists(
     raise AssertionError('Changed fixture SSH material did not become visible')
 
 
+def check_model_host_key(*, trusted):
+    # A probe-only environment owns a fresh SSH master and cannot reuse an
+    # already authenticated model shell when the fixture changes known_hosts.
+    model_check(f"""from tools.environments.ssh import SSHEnvironment
+from tools.environments.base import EnvironmentConnectionError
+try:
+    env = SSHEnvironment("10.203.82.3", "runner", port=2222,
+                         key_path="/run/agent-ssh/id_ed25519", probe_only=True)
+except EnvironmentConnectionError:
+    assert not {trusted!r}, "the configured host key was refused"
+else:
+    env.cleanup()
+    assert {trusted!r}, "SSH accepted a connection without its configured host key"
+""")
+
+
 def run(password_path, mode):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=[
@@ -141,12 +247,21 @@ def run(password_path, mode):
                 page.wait_for_url(lambda u: '/login' not in u)
                 page.wait_for_function('() => window.hermesDesktop?.terminal !== undefined')
                 assert page.evaluate('window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__') == mode
-                open_shell(page, environment='agent' if mode == 'code' else 'code')
+                receiver_mode = 'executor' if mode == 'code' else 'gateway'
+                open_shell(page, environment='gateway' if mode == 'code' else 'executor', action='start')
                 page.wait_for_function('() => testShell.closed !== null', timeout=30000)
                 assert page.evaluate('testShell.meta === null && testShell.closed.reason.includes("environment changed")')
-                open_shell(page)
+                # The held-probe fixture uses Debian Bash's noninteractive
+                # sshd startup hook. Lean Alpine still qualifies normal
+                # startup, strict host keys, and the full terminal lifecycle.
+                if mode == 'code' and origin == LOCAL and os.environ.get('COMPUTER_USE_ENABLED') == 'true':
+                    cancel_starting_code_tab(page)
+                if mode == 'code' and origin == LOCAL:
+                    cancel_unacknowledged_code_shell(page)
+                open_shell(page, environment=receiver_mode, action='start', startup=True)
                 meta = metadata(page)
-                assert meta['environment'] == mode and meta['shell'].startswith(mode.title() + ' · '), meta
+                assert meta['environment'] == receiver_mode and meta['shell'].startswith(mode.title() + ' · '), meta
+                assert page.evaluate('testShell.preparing') == (mode == 'code')
                 if mode == 'code':
                     assert meta['cwd'] == '/workspace', meta
                     output = command(page, "printf 'USER-%s\\n' \"$(id -u)\"; printf 'browser-terminal\\n' > /workspace/webapp-terminal-proof; pwd")
@@ -265,8 +380,13 @@ print('POLICY-'+'OK')
                             change_identity('restore')
                             change_identity('host')
                             denied(page)
+                            check_model_host_key(trusted=False)
+                            change_identity('host-missing')
+                            denied(page)
+                            check_model_host_key(trusted=False)
                         finally:
                             change_identity('finish')
+                        check_model_host_key(trusted=True)
                         open_shell(page)
                         close_shell(page, metadata(page))
                     error = page.evaluate("""async () => {
@@ -289,6 +409,12 @@ print('POLICY-'+'OK')
                         open_shell(page)
                         meta = metadata(page)
                         assert 'LOCAL-OK' in command(page, "printf 'LOCAL-%s\\n' 'OK'")
+                        close_shell(page, meta)
+                        path = '/tmp/local terminal cwd '
+                        smoke.python('hermes', f'from pathlib import Path; Path({path!r}).mkdir(exist_ok=True)')
+                        open_shell(page, cwd=path)
+                        meta = metadata(page)
+                        assert meta['cwd'] == path, meta
                         close_shell(page, meta)
                     finally:
                         smoke.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '600', 'executor')
