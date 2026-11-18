@@ -128,7 +128,7 @@ def run_suite():
             wait_ready()
             if '--image-download-only' in sys.argv:
                 smoke.execute('hermes', '/opt/hermes/.venv/bin/python', '-c',
-                              (ROOT / 'tests/fixtures/content-session.py').read_text(), user='10000:10000')
+                              (ROOT / 'tests/fixtures/content-session.py').read_text(), '--download-icon', user='10000:10000')
                 for content_mode in ('tor_proxied', 'ask', 'off', 'browser_native'):
                     os.environ['WEBAPP_EXTERNAL_CONTENT'] = content_mode
                     values['external_content'] = content_mode

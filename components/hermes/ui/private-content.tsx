@@ -1,6 +1,7 @@
 // Shared browser-hosted resource rendering. The gateway remains authoritative.
 import { Children, isValidElement, type ComponentProps, type ReactNode, useEffect, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { downloadFilename } from '@/lib/download'
 import { isBrowserHostedDesktop } from '@/lib/platform'
 
 type Policy = { mode: 'tor_proxied' | 'ask' | 'off' | 'browser_native'; origins: string[]; error?: string }
@@ -127,7 +128,10 @@ export function PrivateImage({ src, srcSet, ...props }: ComponentProps<'img'>) {
   if (!isBrowserHostedDesktop()) return <img {...props} src={src} srcSet={srcSet} />
   if (passiveLocal(src)) return <img {...props} src={src} />
   if (url && current?.mode === 'browser_native') return <img {...props} src={url.href} srcSet={srcSet} />
-  if (result.key === key && result.data && current && current.mode !== 'off') return <img {...props} src={result.data} />
+  if (url && result.key === key && result.data && current && current.mode !== 'off') {
+    const mime = result.data.slice(5, result.data.indexOf(';'))
+    return <img {...props} src={result.data} data-private-image-filename={downloadFilename(url.href, mime)} />
+  }
   return <span data-private-content="image" className="relative z-10 block rounded border border-dashed bg-background p-3 text-xs">
     <ExternalFallback src={src} reason={current?.error || (current?.mode === 'off' ? 'External images are disabled by deployment policy.' :
       result.key === key && result.error ? result.error : !current ? 'Checking deployment policy…' :

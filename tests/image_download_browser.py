@@ -16,13 +16,16 @@ def chunk(kind, data):
 PNG = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 64, 64, 8, 2, 0, 0, 0)) +
        chunk(b'IDAT', zlib.compress((b'\0' + b'\0\0\xff' * 64) * 64)) + chunk(b'IEND', b''))
 DATA = 'data:image/png;base64,' + base64.b64encode(PNG).decode()
+ICO = struct.pack('<3H4B2H2I', 0, 1, 1, 64, 64, 0, 0, 1, 24, len(PNG), 22) + PNG
+ICON_DATA = 'data:image/x-icon;base64,' + base64.b64encode(ICO).decode()
 EXTERNAL = 'https://public.test:19202'
 
 with sync_playwright() as p:
     for engine in ('chromium', 'firefox', 'webkit'):
         browser = getattr(p, engine).launch()
         try:
-            context = browser.new_context(ignore_https_errors=True, accept_downloads=True, reduced_motion='reduce')
+            context = browser.new_context(ignore_https_errors=True, accept_downloads=True, reduced_motion='reduce',
+                                          viewport={'width': 1440, 'height': 1050})
             for origin in ('http://127.0.0.1:19120',):
                 page = context.new_page()
                 remote_requests, image_calls = [], []
@@ -30,8 +33,9 @@ with sync_playwright() as p:
                     remote_requests.append(route.request.url)
                     route.fulfill(body=PNG, content_type='image/png', headers={'Access-Control-Allow-Origin': '*'})
                 def image(route):
-                    image_calls.append(route.request.post_data_json)
-                    route.fulfill(json={'data_url': DATA})
+                    request = route.request.post_data_json
+                    image_calls.append(request)
+                    route.fulfill(json={'data_url': ICON_DATA if request['url'] == EXTERNAL + '/icon' else DATA})
                 # Controlled clipboard sink qualifies the native menu/reader path
                 # across engines without claiming OS clipboard permission coverage.
                 page.add_init_script("""(() => {
@@ -73,97 +77,76 @@ with sync_playwright() as p:
                 page.evaluate('location.hash = "/private-content-qualification"')
                 page.get_by_text('Private content qualification message.', exact=False).wait_for(timeout=30000)
                 page.wait_for_function('() => Boolean(window.hermesDesktop?.saveImageFromUrl)')
-                # Resolve an external source from a visible controlled image.
-                # Overriding currentSrc exercises the real context-menu target
-                # resolver without triggering a preliminary external image load.
-                page.evaluate("""([data, external]) => {
-                    const img = document.createElement('img'); img.id = 'clipboard-fixture';
-                    img.src = data; img.style = 'position:fixed;top:80px;left:20px;width:64px;height:64px;z-index:9999';
-                    Object.defineProperty(img, 'currentSrc', {value: external + '/copy.png'});
-                    document.body.append(img);
-                }""", [DATA, EXTERNAL])
-                def copy_image():
-                    page.locator('#clipboard-fixture').click(button='right')
-                    page.get_by_role('menuitem', name='Copy image', exact=True).click()
-                if mode == 'ask':
-                    before = len(image_calls)
-                    page.once('dialog', lambda dialog: dialog.dismiss())
-                    copy_image()
-                    page.wait_for_function('() => clipboardProof.errors.length === 1')
-                    assert len(image_calls) == before
-                    assert not page.evaluate('clipboardProof.results')
-                    page.once('dialog', lambda dialog: dialog.accept())
-                copy_image()
+                markdown = page.locator('[data-slot="aui_markdown-image"]').first
+                target = EXTERNAL + '/markdown.png'
                 if mode == 'off':
-                    page.wait_for_function('() => clipboardProof.errors.length === 1')
-                    assert not image_calls and not remote_requests
-                else:
-                    page.wait_for_function('() => clipboardProof.results.length === 1')
-                    assert bytes(page.evaluate('clipboardProof.results[0]')) == PNG
-                    if mode != 'browser_native':
-                        assert {'url': EXTERNAL + '/copy.png', 'load_once': True} in image_calls
-                        assert not remote_requests, remote_requests
-                page.locator('#clipboard-fixture').evaluate('(node) => node.remove()')
-                if mode == 'off':
-                    assert page.evaluate('(url) => window.hermesDesktop.saveImageFromUrl(url)', EXTERNAL + '/save.png') is False
+                    assert markdown.locator('img').count() == 0
+                    assert page.evaluate('(url) => window.hermesDesktop.saveImageFromUrl(url)', target) is False
                     assert not image_calls and not remote_requests
                 else:
                     if mode == 'ask':
-                        # Load-once is independent of the subsequent Save approval.
-                        page.get_by_role('button', name='Load once through Tor / retry').first.click()
-                        page.wait_for_function('() => [...document.images].some(i => i.src.startsWith("data:image/png") && i.complete)')
+                        markdown.get_by_role('button', name='Load once through Tor / retry').click()
+                    rendered = markdown.locator('img').first
+                    rendered.wait_for()
+                    page.wait_for_function("() => [...document.images].some(i => i.alt === 'External fixture image' && i.complete && i.naturalWidth === 64)")
+                    displayed_calls = [call for call in image_calls if call['url'] == target]
+                    def image_menu(name):
+                        # Center the image away from the sticky user message and
+                        # click its left side, clear of the overlaid Save button.
+                        rendered.evaluate("(image) => image.scrollIntoView({block: 'center'})")
+                        rendered.click(button='right', position={'x': 8, 'y': 32})
+                        return page.get_by_role('menuitem', name=name, exact=True)
+                    unexpected_dialogs = []
+                    def unexpected(dialog):
+                        unexpected_dialogs.append(dialog.message)
+                        dialog.dismiss()
+                    page.on('dialog', unexpected)
+                    image_menu('Copy image').click()
+                    page.wait_for_function('() => clipboardProof.results.length === 1')
+                    assert bytes(page.evaluate('clipboardProof.results[0]')) == PNG
+                    with page.expect_download() as saved:
+                        image_menu('Save image as…').click()
+                    assert saved.value.suggested_filename == 'markdown.png'
+                    assert Path(saved.value.path()).read_bytes() == PNG
+                    if mode != 'browser_native':
+                        assert [call for call in image_calls if call['url'] == target] == displayed_calls
+                        assert not remote_requests, remote_requests
+                    assert not unexpected_dialogs, unexpected_dialogs
+                    page.remove_listener('dialog', unexpected)
+
+                    # The toolbar retains the original URL and requests fresh bytes.
+                    save = markdown.get_by_role('button', name='Download image', exact=True)
+                    if mode == 'ask':
                         before = len(image_calls)
                         page.once('dialog', lambda dialog: dialog.dismiss())
-                        assert page.evaluate('(url) => window.hermesDesktop.saveImageFromUrl(url)', EXTERNAL + '/cancel.png') is False
+                        assert page.evaluate('(url) => window.hermesDesktop.saveImageFromUrl(url)', target) is False
                         assert len(image_calls) == before
                         def approve(dialog):
                             assert EXTERNAL in dialog.message and 'once through Tor' in dialog.message
                             dialog.accept()
-                        page.on('dialog', approve)
-                    page.wait_for_function('() => [...document.images].some(i => i.complete && i.naturalWidth===64)')
-                    # Exercise the context-menu entry point with a real click.
-                    page.evaluate('''url => {
-                        const button = document.createElement('button');
-                        button.textContent = 'Save context fixture';
-                        button.onclick = () => void window.hermesDesktop.saveImageFromUrl(url);
-                        document.body.append(button);
-                    }''', EXTERNAL + '/context.png')
+                        page.once('dialog', approve)
                     with page.expect_download() as saved:
-                        page.get_by_role('button', name='Save context fixture', exact=True).click()
-                    assert saved.value.suggested_filename == 'context.png'
-                    assert Path(saved.value.path()).read_bytes() == PNG
-                    # Exercise the real Markdown/lightbox Save handler, whose
-                    # parent retains the original URL rather than the data URL.
-                    markdown = page.locator('[data-slot="aui_markdown-image"]').first
-                    if mode == 'ask' and markdown.locator('[data-private-content="image"]').count():
-                        markdown.get_by_role('button', name='Load once through Tor / retry').click()
-                    save = markdown.get_by_role('button', name='Download image', exact=True)
-                    page.evaluate('''() => {
-                        const save = window.hermesDesktop.saveImageFromUrl;
-                        window.imageSaveCalls = [];
-                        window.hermesDesktop.saveImageFromUrl = async src => {
-                            const call = {src}; window.imageSaveCalls.push(call);
-                            try { return call.result = await save(src); }
-                            catch (error) { call.error = String(error); throw error; }
-                        };
-                    }''')
-                    try:
-                        with page.expect_download() as saved:
-                            save.click()
-                    except Exception:
-                        print('Save diagnostics:', page.evaluate('window.imageSaveCalls'), image_calls,
-                              markdown.evaluate('(node) => node.outerHTML'), flush=True)
-                        raise
-                    page.wait_for_function('() => imageSaveCalls.length === 1 && imageSaveCalls[0].result === true')
-                    assert page.evaluate('imageSaveCalls[0].src') == EXTERNAL + '/markdown.png'
+                        save.click()
+                    assert saved.value.suggested_filename == 'markdown.png'
                     assert Path(saved.value.path()).read_bytes() == PNG
                     if mode == 'browser_native':
                         assert remote_requests and not image_calls
                     else:
                         assert not remote_requests, remote_requests
-                        assert image_calls[-1]['load_once'] is True
+                        assert [call for call in image_calls if call['url'] == target] == [
+                            *displayed_calls, {'url': target, 'load_once': True}]
                         grants = page.evaluate('async () => (await (await fetch("/api/private-content/policy")).json()).origins')
                         assert grants == [], grants
+                    if mode == 'tor_proxied':
+                        rendered = page.get_by_alt_text('External fixture icon', exact=True)
+                        rendered.wait_for()
+                        page.wait_for_function("() => [...document.images].some(i => i.alt === 'External fixture icon' && i.complete && i.naturalWidth === 64)")
+                        before = len(image_calls)
+                        with page.expect_download() as saved:
+                            image_menu('Save image as…').click()
+                        assert saved.value.suggested_filename == 'icon.ico'
+                        assert Path(saved.value.path()).read_bytes() == ICO
+                        assert len(image_calls) == before and not remote_requests
                 page.close()
             context.close()
             print(f'PASS: {engine} {mode} image Save/Copy bytes, consent and browser request placement', flush=True)

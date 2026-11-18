@@ -1,5 +1,6 @@
 """Seed disposable native model/tool output without inference or paid calls."""
 import json
+import sys
 from hermes_state import SessionDB
 
 PUBLIC = 'https://public.test:19202'
@@ -14,9 +15,12 @@ if db.get_session(SESSION) is None:
     }])
     db.append_message(SESSION, 'tool', tool_name='image_generate', tool_call_id='fixture-image-tool',
                       content=json.dumps({'success': True, 'image': PUBLIC + '/generated.png'}))
+    icon = f'![External fixture icon]({PUBLIC}/icon)' if '--download-icon' in sys.argv else ''
     db.append_message(SESSION, 'assistant', content=f'''Private content qualification message.
 
 ![External fixture image]({PUBLIC}/markdown.png)
+
+{icon}
 
 ![Local fixture image](/workspace/private-content-local.png)
 

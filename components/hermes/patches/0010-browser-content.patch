@@ -1380,7 +1380,8 @@
  import type { HermesApiRequest } from '@/global'
 @@ -162,6 +164,13 @@
      },
-     saveImageFromUrl: async (url: string) => {
+-    saveImageFromUrl: async (url: string) => {
++    saveImageFromUrl: async (url: string, suggestedName?: string) => {
        try {
 +        const source = await privateImageDownloadSource(url)
 +        if (source === null) return false
@@ -1389,12 +1390,13 @@
 +          downloadBlob(image, downloadFilename(url, image.type))
 +          return true
 +        }
-         return await downloadUrl(url)
+-        return await downloadUrl(url)
++        return await downloadUrl(url, suggestedName)
        } catch (error) {
          // Context-menu consumers fire and forget; surface failures here.
 --- a/apps/desktop/src/lib/private-image-download.test.ts
 +++ b/apps/desktop/src/lib/private-image-download.test.ts
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,126 @@
 +import { afterEach, expect, it, vi } from 'vitest'
 +
 +import { clearNotifications } from '@/store/notifications'
@@ -1418,7 +1420,7 @@
 +    const url = String(input)
 +    if (url === '/api/private-content/policy') return new Response(JSON.stringify({mode, origins: []}))
 +    if (url === '/api/private-content/image') return new Response(JSON.stringify(fail ? {detail: 'Controlled Tor failure'} : {data_url: data}), {status: fail ? 502 : 200})
-+    if (url === data) return new Response('image', {headers: {'Content-Type': data.startsWith('data:image/png') ? 'image/png' : 'image/jpeg'}})
++    if (url === data) return new Response('image', {headers: {'Content-Type': data.slice(5, data.indexOf(';'))}})
 +    // Only browser_native may use the original external URL.
 +    if (mode === 'browser_native' && url === SRC) return new Response('native', {headers: {'Content-Type': 'image/png'}})
 +    throw new Error('Unexpected browser request: ' + url)
@@ -1440,6 +1442,12 @@
 +  expect(clicked[0].download).toBe('hash.jpg')
 +  expect(confirm).toHaveBeenCalledTimes(mode === 'ask' ? 1 : 0)
 +  if (mode === 'ask') expect(confirm.mock.calls[0][0]).toContain('https://images.example')
++})
++
++it('saves an extensionless Tor icon with its raster extension', async () => {
++  const {bridge, clicked} = await setup('tor_proxied', true, false, 'data:image/x-icon;base64,aW1hZ2U=')
++  expect(await bridge.saveImageFromUrl(SRC)).toBe(true)
++  expect(clicked[0].download).toBe('hash.ico')
 +})
 +
 +it('cancelling ask approval performs no image retrieval or download', async () => {
@@ -1559,3 +1567,53 @@
 +    const response = await fetch(source, { credentials: 'omit', mode: 'cors', signal: controller.signal })
      controller.signal.throwIfAborted()
      reader = response.body?.getReader()
+--- a/apps/desktop/src/app/context-menu/target.ts
++++ b/apps/desktop/src/app/context-menu/target.ts
+@@ -21,6 +21,7 @@
+   linkUrl: string
+   /** Source URL of the clicked image, when the click landed on one. */
+   imageUrl: string
++  imageSuggestedName?: string
+   /** True when the click landed on an `<img>` (imageUrl may still be empty
+    *  for a broken image; Copy image works through coordinates either way). */
+   onImage: boolean
+@@ -58,6 +59,7 @@
+     // A placeholder anchor is not a link the menu can act on.
+     linkUrl: linkUrl === '#' ? '' : linkUrl,
+     imageUrl: image instanceof HTMLImageElement ? image.currentSrc || image.src : '',
++    imageSuggestedName: image instanceof HTMLImageElement ? image.dataset.privateImageFilename : undefined,
+     onImage: Boolean(image),
+     selectionText: window.getSelection()?.toString().trim() ?? ''
+   }
+--- a/apps/desktop/src/app/context-menu/app-context-menu.tsx
++++ b/apps/desktop/src/app/context-menu/app-context-menu.tsx
+@@ -280,7 +280,7 @@
+         icon="save"
+         key="image-save"
+         label={copy.image.saveImageAs}
+-        onSelect={() => void window.hermesDesktop?.saveImageFromUrl?.(target.imageUrl)}
++        onSelect={() => void window.hermesDesktop?.saveImageFromUrl?.(target.imageUrl, target.imageSuggestedName)}
+       />
+     ) : null
+   ].filter(Boolean)
+--- a/apps/desktop/src/global.d.ts
++++ b/apps/desktop/src/global.d.ts
+@@ -365,7 +365,7 @@
+         /** The chat the clip belongs to: its `/workspace` is that session's sandbox. */
+         sessionId?: string
+       }) => Promise<string>
+-      saveImageFromUrl: (url: string) => Promise<boolean>
++      saveImageFromUrl: (url: string, suggestedName?: string) => Promise<boolean>
+       /** Edit verb against the window's focused element (the custom context
+        *  menu's Cut/Copy/Paste/Select all). */
+       contextMenuEdit?: (command: 'copy' | 'cut' | 'paste' | 'selectAll') => Promise<void>
+--- a/apps/desktop/src/lib/download.ts
++++ b/apps/desktop/src/lib/download.ts
+@@ -4,5 +4,6 @@ const MIME_EXTENSIONS: Record<string, string> = {
+   'image/jpeg': '.jpg',
+   'image/png': '.png',
+   'image/svg+xml': '.svg',
+-  'image/webp': '.webp'
++  'image/webp': '.webp',
++  'image/x-icon': '.ico'
+ }
