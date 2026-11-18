@@ -100,6 +100,25 @@ def check():
             {'names': [name]}, current_tool_defs=definitions))
         assert name not in described.get('tools', {}), described
 
+    from tools.connectors.contract import TargetState
+    from tools.connectors.mcp import _registered_tool_names
+    from tools.connectors.operation import ConnectionOperation, Target
+    fixture_tool = 'mcp__fixture__lookup'
+    try:
+        # Setup and catalog activation read the registered MCP tool names.
+        for name in [fixture_tool, *sorted(blocked)]:
+            registry.register(name=name, toolset='mcp-fixture',
+                              schema={'name': name, 'description': 'Fixture'}, handler=lambda **kw: '{}')
+        tools = _registered_tool_names('fixture', wait_seconds=0)
+        assert tools == [fixture_tool], tools
+        for kind, action in (('mcp', 'connect'), ('plugin', 'install')):
+            operation = ConnectionOperation([
+                Target('fixture', kind, action, state=TargetState.connected, extra={'tools': tools}),
+            ])
+            assert operation.result()['targets'][0]['tools'] == [fixture_tool]
+    finally:
+        registry.deregister(fixture_tool)
+
     def forbidden(*args, **kwargs):
         raise AssertionError('unsupported handler or GUI callback invoked')
 

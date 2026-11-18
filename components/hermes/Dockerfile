@@ -37,6 +37,7 @@ COPY --from=webapp-build /opt/hermes/tools/browser_session_lifecycle.py /opt/her
 COPY --from=webapp-build /opt/hermes/tools/browser_session_sandbox.py /opt/hermes/tools/browser_session_sandbox.py
 COPY --from=webapp-build /opt/hermes/tools/browser_supervisor.py /opt/hermes/tools/browser_supervisor.py
 COPY --from=webapp-build /opt/hermes/tools/environments/ssh.py /opt/hermes/tools/environments/ssh.py
+COPY --from=webapp-build /opt/hermes/agent/background_review.py /opt/hermes/agent/background_review.py
 COPY --from=webapp-build /opt/hermes/agent/inline_tool_executors.py /opt/hermes/agent/inline_tool_executors.py
 COPY --from=webapp-build /opt/hermes/agent/context_references.py /opt/hermes/agent/context_references.py
 COPY --from=webapp-build /opt/hermes/tools/bot_desktop/ /opt/hermes/tools/bot_desktop/

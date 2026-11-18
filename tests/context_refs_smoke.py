@@ -5,10 +5,12 @@ Build first: python3 scripts/stack.py compose build hermes
 Run: python3 tests/context_refs_smoke.py
 """
 import asyncio
+from contextlib import ExitStack
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 
 
 def check():
@@ -17,6 +19,8 @@ def check():
         preprocess_context_references, preprocess_context_references_async,
         register_context_reference_provider,
     )
+    from gateway.session_context_refs import managed_turn_text
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     from tools import web_tools
 
     fetches = []
@@ -28,8 +32,12 @@ def check():
     # Cover both supplied and default fetchers. Native expansion catches fetch
     # exceptions, so also assert call count and the absence of injected warnings.
     web_tools.web_extract_tool = forbidden_fetch
-    with tempfile.TemporaryDirectory(prefix='context-reference-test-') as folder:
+    with tempfile.TemporaryDirectory(prefix='context-reference-test-') as folder, ExitStack() as scope:
         root = Path(folder)
+        profile = root / 'profile'
+        profile.mkdir()
+        (profile / 'config.yaml').write_text('context_references:\n  fetch_urls: true\n')
+        scope.callback(reset_hermes_home_override, set_hermes_home_override(profile))
         cwd = root / 'workspace'
         cwd.mkdir()
         (cwd / 'sample.txt').write_text('FILE_REFERENCE_CANARY')
@@ -89,6 +97,21 @@ def check():
             assert not fetches, fetches
             refused = await preprocess_context_references_async('@file:../outside.txt', **common)
             assert refused.warnings and 'outside the allowed workspace' in str(refused.warnings)
+
+            # A working file reference proves the admitted text got through the
+            # gateway's preprocessing, even when it bypasses profile plugins.
+            text = message + ' @file:sample.txt @fixturecontext:value'
+            for bypass in (False, True):
+                policy = SimpleNamespace(
+                    cwd=cwd, ignore_user_config=bypass, base_url='', provider='',
+                    config=lambda _authority: {'model': {'context_length': common['context_length']}},
+                    current_model=lambda _authority: 'fixture',
+                )
+                received, refusal = await managed_turn_text(None, {'payload': {'text': text}}, policy)
+                assert refusal is None, refusal
+                assert received.startswith(text) and 'FILE_REFERENCE_CANARY' in received, received
+                assert ('PLUGIN_REFERENCE_CANARY' in received) != bypass, received
+                assert not fetches, fetches
             assert 'OUTSIDE_ROOT_CANARY' not in refused.message
 
         asyncio.run(run_async())
@@ -103,13 +126,17 @@ def main():
     from deployment import engine_command
 
     fixture = Path(__file__).resolve()
-    subprocess.run([
-        *engine_command(), 'run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
-        '-e', 'HERMES_HOME=/tmp/context-reference-home', '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied',
-        '--mount', f'type=bind,source={fixture},target=/tmp/context_refs_smoke.py,readonly',
-        '--entrypoint', '/opt/hermes/.venv/bin/python',
-        'private-hermes-agent:local', '/tmp/context_refs_smoke.py', '--inside',
-    ], check=True)
+    with tempfile.TemporaryDirectory(prefix='context-managed-') as managed:
+        (Path(managed) / 'config.yaml').write_text('context_references:\n  fetch_urls: false\n')
+        subprocess.run([
+            *engine_command(), 'run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
+            '-e', 'HERMES_HOME=/tmp/context-reference-home', '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied',
+            '-e', 'HERMES_MANAGED_DIR=/etc/hermes',
+            '--mount', f'type=bind,source={managed},target=/etc/hermes,readonly',
+            '--mount', f'type=bind,source={fixture},target=/tmp/context_refs_smoke.py,readonly',
+            '--entrypoint', '/opt/hermes/.venv/bin/python',
+            'private-hermes-agent:local', '/tmp/context_refs_smoke.py', '--inside',
+        ], check=True)
 
 
 if __name__ == '__main__':
