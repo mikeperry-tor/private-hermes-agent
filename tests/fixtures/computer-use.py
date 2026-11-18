@@ -1,13 +1,17 @@
 """Runs inside disposable Hermes against its real SSH desktop, with no provider calls."""
+import asyncio
 import json
 import os
 import re
 import secrets
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import AsyncMock, Mock, patch
 import model_tools
 from tools.bot_desktop import placement, runtime, sandbox_host, lease
 from tools.environments import streams
-from tools.computer_use import tool
+from tools.computer_use import cua_backend_session, tool
 from tools.registry import registry
 
 assert tool.check_computer_use_requirements(), 'desktop requirements unavailable'
@@ -81,7 +85,95 @@ lease.acquire('fixture-viewer')
 blocked = json.loads(tool.handle_computer_use({'action': 'capture'}, session_id='computer-use-fixture'))
 assert blocked['code'] == 'human_has_control', blocked
 lease.release('fixture-viewer')
+
+session = tool._get_backend('computer-use-fixture')._session
+inspect_desktop = session._assert_desktop
+
+
+def takeover_during_inspection():
+    inspect_desktop()
+    lease.acquire('fixture-viewer')
+    lease.release('fixture-viewer')
+
+
+with patch.object(session, '_assert_desktop', takeover_during_inspection), \
+     patch.object(session._session, 'call_tool', AsyncMock()) as send:
+    blocked = json.loads(tool.handle_computer_use(
+        {'action': 'list_apps'}, session_id='computer-use-fixture'))
+    assert blocked['code'] == 'human_has_control', blocked
+    send.assert_not_awaited()
+
+# The bridge can time out while its loop is blocked inside the last lease read.
+lease_entered, finish_lease, lease_done = threading.Event(), threading.Event(), threading.Event()
+
+
+def blocked_lease_read():
+    lease_entered.set()
+    assert finish_lease.wait(10)
+    lease_done.set()
+
+
+def call_through_bridge():
+    token = cua_backend_session.dispatch_fence.set(blocked_lease_read)
+    try:
+        session._bridge.run(session._call_tool_async('list_apps', {}), timeout=3)
+    except TimeoutError:
+        return
+    finally:
+        cua_backend_session.dispatch_fence.reset(token)
+    raise AssertionError('CUA bridge did not time out')
+
+
+with patch.object(session._session, 'call_tool', AsyncMock()) as send, ThreadPoolExecutor(1) as pool:
+    call = pool.submit(call_through_bridge)
+    try:
+        assert lease_entered.wait(10), 'CUA request did not reach the final lease read'
+        call.result(timeout=10)
+    finally:
+        finish_lease.set()
+    assert lease_done.wait(10)
+    session._bridge.run(asyncio.sleep(0))
+    send.assert_not_awaited()
+
+# Permission revocation during the final lease read must refuse the operation
+# before any message reaches the old driver.
+current_mode = Mock(return_value='standard')
+read_lease = lease.get
+
+
+def change_mode_during_lease_read(profile_key=None):
+    if threading.current_thread().name == 'cua-driver-loop':
+        current_mode.return_value = 'bounded'
+    return read_lease(profile_key)
+
+
+with patch.object(tool, '_cua_permission_mode', current_mode), \
+     patch.object(lease, 'get', change_mode_during_lease_read), \
+     patch.object(session._session, 'call_tool', AsyncMock()) as send:
+    blocked = json.loads(tool.handle_computer_use(
+        {'action': 'list_apps'}, session_id='computer-use-fixture'))
+    assert 'permissions changed' in blocked['error'], blocked
+    # Retiring the old driver may send its own end_session cleanup request.
+    assert all(call.args[0] == 'end_session' for call in send.await_args_list), send.await_args_list
+act(action='list_apps')
+
+# A restarted launcher can reuse the same X display while the model still has
+# a cached driver and screen targets. The first call must refuse that owner.
+assert runtime.stop()
+assert runtime.start().running
+replacement = runtime.published_env()
+assert replacement['DISPLAY'] == published['DISPLAY']
+assert replacement['DBUS_SESSION_BUS_ADDRESS'] != published['DBUS_SESSION_BUS_ADDRESS']
+stale = json.loads(tool.handle_computer_use(
+    {'action': 'list_apps'}, session_id='computer-use-fixture'))
+assert 'recorded desktop changed' in stale['error'].lower(), stale
+act(action='capture', mode='vision', app='screen')
 tool.release_computer_use_session('computer-use-fixture')
+
+# The fixture's terminal belonged to the old X session. Reopen it on the new screen.
+published = replacement
+remote("nohup xfce4-terminal --disable-server --title computer-use-fixture > /tmp/cu-terminal.log 2>&1 </dev/null &")
+time.sleep(1)
 act(action='capture', mode='vision', app='xfce4-terminal')
 tool.release_computer_use_session('computer-use-fixture')
 

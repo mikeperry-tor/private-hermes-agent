@@ -27,6 +27,7 @@ RUN install -d -m 0755 -o 10000 -g 10000 /workspace && \
     rm -rf /opt/hermes/apps/desktop/dist-webapp
 COPY --from=webapp-build /opt/hermes/hermes_bootstrap.py /opt/hermes/hermes_bootstrap.py
 COPY --from=webapp-build /opt/hermes/hermes_cli/ /opt/hermes/hermes_cli/
+COPY --from=webapp-build /opt/hermes/tools/approval.py /opt/hermes/tools/approval.py
 COPY --from=webapp-build /opt/hermes/tools/registry.py /opt/hermes/tools/registry.py
 COPY --from=webapp-build /opt/hermes/tools/browser_use_cli.py /opt/hermes/tools/browser_use_cli.py
 COPY --from=webapp-build /opt/hermes/tools/browser_session.py /opt/hermes/tools/browser_session.py

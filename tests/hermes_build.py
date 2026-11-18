@@ -69,6 +69,19 @@ assert _external_content_mode == original
         '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied', '-e', 'COMPUTER_USE_ENABLED=true',
         '-e', 'HERMES_HOME=/tmp/desktop-probe-test', '--entrypoint', PYTHON, IMAGE,
         '-c', (ROOT / 'tests/fixtures/desktop-dependency-probe.py').read_text())
+    run('run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
+        '-e', 'HERMES_HOME=/tmp/approval-probe-test', '--entrypoint', PYTHON, IMAGE, '-c', """
+from unittest.mock import patch
+from tools import approval
+
+request = dict(pattern_key='image-probe', description='image probe', display_target='fixture',
+               autoapprove_log_prefix='image probe', fail_closed_when_no_human=True)
+with patch.object(approval, '_yolo_active', return_value=True), \\
+     patch.object(approval, '_presence', return_value=(None, False, False, False)):
+    assert approval._run_approval_gate(**request)['approved']
+    result = approval._run_approval_gate(**request, allow_mode_bypass=False)
+    assert result['approved'] is False, result
+""")
     run('run', '--rm', '-i', '--network', 'none', '--cap-drop', 'ALL',
         '--entrypoint', PYTHON, IMAGE, '-c',
         (ROOT / 'tests/fixtures/ssh-workspace-files.py').read_text())

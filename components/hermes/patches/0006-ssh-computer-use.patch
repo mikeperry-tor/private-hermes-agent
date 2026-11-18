@@ -2,8 +2,7 @@
 +++ b/tools/bot_desktop/placement.py
 @@ -1,19 +1,7 @@
 -"""Where this profile's desktop lives: the gateway host or inside the configured terminal backend.
-+"""Private Hermes desktop placement: only the configured SSH executor may host it.
-
+-
 -``bot_desktop.placement``:
 -  ``auto``      (default) follow the terminal backend when it is a sandbox that can host a stream
 -                (docker / ssh, or a plugin backend declaring ``supports_streams``); the
@@ -18,12 +17,14 @@
 -``resolve()`` is pure config + backend-class reasoning: it never starts a sandbox. ``terminal_environment()``
 -does acquire the profile's terminal environment (creating the container if needed) because a screen cannot
 -exist before the sandbox does.
++"""Private Hermes desktop placement: only the configured SSH executor may host it.
++
 +Resolution reads policy/configuration; terminal_environment uses native terminal
 +ownership to acquire the executor when requested.
  """
  from __future__ import annotations
 
-@@ -26,7 +14,6 @@
+@@ -26,7 +14,6 @@ logger = logging.getLogger(__name__)
  GATEWAY = "gateway"
  TERMINAL = "terminal"
  REFUSED = "refused"
@@ -31,22 +32,14 @@
 
 
  @dataclass(frozen=True)
-@@ -48,42 +35,15 @@
+@@ -48,42 +35,20 @@ def _terminal_backend() -> str:
      return str(_get_env_config().get("env_type") or "local")
 
 
 -def _plugin_streams(backend: str) -> bool:
 -    from tools.terminal_tool_config import _plugin_env_flag
 -    return _plugin_env_flag(backend, "supports_streams") is True
-+def resolve() -> Placement:
-+    from hermes_bootstrap import PRIVATE_HERMES_COMPUTER_USE
-+    if not PRIVATE_HERMES_COMPUTER_USE:
-+        return Placement(REFUSED, "ssh", "Computer use requires COMPUTER_USE_ENABLED=true and a rebuilt executor")
-+    backend = _terminal_backend()
-+    if backend != "ssh" or _setting() == GATEWAY:
-+        return Placement(REFUSED, backend, "This deployment supports desktop actions only inside the SSH executor")
-+    return Placement(TERMINAL, backend)
-
+-
 -
 -def _plugin_host_isolated() -> bool:
 -    # Under host isolation a plugin's environment object reaches Hermes as an opaque placeholder, so its
@@ -56,7 +49,7 @@
 -    return isolation_mode() == ISOLATION_HOST
 -
 -
--def resolve() -> Placement:
+ def resolve() -> Placement:
 -    # Backend first (env only): a local terminal IS the gateway host whatever the setting says, and that is
 -    # the common case — it must not cost a config load (this runs on every browser / cua-driver spawn).
 -    backend = _terminal_backend()
@@ -79,12 +72,195 @@
 -              f"gateway host would put the agent's screen, browser and computer_use outside the sandbox you chose "
 -              f"for it. Set bot_desktop.placement: gateway to allow that explicitly.")
 -    return Placement(REFUSED, backend, reason)
++    from hermes_bootstrap import PRIVATE_HERMES_COMPUTER_USE
++    if not PRIVATE_HERMES_COMPUTER_USE:
++        return Placement(REFUSED, "ssh", "Computer use requires COMPUTER_USE_ENABLED=true and a rebuilt executor")
++    from tools.terminal_scope import TerminalPolicyUnavailable
++
++    try:
++        backend = _terminal_backend()
++    except TerminalPolicyUnavailable as exc:
++        return Placement(REFUSED, "", str(exc))
++    if backend != "ssh" or _setting() == GATEWAY:
++        return Placement(REFUSED, backend, "This deployment supports desktop actions only inside the SSH executor")
++    return Placement(TERMINAL, backend)
++
 
 
  def terminal_environment(*, create: bool = True) -> Optional[Any]:
 --- a/tools/computer_use/tool.py
 +++ b/tools/computer_use/tool.py
-@@ -925,10 +925,6 @@
+@@ -191,12 +191,15 @@
+     sid = str(session_id or "")
+     return sid if get_hermes_home_override() is None else f"{sid}@{hermes_home_key()}"
+
+-def _get_backend(session_id: str = "") -> ComputerUseBackend:
++def _get_backend(session_id: str = "", *, requested_mode: Optional[str] = None) -> ComputerUseBackend:
+     bare_sid, sid = str(session_id or ""), _scoped_sid(session_id)
+     while True:
+         with _backend_lock:
+             # Mode resolved under the cache lock; YOLO mutation never holds the approval lock while releasing it.
+             permission_mode = _cua_permission_mode(bare_sid)  # approval state is keyed by the Hermes session id
++            if requested_mode is not None and permission_mode != requested_mode:
++                from tools.computer_use.cua_backend_session import DesktopChanged
++                raise DesktopChanged("Computer-use permissions changed; retry with fresh screen state")
+             if (cached := _backends.get(sid)) is None:
+                 backend = _new_backend(permission_mode)
+                 backend.start()  # under the cache lock: one backend per session; a concurrent toggle releases it
+@@ -211,34 +214,41 @@
+         _stop_backend(cached, stale_lock, lambda e: None)
+
+ @contextlib.contextmanager
+-def _backend_for_call(session_id: str = "") -> Iterator[ComputerUseBackend]:
+-    """Hold a live backend through dispatch, retrying admission but never an action.
++def _backend_for_call(session_id: str, requested_mode: str) -> Iterator[ComputerUseBackend]:
++    """Hold one backend through dispatch. A queued action cannot change screens.
+
+     A display/mode change or release can retire a backend before lock lookup or
+     while a caller waits. Revalidate AFTER acquiring its profile-scoped call
+     lock; teardown needs that same lock. Never wait under the global cache lock.
+     """
+     from tools.computer_use.cua_backend import backend_display_stale, desktop_identity
++    from tools.computer_use.cua_backend_session import DesktopChanged
+
+     sid = _scoped_sid(session_id)
+-    while True:
+-        backend = _get_backend(session_id=session_id)
+-        with _backend_lock:
+-            if _backends.get(sid) is not backend:
+-                continue
+-            call_lock = _backend_call_locks[sid]
+-        with call_lock:
++    backend = _get_backend(session_id=session_id, requested_mode=requested_mode)
++    with _backend_lock:
++        if _backends.get(sid) is not backend:
++            raise DesktopChanged("The desktop driver changed; retry with fresh screen state")
++        call_lock = _backend_call_locks[sid]
++    with call_lock:
++        try:
+             with _backend_lock:
+                 if (_backends.get(sid) is not backend
+                         or _backend_call_locks.get(sid) is not call_lock):
+-                    continue
+-                # A queued call can outlive a display/config change even when
+-                # no other caller has replaced the cached backend yet.
+-                if (_backend_permission_modes.get(sid) != _cua_permission_mode(str(session_id or ""))
+-                        or backend_display_stale(_backend_displays.get(sid, ""), desktop_identity())):
+-                    continue
++                    raise DesktopChanged("The desktop driver changed; retry with fresh screen state")
++                if backend_display_stale(_backend_displays.get(sid, ""), desktop_identity()):
++                    raise DesktopChanged("The desktop display changed; retry with fresh screen state")
++                if _backend_permission_modes[sid] != _cua_permission_mode(session_id):
++                    raise DesktopChanged("Computer-use permissions changed; retry with fresh screen state")
+             yield backend
+-            return
++        except DesktopChanged:
++            # Drop only this backend. The next action can acquire the new
++            # owner, while this action keeps its original refusal.
++            with _backend_lock:
++                detached = _detach_locked(sid)[0] if _backends.get(sid) is backend else None
++            if detached is not None:
++                _stop_backend(detached, call_lock, lambda e: None)
++            raise
+
+
+ def release_computer_use_session(session_id: str) -> bool:
+@@ -285,25 +295,45 @@
+     # Bot Desktop lease: while a human drives the screen every action, capture included, is refused.
+     from tools.bot_desktop import lease as _bd_lease
+     from tools.bot_desktop.runtime import ensure_started_for_tool as _bd_ensure_started
++    from tools.computer_use.cua_backend_session import DesktopChanged, dispatch_fence
+     def _refused(e: Exception) -> str:
+         return json.dumps({"ok": False, "action": action, "code": "human_has_control", "error": str(e)})
+     try:
+         admitted = _bd_lease.assert_agent_may_act()
+     except _bd_lease.HumanHasControl as e:
+         return _refused(e)
++
++    def _fence(*, check_permissions: bool = True) -> None:
++        with _bd_lease.agent_admission() as current:
++            # Keep the lease stable while evaluating the mode. A hand-back
++            # cannot reauthorize an action admitted under an earlier epoch.
++            if current.epoch != admitted.epoch:
++                raise _bd_lease.HumanHasControl(
++                    "A human took over this desktop while the action ran; its result was discarded. "
++                    "Tell the user what you need and re-capture once they hand back.")
++            if check_permissions and _cua_permission_mode(session_id) != permission_mode:
++                raise DesktopChanged("Computer-use permissions changed; retry with fresh screen state")
++
+     _bd_ensure_started()  # headless gateway: bring the profile's screen up before the backend probes DISPLAY
+     if (err := _reject_unsafe(action, args)) is not None:
+         return err
++    permission_mode = _cua_permission_mode(session_id)
+     scopes = ([action] if action in _ACTIONS and _ACTIONS[action].destructive else []) + (
+         ["bring_to_front"] if args.get("bring_to_front") or (action == "focus_app" and args.get("raise_window")) else [])
+     for scope in scopes:
+-        if (err := _request_approval(scope, args)) is not None:
++        if (err := _request_approval(scope, args, allow_mode_bypass=permission_mode == "unrestricted")) is not None:
+             return err
+     # Acquire separately so startup errors retain the install hint; the stack
+     # releases the admitted call lock on every dispatch return or exception.
+     call = contextlib.ExitStack()
+     try:
+-        backend = call.enter_context(_backend_for_call(session_id))
++        backend = call.enter_context(_backend_for_call(session_id, permission_mode))
++    except DesktopChanged as e:
++        try:
++            _fence(check_permissions=False)
++        except _bd_lease.HumanHasControl as lease_error:
++            return _refused(lease_error)
++        return json.dumps({"error": str(e)})
+     except Exception as e:
+         from plugins.computer_use import DEFAULT_BACKEND, configured_backend_name
+         hint = ({"hint": "If the cua-driver binary is missing, run `hermes computer-use install`. If a Python "
+@@ -312,24 +342,12 @@
+         return json.dumps({"error": f"computer_use backend unavailable: {e}", **hint})
+     try:
+         with call:
+-            # Re-check under the dispatch lock: approval, backend start-up and lock waits above can take
+-            # seconds, and a human may have taken over meanwhile. A result produced after such a flip is
+-            # discarded too — it may picture what they typed.
++            _fence()
++            token = dispatch_fence.set(_fence)
+             try:
+-                _bd_lease.assert_agent_may_act()
+-            except _bd_lease.HumanHasControl as e:
+-                return _refused(e)
+-
+-            def _fence() -> None:
+-                # Any lease transition since admission voids the frame — including a full take-over /
+-                # hand-back cycle that already finished: it still belongs to the human's turn. Capture
+-                # paths call this BEFORE the frame is persisted, spilled or sent to auxiliary vision.
+-                if _bd_lease.get().epoch != admitted.epoch:
+-                    raise _bd_lease.HumanHasControl(
+-                        "A human took over this desktop while the action ran; its result was discarded. "
+-                        "Tell the user what you need and re-capture once they hand back.")
+-            _fence()  # input actions never receive fence=; refuse before the device op starts
+-            result = _dispatch(backend, action, args, fence=_fence, session_id=session_id or None)
++                result = _dispatch(backend, action, args, fence=_fence, session_id=session_id or None)
++            finally:
++                dispatch_fence.reset(token)
+             _fence()
+             return result
+     except _bd_lease.HumanHasControl as e:
+@@ -338,7 +356,7 @@
+         logger.exception("computer_use %s failed", action)
+         return json.dumps({"error": f"{action} failed: {e}"})
+
+-def _request_approval(action: str, args: dict[str, Any]) -> Optional[str]:
++def _request_approval(action: str, args: dict[str, Any], *, allow_mode_bypass: bool = True) -> Optional[str]:
+     """None if approved, else a JSON error string. The decision (yolo bypass, session/permanent grants, CLI prompt,
+     gateway pending, cron/unattended policy, fail-closed with nobody to ask) is ``tools.approval``'s shared gate,
+     so a computer_use grant is one store entry like any terminal pattern. Scope key ``cua:<action>:<mode>``:
+@@ -355,6 +373,7 @@
+         advice="Find an alternative approach that avoids driving the desktop.",
+         autoapprove_log_prefix="computer_use action in non-interactive non-gateway context",
+         fail_closed_when_no_human=True,
++        allow_mode_bypass=allow_mode_bypass,
+         no_human_block_message=(f"BLOCKED: computer_use `{action}` requires approval but no interactive user or "
+                                 "gateway is present to approve it."),
+     )
+@@ -925,10 +944,6 @@
 
  # ── Availability check (used by the tool registry check_fn) ─────────────────
  def check_computer_use_requirements() -> bool:
@@ -98,9 +274,119 @@
 +    """Check actual SSH executor dependencies without starting its display."""
 +    from hermes_cli.private_computer_use import available
 +    return available()
+--- a/tools/approval.py
++++ b/tools/approval.py
+@@ -1204,13 +1204,20 @@
+     return approval_callback, is_cli, is_gateway, is_ask
+
+
++def _action_gate_bypasses(allow_mode_bypass: bool) -> bool:
++    if allow_mode_bypass:
++        return _yolo_active() or approval_context._get_approval_mode() == "off"
++    from gateway.session_finite import unattended_turn
++    return unattended_turn()
++
++
+ def _run_approval_gate(
+     *, pattern_key: str, description: str, display_target: str, approval_callback=None,
+     subject: str = "", noun: str = "flagged actions",
+     advice: str = "Find an alternative approach that avoids this action.",
+     cron_deny_message: str = "", single_query_deny_message: str = "", unattended_deny_message: str = "",
+     autoapprove_log_prefix: str, fail_closed_when_no_human: bool = False, no_human_block_message: str = "",
+-    pattern_keys: list[str] | None = None,
++    pattern_keys: list[str] | None = None, allow_mode_bypass: bool = True,
+ ) -> dict:
+     """Shared human-approval gate for a flagged action (tool call or write): decision core for
+     :func:`request_tool_approval` and the file-tool write gates.
+@@ -1220,6 +1227,8 @@
+     caller's job. ``fail_closed_when_no_human``: a non-interactive, non-gateway, non-cron
+     context without an ask bridge BLOCKS instead of auto-approving, so a plugin-flagged action
+     never runs ungated.
++    A caller that binds its dispatch to a restricted mode can disallow the
++    bypass here so an intervening escalation cannot approve the action.
+     Unattended deny text is ``ctx.block_message(subject, noun, advice)`` unless the caller passes
+     an explicit ``*_deny_message`` (the file-tool write gates word their own). ``pattern_keys``
+     (default ``[pattern_key]``) are what a session/always answer persists.
+@@ -1228,7 +1237,7 @@
+     # ``approvals.mode: off`` is the third bypass source (the Desktop "Approvals: off" toggle writes it); the shell
+     # guards honour it, so every action routed through this gate (computer_use, plugin rules, SSH-config writes,
+     # dangerous-pattern prompts) must too, or "off" still prompts on those surfaces.
+-    if _yolo_active() or approval_context._get_approval_mode() == "off":
++    if _action_gate_bypasses(allow_mode_bypass):
+         return _approved()
+     session_key = get_current_session_key()
+     if is_approved(session_key, pattern_key):
+--- a/tools/bot_desktop/lease.py
++++ b/tools/bot_desktop/lease.py
+@@ -24,9 +24,10 @@
+ import os
+ import threading
+ import time
++from contextlib import contextmanager
+ from dataclasses import asdict, dataclass, field
+ from pathlib import Path
+-from typing import Callable, Dict, List, Optional
++from typing import Callable, Dict, Iterator, List, Optional
+
+ from hermes_constants import get_hermes_home, hermes_home_key, secure_parent_dir
+
+@@ -249,3 +250,10 @@
+             "A human has taken over this desktop (they may be entering a credential). Screen actions and "
+             "captures are refused until they hand control back. Tell the user what you need in your reply.")
+     return lease
++
++
++@contextmanager
++def agent_admission(profile_key: Optional[str] = None) -> Iterator[Lease]:
++    """Hold the current lease stable through local dispatch checks. Release before driver I/O."""
++    with _locked(_path(profile_key)):
++        yield assert_agent_may_act(profile_key)
 --- a/tools/computer_use/cua_backend.py
 +++ b/tools/computer_use/cua_backend.py
-@@ -256,8 +256,8 @@
+@@ -27,7 +27,7 @@
+     resolve_cua_driver_cmd)
+ from tools.computer_use.cua_backend_input import _InputMixin
+ from tools.computer_use.cua_backend_parse import _action_result_from
+-from tools.computer_use.cua_backend_session import _AsyncBridge, _CuaDriverSession
++from tools.computer_use.cua_backend_session import DesktopChanged, _AsyncBridge, _CuaDriverSession
+
+ logger = logging.getLogger(__name__)
+ # cua-driver's anonymous PostHog telemetry gate ("0" disables; absent => ON upstream).
+@@ -157,26 +157,18 @@
+         env[_CUA_NATIVE_WAYLAND_ENV_VAR] = "1"
+     return env
+
+-def sandbox_mcp_invocation() -> Optional[tuple[tuple[str, list[str]], dict[str, str]]]:
+-    """``((command, args), child_env)`` spawning ``cua-driver mcp`` INSIDE the terminal backend when the Bot
+-    Desktop is placed there (the driver in the sandbox image drives the sandbox's own screen); None on a
+-    gateway-hosted desktop, where the local driver is used. Placement is the authority: a ``terminal``
+-    placement gets its screen started here and a ``refused`` one raises — the host driver is never the
+-    fallback for a sandbox whose screen is down."""
++def sandbox_mcp_invocation():
++    """Return the cua-driver invocation and its exact desktop binding."""
+     from tools.bot_desktop import placement, runtime as _bd_runtime
+-    if _bd_runtime.tool_placement() == placement.GATEWAY:
+-        return None
+-    published = _bd_runtime.published_env()
+-    if not published.get("DISPLAY"):
+-        raise RuntimeError("the screen inside the terminal backend's sandbox is gone; start it again")
++    if _bd_runtime.tool_placement() != placement.TERMINAL:
++        raise RuntimeError("Computer use requires the SSH executor desktop")
+     from tools.bot_desktop import sandbox_host
+-    env = _bd_runtime._sandbox_env(create=True)
+-    if env is None:
+-        raise RuntimeError("the terminal backend's sandbox is not running, so there is nowhere to run cua-driver")
++
++    env, published = _bd_runtime.tool_sandbox()
+     command, args = sandbox_host.cua_mcp_invocation(env, _bd_runtime._profile_name(),
+                                                     {**published, _CUA_TELEMETRY_ENV_VAR: "0"})
+     _bd_runtime.touch_activity()
+-    return (command, args), {"PATH": os.environ.get("PATH", "")}
++    return (command, args), {"PATH": os.environ.get("PATH", "")}, (env, published)
+
+
+ def sanitized_cua_driver_env() -> dict[str, str]:
+@@ -256,8 +248,8 @@
      """Default computer-use backend. Cross-platform via cua-driver MCP."""
 
      def __init__(self, permission_mode: str = "standard") -> None:
@@ -111,9 +397,140 @@
          self.permission_mode = permission_mode
          self._embedded_daemon: Optional[_EmbeddedCuaDaemon] = None
          if permission_mode != "standard":
+@@ -410,6 +402,8 @@
+             args.setdefault("session", self._session_id)
+         try:
+             out = self._session.call_tool(name, args)
++        except DesktopChanged:
++            raise
+         except Exception as e:
+             logger.exception("cua-driver %s call failed", name)
+             return ActionResult(ok=False, action=name, message=f"cua-driver error: {e}")
 --- a/tools/computer_use/cua_backend_session.py
 +++ b/tools/computer_use/cua_backend_session.py
-@@ -426,35 +426,8 @@
+@@ -12,6 +12,7 @@
+ import logging
+ import os
+ import threading
++from contextvars import ContextVar
+ from typing import Any, Dict, List, Optional
+
+ from hermes_cli._subprocess_compat import windows_hide_flags
+@@ -19,6 +20,13 @@
+ from tools.computer_use.cua_backend_parse import _extract_tool_result, _mcp_field, _tool_envelope
+
+ logger = logging.getLogger("tools.computer_use.cua_backend")
++dispatch_fence = ContextVar("cua_dispatch_fence", default=None)
++_request_cancelled = ContextVar[Optional[threading.Event]]("cua_request_cancelled", default=None)
++
++
++def _check_dispatch_fence() -> None:
++    if fence := dispatch_fence.get():
++        fence()
+
+
+ class _AsyncBridge:
+@@ -52,12 +60,23 @@
+     def run(self, coro, timeout: Optional[float] = 30.0) -> Any:
+         from agent.async_utils import safe_schedule_threadsafe
+         alive = self._loop is not None and self._thread is not None and self._thread.is_alive()
+-        fut = safe_schedule_threadsafe(coro, self._loop) if alive else None  # closes the coroutine on failure
++        cancelled = threading.Event()
++        token = _request_cancelled.set(cancelled)
++        try:
++            fut = safe_schedule_threadsafe(coro, self._loop) if alive else None
++        finally:
++            _request_cancelled.reset(token)
+         if fut is None:
+             if asyncio.iscoroutine(coro):
+                 coro.close()  # no-op when safe_schedule_threadsafe already closed it
+             raise RuntimeError("cua-driver bridge not started")
+-        return fut.result(timeout=timeout)
++        try:
++            return fut.result(timeout=timeout)
++        except concurrent.futures.TimeoutError:
++            # The loop may be blocked in the lease check when cancellation is queued.
++            cancelled.set()
++            fut.cancel()
++            raise
+
+     def stop(self) -> None:
+         if self._loop and self._loop.is_running():
+@@ -167,6 +186,10 @@
+             and ("has ended" in message or "session ended" in message))
+
+
++class DesktopChanged(RuntimeError):
++    """The active driver no longer owns the executor desktop."""
++
++
+ class _CuaDriverSession:
+     """Holds the mcp ClientSession. Spawned lazily; re-entered on drop. Lifecycle ownership: one long-running
+     coroutine (`_lifecycle_coro`) opens the stdio_client + ClientSession contexts, populates capabilities, sets
+@@ -184,6 +207,7 @@
+     # call_tool. Class-level default: tests that bypass __init__ see healthy.
+     # See #74799.
+     _timeout_suspect = False
++    _sandbox_desktop = None
+
+     def __init__(self, bridge: _AsyncBridge, embedded_daemon: Optional[Any] = None) -> None:
+         self._bridge, self._embedded_daemon, self._session = bridge, embedded_daemon, None
+@@ -222,14 +246,12 @@
+         # reports HOW FAR it got instead of an opaque "never reached ready".
+         self._startup_phase = "binary-check"
+         try:
+-            driver_cmd = _driver.resolve_cua_driver_cmd()
+-            if not driver_cmd and _cb.sandbox_mcp_invocation() is None:
+-                raise RuntimeError(_driver.cua_driver_install_hint())
++            self._assert_desktop()
++            (command, args), child_env, binding = _cb.sandbox_mcp_invocation()
++            if self._sandbox_desktop is not None and binding != self._sandbox_desktop:
++                raise DesktopChanged("The recorded desktop changed; retry with a fresh computer-use session")
++            self._sandbox_desktop = binding
+             self._startup_phase = "manifest-discovery"
+-            daemon = self._embedded_daemon
+-            (command, args), child_env = (
+-                (daemon.proxy_invocation(), daemon.child_env()) if daemon is not None
+-                else _cb.sandbox_mcp_invocation() or (_driver._resolve_mcp_invocation(driver_cmd), _cb.cua_driver_child_env()))
+             _t_manifest = _time.monotonic()
+             # Telemetry policy first (default: disabled), then strip Hermes secrets.
+             params = StdioServerParameters(command=command, args=args, env=_sanitize_subprocess_env(child_env))
+@@ -305,6 +327,8 @@
+                 f"{getattr(self, '_startup_phase', 'unknown')}). Run `hermes computer-use doctor` and check "
+                 f"{display_hermes_home()}/logs/agent.log for the phase timings.")
+         if self._setup_error is not None:
++            if isinstance(self._setup_error, DesktopChanged):
++                raise self._setup_error
+             raise RuntimeError(f"cua-driver session setup failed: {self._setup_error}") from self._setup_error
+         self._transport_generation += 1
+         if self._transport_generation > 1:
+@@ -345,7 +369,25 @@
+             with contextlib.suppress(RuntimeError):  # loop closed — nothing to signal
+                 loop.call_soon_threadsafe(event.set)
+
++    def _assert_desktop(self) -> None:
++        if self._sandbox_desktop is None:
++            return
++        from tools.bot_desktop import runtime
++
++        try:
++            env, published = runtime.tool_sandbox(reattach=False)
++        except (OSError, RuntimeError) as exc:
++            raise DesktopChanged(str(exc)) from exc
++        # The session bus identifies this launcher even when its successor
++        # reuses the display number and the same SSH endpoint.
++        if (env, published) != self._sandbox_desktop or not runtime.owns_tool_sandbox(env):
++            raise DesktopChanged("The recorded desktop changed; retry with a fresh computer-use session")
++
+     async def _call_tool_async(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
++        await asyncio.to_thread(self._assert_desktop)
++        _check_dispatch_fence()
++        if (cancelled := _request_cancelled.get()) is not None and cancelled.is_set():
++            raise asyncio.CancelledError
+         return _extract_tool_result(await self._session.call_tool(name, args))
+
+     # ── Capability detection ─────────────────────────────────────────
+@@ -426,35 +468,8 @@
              self._redeclare_session(timeout, "cua-driver public session label %s could not be restored: %s")
 
      def _call_tool_via_cli(self, name: str, args: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -187,7 +604,79 @@
 
 
  def in_sandbox() -> bool:
-@@ -619,6 +604,10 @@
+@@ -561,51 +546,37 @@
+
+
+ def sandbox_screen_running() -> bool:
+-    """True when a sandbox-hosted screen is UP for this profile: the start marker exists AND the sandbox it
+-    names is alive — registered in this process, or (after a gateway restart emptied the registry) the
+-    marker's recorded container still running. Only a sandbox that is provably gone (its container removed
+-    out from under us) drops the marker, so the next start rebuilds instead of the browser exec-ing into a
+-    dead container; an unregistered-but-alive one is re-attached by ``_sandbox_env(create=True)`` at the
+-    next spawn (the terminal planner reuses the persisted container by label)."""
++    """Report the recorded owner without provisioning a new terminal environment."""
++    return _owned_sandbox_env(reattach=False) is not None
++
++
++def _owned_sandbox_env(*, reattach: bool = True):
++    """Reuse only the recorded SSH target selected by this profile."""
+     from tools.bot_desktop import sandbox_host
++    from tools.terminal_tool import _get_env_config
++
+     marker = sandbox_host._read_marker()
+-    if not marker:
+-        return False
+-    if _sandbox_env(create=False) is not None:
+-        return True
+-    if sandbox_host.marker_sandbox_alive(marker):
+-        return True
+-    sandbox_host._marker().unlink(missing_ok=True)
+-    return False
+-
+-
+-def _owned_sandbox_env():
+-    """The environment hosting the screen the marker records, re-attaching after a restart when the recorded
+-    sandbox is still alive; None when there is no marker or its sandbox is gone. Never builds a sandbox for
+-    a screen that is not there."""
+-    from tools.bot_desktop import sandbox_host
+-    marker = sandbox_host._read_marker()
+-    if not marker:
++    expected = marker.get("ssh")
++    if not expected:
++        return None
++    cfg = _get_env_config()
++    target = sandbox_host.ssh_owner(cfg["ssh_host"], cfg["ssh_user"], cfg["ssh_port"], cfg["ssh_key"])
++    if cfg["env_type"] != "ssh" or target != expected:
+         return None
+     env = _sandbox_env(create=False)
+-    if env is not None:
+-        return env
+-    if sandbox_host.marker_sandbox_alive(marker):
+-        return _sandbox_env(create=True)
+-    return None
++    if env is None and reattach:
++        env = _sandbox_env(create=True)
++    return env if env is not None and sandbox_host._owner_identity(env).get("ssh") == expected else None
+
+
+ def is_running() -> bool:
+     return bool(published_env().get("DISPLAY"))
+
+
+-def open_rfb_stream() -> subprocess.Popen:
+-    """Popen whose stdin/stdout carry RFB bytes for a sandbox-hosted screen (``in_sandbox()`` only)."""
++def open_rfb_stream(env, profile: str) -> subprocess.Popen:
++    """Open the RFB relay in the already acquired SSH executor."""
+     from tools.bot_desktop import sandbox_host
+-    env = _sandbox_env(create=False)
+-    if env is None:
+-        raise RuntimeError("the sandbox hosting this screen is not running")
+-    return sandbox_host.open_rfb_stream(env, _profile_name())
++    return sandbox_host.open_rfb_stream(env, profile)
+
+
+ def geometry() -> str:
+@@ -619,6 +590,10 @@
      from tools.bot_desktop import resources
      from tools.bot_desktop import sandbox_host
      where = placement.resolve()
@@ -198,7 +687,7 @@
      if where.where == placement.TERMINAL or sandbox_host._read_marker():
          # A screen already running inside a sandbox is reported (and stoppable) even after the placement
          # setting moved: the recorded owner wins over the current policy until it is stopped.
-@@ -674,7 +663,7 @@
+@@ -687,7 +662,7 @@
              f"use {sandbox_host.SANDBOX_IMAGE_HINT} as terminal.{where.backend}_image (the default sandbox base "
              f"plus the desktop stack)")
          blocker = (f"The terminal backend's sandbox image lacks {', '.join(missing)}. {advice[0].upper()}{advice[1:]}, "
@@ -207,7 +696,28 @@
          if where.backend == "docker":
              # The usual reason on an upgraded install: the persisted container predates the default
              # flip and was kept on purpose. The pane offers the switch instead of a config hint.
-@@ -879,7 +868,7 @@
+@@ -881,29 +856,55 @@
+
+ def _start_in_sandbox(wait_seconds: float) -> DesktopStatus:
+     from tools.bot_desktop import sandbox_host
+-    env = _sandbox_env(create=True)
+-    if env is None:
+-        raise RuntimeError("the terminal backend's sandbox could not be started, so there is nowhere to put the screen")
+     sd = state_dir()
+     sd.mkdir(parents=True, exist_ok=True)
+     os.chmod(sd, 0o700)
+     with _flocked(sd / "start.lock"):
++        if _launcher_pid() is not None:
++            raise RuntimeError("Stop the current gateway desktop before starting a desktop in the terminal executor")
++        marker = sandbox_host._read_marker()
++        env = _owned_sandbox_env() if marker else None
++        if marker and env is None:
++            raise RuntimeError("Restore the recorded desktop's SSH settings and stop it before starting another")
++        if env is None:
++            env = _sandbox_env(create=True)
++        if env is None:
++            raise RuntimeError("The terminal sandbox could not be started")
+         # The dock's Browser icon runs the sandbox's own Playwright Chromium on the profile the agent's browser
          # uses there: the human's browser is the bot's browser, as on the host.
          from tools.bot_desktop.browser import dock_exec_line
          exe = sandbox_host.chromium_executable(env)
@@ -215,10 +725,120 @@
 +        browser = (exe, dock_exec_line(exe, sandbox_host.browser_profile_dir(env), sandbox_bypass=False)) if exe else (None, None)
          published = sandbox_host.start(env, _profile_name(), geometry=geometry(), wait_seconds=max(wait_seconds, 20.0),
                                         browser_exec=browser[0], browser_exec_line=browser[1])
-     (sd / "env").write_text("".join(f"{k}={v}\n" for k, v in published.items()), encoding="utf-8")
+-    (sd / "env").write_text("".join(f"{k}={v}\n" for k, v in published.items()), encoding="utf-8")
+-    touch_activity()
+-    return status()
++        (sd / "env").write_text("".join(f"{k}={v}\n" for k, v in published.items()), encoding="utf-8")
++        touch_activity()
++        return status()
++
++
++def tool_sandbox(*, reattach: bool = True):
++    """Read and act through the same verified environment that owns this profile's display."""
++    from tools.bot_desktop import sandbox_host
++
++    env = _owned_sandbox_env(reattach=reattach)
++    if env is None:
++        raise RuntimeError("The recorded terminal desktop is unavailable; restore its terminal settings")
++    published = sandbox_host.published_env(env, _profile_name(), strict=True)
++    if not published.get("DISPLAY"):
++        raise RuntimeError("The terminal desktop screen is stopped; start it again")
++    return env, published
++
++
++def owns_tool_sandbox(env) -> bool:
++    """Revalidate a queued tool or companion operation without warming a new environment."""
++    return (env is not None and placement.resolve().where == placement.TERMINAL
++            and _owned_sandbox_env(reattach=False) is env)
+
+
+ def _sandbox_published_env() -> dict[str, str]:
+     """Published env of a sandbox-hosted screen (the caller saw the host-side marker written at start)."""
+     from tools.bot_desktop import sandbox_host
+-    env = _sandbox_env(create=False)
++    env = _owned_sandbox_env(reattach=False)
+     if env is None:
+         return {}
+     return sandbox_host.published_env(env, _profile_name())
+@@ -914,26 +915,25 @@
+     was signalled. ``still_due`` is asked again before anything is killed (under ``start.lock`` for a screen on
+     this host); False there leaves the screen running."""
+     from tools.bot_desktop import sandbox_host
+-    if sandbox_host._read_marker() or placement.resolve().where == placement.TERMINAL:
+-        if still_due is not None and not still_due():
+-            return False
+-        # The marker names the sandbox that owns the screen; stop THAT one (re-attaching after a restart),
+-        # whatever the placement setting says now. A marker whose sandbox is gone is simply dropped.
+-        env = _owned_sandbox_env()
+-        stopped = sandbox_host.stop(env, _profile_name()) if env is not None else False
+-        sandbox_host._marker().unlink(missing_ok=True)
+-        for name in ("env", "activity"):
+-            (state_dir() / name).unlink(missing_ok=True)
+-        return stopped
+-    if not is_supported_host():
++
++    sd = state_dir()
++    if not sd.exists() and not is_supported_host():
+         return False
+-    sd = state_dir()
+     sd.mkdir(parents=True, exist_ok=True)
+     with _flocked(sd / "start.lock"):
+         if still_due is not None and not still_due():
+-            logger.info("Bot Desktop for profile %s changed while the idle stop waited; kept", _profile_name())
+             return False
+-        return _stop_locked(sd)
++        marker = sandbox_host._read_marker()
++        if marker:
++            env = _owned_sandbox_env()
++            if env is None:
++                raise RuntimeError("Could not stop the recorded desktop; restore its SSH settings and retry")
++            stopped = sandbox_host.stop(env, _profile_name())
++            sandbox_host._marker().unlink(missing_ok=True)
++            for name in ("env", "activity"):
++                (sd / name).unlink(missing_ok=True)
++            return stopped
++        return _stop_locked(sd) if is_supported_host() else False
+
+
+ def _stop_locked(sd: Path) -> bool:
 --- a/tools/bot_desktop/sandbox_host.py
 +++ b/tools/bot_desktop/sandbox_host.py
-@@ -276,7 +276,7 @@
+@@ -70,9 +70,14 @@ def _marker() -> Path:
+
+ def _read_marker() -> dict[str, Any]:
+     try:
+-        return json.loads(_marker().read_text(encoding="utf-8-sig"))
+-    except (OSError, ValueError):
++        marker = json.loads(_marker().read_text(encoding="utf-8-sig"))
++    except FileNotFoundError:
+         return {}
++    except (OSError, ValueError) as exc:
++        raise RuntimeError("Could not read the stored desktop owner; inspect sandbox.json before changing placement") from exc
++    if not isinstance(marker, dict) or not marker:
++        raise RuntimeError("The stored desktop owner is invalid; inspect sandbox.json before changing placement")
++    return marker
+
+
+ def _owner_identity(env: Any) -> dict[str, Any]:
+@@ -83,9 +88,17 @@ def _owner_identity(env: Any) -> dict[str, Any]:
+     if container:
+         ident["container"] = container
+         ident["docker"] = getattr(env, "_docker_exe", "docker")
++    if streams.shell_joined(env):
++        ident["ssh"] = ssh_owner(env.host, env.user, env.port, env.key_path)
+     return ident
+
+
++def ssh_owner(host, user, port, key) -> list:
++    from tools.environments.ssh import _PINNED_SSH_OPTIONS
++
++    return [host, user, str(port), key, list(_PINNED_SSH_OPTIONS)]
++
++
+ _ALIVE_CACHE: dict[str, tuple[float, bool]] = {}
+
+
+@@ -274,7 +287,7 @@ def start(env: Any, profile: str, *, geometry: str, wait_seconds: float = 20.0,
              f"terminal.docker_image / modal_image")
          raise RuntimeError(
              f"Bot Desktop needs {', '.join(missing)} inside the terminal backend's sandbox. The configured image "
@@ -227,9 +847,115 @@
      user = _user_for(env)
      launcher = (Path(__file__).with_name("launcher.sh").read_bytes())
      wallpaper = Path(__file__).with_name("wallpaper.png").read_bytes()
+@@ -302,6 +315,9 @@ def start(env: Any, profile: str, *, geometry: str, wait_seconds: float = 20.0,
+     spawn = (f"cd {shlex.quote(rdir)} && setsid -f bash -c "
+              f"'echo $$ > launcher.pid; exec bash launcher.sh' > launcher.log 2>&1 < /dev/null; "
+              f"for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s launcher.pid ] && break; sleep 0.1; done; [ -s launcher.pid ]")
++    # The launcher can survive a dropped reply from the terminal. Publish its
++    # owner before detaching it, under the profile lifecycle lock.
++    _record(env, rdir, profile, {"DISPLAY": f":{num}"})
+     proc = streams.run_in(env, ["bash", "-c", spawn], child_env=child_env, user=user, timeout=30)
+     if proc.returncode != 0:
+         raise RuntimeError(f"sandbox desktop launcher did not start: {proc.stderr.decode('utf-8', 'replace')[-500:]}")
+@@ -321,8 +337,10 @@ def start(env: Any, profile: str, *, geometry: str, wait_seconds: float = 20.0,
+
+ def _record(env: Any, rdir: str, profile: str, live: dict[str, str]) -> dict[str, str]:
+     _marker().parent.mkdir(parents=True, exist_ok=True)
+-    _marker().write_text(json.dumps({"display": live["DISPLAY"], "dir": rdir, "profile": profile,
+-                                     **_owner_identity(env)}), encoding="utf-8")
++    from utils.files import atomic_write_text
++
++    atomic_write_text(_marker(), json.dumps({"display": live["DISPLAY"], "dir": rdir, "profile": profile,
++                                             **_owner_identity(env)}), mode=0o600)
+     return live
+
+
+@@ -333,17 +351,46 @@ def stop(env: Any, profile: str) -> bool:
+     rdir = _remote_dir(env, profile)
+     q = shlex.quote(rdir)
+     script = f"""
++dir={q}
++{_LAUNCHER_LIVE}
++screen_pids() {{
++    local file arg pid
++    for file in /proc/[0-9]*/cmdline; do
++        [ -r "$file" ] || continue
++        while IFS= read -r -d '' arg; do
++            case "$arg" in
++                "$dir"/rfb.sock|"$dir"/Xauthority)
++                    pid=${{file#/proc/}}
++                    printf '%s\n' "${{pid%/cmdline}}"
++                    break
++                    ;;
++            esac
++        done < "$file" 2>/dev/null
++    done
++}}
++p=$(cat "$dir/launcher.pid" 2>/dev/null)
+ live=0
+-p=$(cat {q}/launcher.pid 2>/dev/null)
+-if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then live=1; kill -TERM -- -"$p" 2>/dev/null || kill -TERM "$p" 2>/dev/null; fi
+-for pid in $(pgrep -f -- {shlex.quote(rdir + "/")} 2>/dev/null); do [ "$pid" != "$$" ] && {{ live=1; kill -TERM "$pid" 2>/dev/null; }}; done
+-sleep 0.5
+-for pid in $(pgrep -f -- {shlex.quote(rdir + "/")} 2>/dev/null); do [ "$pid" != "$$" ] && kill -KILL "$pid" 2>/dev/null; done
+-rm -f {q}/env {q}/launcher.pid {q}/rfb.sock
+-[ "$live" = 1 ]
++if launcher_live; then
++    live=1
++    kill -TERM -- -"$p" 2>/dev/null || kill -TERM "$p" 2>/dev/null
++fi
++for pid in $(screen_pids); do live=1; kill -TERM "$pid" 2>/dev/null; done
++if [ "$live" = 1 ]; then
++    sleep 0.5
++    if launcher_live; then kill -KILL -- -"$p" 2>/dev/null || kill -KILL "$p" 2>/dev/null; fi
++    for pid in $(screen_pids); do kill -KILL "$pid" 2>/dev/null; done
++    for attempt in 1 2 3 4 5; do
++        if ! launcher_live && [ -z "$(screen_pids)" ]; then break; fi
++        sleep 0.1
++    done
++fi
++if launcher_live || [ -n "$(screen_pids)" ]; then exit 4; fi
++rm -f "$dir/env" "$dir/launcher.pid" "$dir/rfb.sock" || exit 4
++[ "$live" = 1 ] || exit 3
+ """
+     proc = streams.run_in(env, ["bash", "-c", script], user=_user_for(env), timeout=30)
+-    _marker().unlink(missing_ok=True)
++    if proc.returncode not in (0, 3):
++        raise RuntimeError("Could not stop the desktop; check the terminal sandbox connection and retry")
+     return proc.returncode == 0
+
+
 --- a/tui_gateway/methods_display.py
 +++ b/tui_gateway/methods_display.py
-@@ -192,48 +192,7 @@
+@@ -155,11 +155,14 @@ def _(rid, params: dict) -> dict:
+     from hermes_constants import get_hermes_home
+     from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+     from hermes_cli.web_session_sockets import admission_of
+-    from tools.bot_desktop import runtime as _bd_runtime
++    from tools.bot_desktop import placement, runtime as _bd_runtime
+     try:
+-        # The bridge dials either the host RFB socket or the sandbox relay; neither exists before start.
+-        if _bd_runtime.rfb_socket_path() is None and not _bd_runtime.sandbox_screen_running():
+-            return _err(rid, _DISPLAY_ERR, "this profile's Bot Desktop is not running; call display.start first")
++        where = placement.resolve()
++        if where.where != placement.TERMINAL:
++            return _err(rid, _DISPLAY_ERR, where.reason or "SSH executor screen is unavailable")
++        snapshot = _display_snapshot()
++        if not snapshot["running"]:
++            return _err(rid, _DISPLAY_ERR, snapshot["blocker"] or "this profile's Bot Desktop is not running; call display.start first")
+         viewer_id = _mint_viewer_id(str(params.get("viewer_id") or "").strip())
+         extra = {"hermes_home": str(get_hermes_home()), "viewer_id": viewer_id}
+         # A viewer a browser tab opens watches and can drive this screen: it signs out with that tab,
+@@ -168,7 +171,7 @@ def _(rid, params: dict) -> dict:
+             extra["admitted_with"] = admitted
+         ticket = mint_ticket(user_id=f"display:{viewer_id}", provider="bot-desktop", extra=extra)
+         return _ok(rid, {"ticket": ticket, "path": "/api/display/ws", "viewer_id": viewer_id,
+-                         **_display_snapshot()})
++                         **snapshot})
+     except Exception as e:
+         return _err(rid, _DISPLAY_ERR, str(e))
+
+@@ -192,48 +195,7 @@ def _(rid, params: dict) -> dict:
  def _(rid, params: dict) -> dict:
      """Start the package install in the background; the renderer follows ``display.install.log`` /
      ``display.install.done``. Refused while one is already running for this profile."""
@@ -281,10 +1007,43 @@
  @method("display.lease.acquire")
 --- a/hermes_cli/web_routers/display.py
 +++ b/hermes_cli/web_routers/display.py
-@@ -118,14 +118,11 @@
-     from tools.bot_desktop import runtime as _bd_runtime
-     token = set_hermes_home_override(profile_home)
-     try:
+@@ -23,7 +23,8 @@ from __future__ import annotations
+
+ import asyncio
+ import logging
++import subprocess
+ from pathlib import Path
+ from typing import Optional
+
+ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+@@ -110,24 +111,30 @@ def _signed_out(ws: WebSocket, info: dict) -> bool:
+     return False
+
+
++def _rfb_sandbox(profile_home: Path):
++    from tools.bot_desktop import placement, runtime, sandbox_host
++    from tui_gateway.server import _launch_home, _session_profile_runtime_scope
++
++    named_home = None if profile_home == _launch_home() else str(profile_home)
++    with _session_profile_runtime_scope({"profile_home": named_home}, hydrate_secrets=False):
++        where = placement.resolve()
++        if where.where != placement.TERMINAL:
++            raise OSError(where.reason or "SSH executor screen is unavailable")
++        env = runtime._owned_sandbox_env()
++        if env is None:
++            raise OSError("SSH executor screen is unavailable")
++        sandbox_host._user_for(env)
++        return env, runtime._profile_name()
++
++
+ async def _open_rfb(profile_home: Path):
+     """``(reader, writer, relay)`` for THIS profile's Xvnc. Gateway-hosted screen: its unix socket. Screen inside
+     the terminal backend: a ``docker exec`` / ``ssh`` relay whose stdio IS the RFB stream (``relay`` is that
+     Popen; None for a socket). Raises OSError when nothing is running."""
+-    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+-    from tools.bot_desktop import runtime as _bd_runtime
+-    token = set_hermes_home_override(profile_home)
+-    try:
 -        if _bd_runtime.sandbox_screen_running():
 -            relay = _bd_runtime.open_rfb_stream()
 -        else:
@@ -293,11 +1052,87 @@
 -                raise OSError("rfb.sock missing")
 -            reader, writer = await asyncio.open_unix_connection(str(sock))
 -            return reader, writer, None
-+        from tools.bot_desktop import placement
-+        where = placement.resolve()
-+        if where.where != placement.TERMINAL or not _bd_runtime.sandbox_screen_running():
-+            raise OSError(where.reason or "SSH executor screen is unavailable")
-+        relay = _bd_runtime.open_rfb_stream()
-     finally:
-         reset_hermes_home_override(token)
+-    finally:
+-        reset_hermes_home_override(token)
++    from tools.bot_desktop import runtime
++
++    env, profile = await asyncio.to_thread(_rfb_sandbox, profile_home)
++    relay = runtime.open_rfb_stream(env, profile)
      loop = asyncio.get_running_loop()
+     reader = asyncio.StreamReader()
+     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), relay.stdout)
+@@ -150,7 +157,7 @@ async def _bridge(ws: WebSocket, info: dict) -> None:
+     viewer_id = str(info.get("viewer_id") or info.get("user_id") or "viewer")
+     try:
+         reader, writer, relay = await _open_rfb(Path(profile_home))
+-    except OSError as exc:
++    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+         _log.warning("display ws: cannot reach RFB endpoint for %s: %s", profile_home, exc)
+         await ws.close(code=_CLOSE_DESKTOP_GONE, reason="Bot Desktop is not running")
+         return
+--- a/tools/bot_desktop/thumbnail.py
++++ b/tools/bot_desktop/thumbnail.py
+@@ -1,53 +1,23 @@
+-"""Thumbnail of a bot's screen: one JPEG grab of the profile's Xvnc display.
+-
+-Feeds the Screen hero in Hermes Desktop (the big preview at the top of a bot's pane). Read-only:
+-it never touches the lease, so a human in control is not disturbed and the bot is not blocked.
+-"""
++"""Thumbnail of the profile's SSH executor desktop. The lease is unchanged."""
+
+ from __future__ import annotations
+
+ import base64
+-import io
+-import os
+-import threading
+ from typing import Optional
+
+-from tools.bot_desktop import runtime
++from tools.bot_desktop import placement, runtime, sandbox_host
+
+ THUMB_MAX = (960, 600)
+-_grab_lock = threading.Lock()
+
+
+ def thumbnail_data_url(max_size: tuple[int, int] = THUMB_MAX, quality: int = 72) -> Optional[str]:
+-    """``data:image/jpeg;base64,...`` of the running screen, or ``None`` when no screen is up."""
+-    env = runtime.published_env()
+-    display = env.get("DISPLAY")
+-    if not display:
++    if placement.resolve().where != placement.TERMINAL:
+         return None
+-    if runtime.sandbox_screen_running():
+-        from tools.bot_desktop import sandbox_host
+-        sandbox = runtime._owned_sandbox_env()
+-        jpeg = sandbox_host.grab_jpeg(sandbox, env, max_size, quality) if sandbox is not None else None
+-        return "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii") if jpeg else None
+-    if runtime._launcher_pid() is None:
++    sandbox = runtime._owned_sandbox_env()
++    if sandbox is None:
+         return None
+-    from PIL import ImageGrab  # Pillow is a hard dependency; import lazily to keep status calls cheap
+-
+-    # Xlib reads XAUTHORITY from the process env; the launcher publishes a per-profile cookie file.
+-    # The swap is process-wide, so two profiles grabbed on worker threads at once serialise here or
+-    # one would grab with the other's cookie and restore the wrong value.
+-    with _grab_lock:
+-        previous = os.environ.get("XAUTHORITY")
+-        if env.get("XAUTHORITY"):
+-            os.environ["XAUTHORITY"] = env["XAUTHORITY"]
+-        try:
+-            image = ImageGrab.grab(xdisplay=display)
+-        finally:
+-            if previous is None:
+-                os.environ.pop("XAUTHORITY", None)
+-            else:
+-                os.environ["XAUTHORITY"] = previous
+-    image.thumbnail(max_size)
+-    buf = io.BytesIO()
+-    image.convert("RGB").save(buf, "JPEG", quality=quality, optimize=True)
+-    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
++    env = sandbox_host.published_env(sandbox, runtime._profile_name())
++    if not env.get("DISPLAY"):
++        return None
++    jpeg = sandbox_host.grab_jpeg(sandbox, env, max_size, quality)
++    return "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii") if jpeg else None
