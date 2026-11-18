@@ -189,6 +189,10 @@ leave an already-issued browser action completed; inspect state before retrying.
 Browser downloads use the shared `/workspace/browser-use/downloads` directory;
 named tabs do not provide separate download or cookie authority.
 
+A named session selects a fresh tab before its first model program and after a
+harness daemon restart. Later calls retain that session's selected tab, including
+intentional tab switches. Failed tab initialization stops before model code runs.
+
 The same executor service, Tor namespace, runner UID/GID 10000, SSH identity and
 home/workspace mounts serve both choices. Neither enables sudo or a writable
 system filesystem. Docker's desktop selects a maintained seccomp profile for

@@ -9,7 +9,7 @@ from deployment import engine_command  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'private-hermes-webapp-build:qualification'
 # The runtime image omits this file, imported by an upstream TypeScript test.
-# Copied verbatim from source 3b421578588243f920886e6fe79a6faa87ea026e:
+# Copied verbatim from source ae2a81ccc00e9b7c06301523e5bb09608397149c:
 # tests/fixtures/session-resume-active-turn.json. Not used by runtime services.
 FIXTURE = ROOT / 'tests/fixtures/session-resume-active-turn.json'
 WORKSPACE = '/opt/hermes/.build/webapp-workspace/apps/desktop'
@@ -32,6 +32,10 @@ def main():
     run(*engine_command(), 'run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
         '--entrypoint', 'node', '--workdir', WORKSPACE, IMAGE,
         'node_modules/vitest/vitest.mjs', 'run', '--project', 'ui',
+        'src/lib/private-image-download.test.ts', 'src/lib/browser-image-copy.test.ts',
+        'src/lib/browser-desktop-bridge-ownership-download.test.ts',
+        'src/plugins/hermes-bots/screen-pane-status-events.test.tsx',
+        'src/plugins/hermes-bots/screen-portal-status-request.test.tsx',
         'src/lib/browser-terminal.test.ts', 'src/lib/browser-desktop-bridge-saved-connections.test.ts',
         'src/app/right-sidebar/terminal/terminals.test.ts',
         'src/app/right-sidebar/terminal/use-terminal-session.test.tsx',

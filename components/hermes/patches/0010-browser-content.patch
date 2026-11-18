@@ -3,11 +3,11 @@
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import './catalog.css'
- 
+
  import { type CSSProperties, type ReactNode, useState } from 'react'
 @@ -36,7 +37,7 @@
    const [failed, setFailed] = useState(false)
- 
+
    return failed ? null : (
 -    <img
 +    <PrivateImage
@@ -20,7 +20,7 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { useStore } from '@nanostores/react'
  import { useState } from 'react'
- 
+
 @@ -161,7 +162,7 @@
            >
              <span className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-border/55 bg-muted/35 text-muted-foreground">
@@ -54,7 +54,7 @@
   * Browser-hosted Desktop has no Electron `<webview>`, so a live web preview
   * mounts a sandboxed iframe instead. The frame is opaque to this renderer
 @@ -26,7 +27,7 @@
- 
+
  /** Mount the frame into `host` and publish it as the pane's navigation
   *  surface. Returns the mount effect's cleanup. */
 -export function mountBrowserPreviewFrame({
@@ -119,7 +119,7 @@
  import { useStore } from '@nanostores/react'
  import type * as React from 'react'
 @@ -392,7 +393,7 @@
- 
+
  function MarkdownImage({ alt, src, ...rest }: ComponentProps<'img'>) {
    return (
 -    <img
@@ -151,11 +151,11 @@
 +import { browserContentMode } from '@/components/ui/private-content'
  import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
  import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
- 
+
 @@ -16,6 +17,11 @@
  import { readActivePreview } from './preview-reader'
  import { activePreviewScriptRunner } from './preview-script-runner'
- 
+
 +vi.mock('@/components/ui/private-content', async importOriginal => {
 +  const actual = await importOriginal<typeof import('@/components/ui/private-content')>()
 +  return {...actual, browserContentMode: vi.fn(async () => 'browser_native')}
@@ -165,7 +165,7 @@
  // these tests exercise the pane's console/watch/webview wiring, not the
  // prompt, so isolate it the way the pane's other collaborators are.
 @@ -42,6 +48,7 @@
- 
+
  describe('PreviewPane console state', () => {
    beforeEach(() => {
 +    vi.mocked(browserContentMode).mockResolvedValue('browser_native')
@@ -173,17 +173,17 @@
        window.setTimeout(() => callback(Date.now()), 0)
      )
 @@ -148,6 +155,7 @@
- 
+
      const rendered = render(<PreviewPane tabId={tabId} target={target} />)
- 
+
 +    await waitFor(() => expect(rendered.container.querySelector('iframe')).not.toBeNull())
      const frame = rendered.container.querySelector('iframe')
- 
+
      expect(frame).toBeInstanceOf(HTMLIFrameElement)
 @@ -175,7 +183,17 @@
      })
    })
- 
+
 -  it('reuses the browser iframe when a tab navigates to another target URL', () => {
 +  it('never assigns a live web-preview frame in private modes', async () => {
 +    globalThis.document.documentElement.dataset.hermesDesktopHost = 'browser'
@@ -197,11 +197,11 @@
 +
 +  it('reuses the browser iframe when a tab navigates to another target URL', async () => {
      globalThis.document.documentElement.dataset.hermesDesktopHost = 'browser'
- 
+
      const target = {
 @@ -186,6 +204,7 @@
      }
- 
+
      const rendered = render(<PreviewPane tabId="reuse-browser-frame" target={target} />)
 +    await waitFor(() => expect(rendered.container.querySelector('iframe')).not.toBeNull())
      const frame = rendered.container.querySelector('iframe')!
@@ -210,35 +210,35 @@
 @@ -242,7 +261,7 @@
      expect(focus).toHaveBeenCalledOnce()
    })
- 
+
 -  it('keeps the original URL available outside an embedded browser preview after loading', () => {
 +  it('keeps the original URL available outside an embedded browser preview after loading', async () => {
      globalThis.document.documentElement.dataset.hermesDesktopHost = 'browser'
      const openPreviewInBrowser = vi.fn(async () => undefined)
      vi.stubGlobal('hermesDesktop', { openPreviewInBrowser })
 @@ -256,6 +275,8 @@
- 
+
      const rendered = render(<PreviewPane embedded target={target} />)
- 
+
 +    await waitFor(() => expect(rendered.container.querySelector('iframe')).not.toBeNull())
 +
      // Browsers also fire load when framing is denied. Recovery must stay
      // available without guessing whether the frame loaded successfully.
      fireEvent.load(rendered.container.querySelector('iframe')!)
 @@ -266,6 +287,7 @@
- 
+
      const nextTarget = { ...target, source: 'https://example.org/next', url: 'https://example.org/next' }
      rendered.rerender(<PreviewPane embedded target={nextTarget} />)
 +    await waitFor(() => expect(rendered.container.querySelector('iframe')).not.toBeNull())
      fireEvent.load(rendered.container.querySelector('iframe')!)
      expect(openPreviewInBrowser).toHaveBeenCalledTimes(1)
- 
+
 --- a/apps/desktop/src/app/messaging/relay-link.tsx
 +++ b/apps/desktop/src/app/messaging/relay-link.tsx
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { useCallback, useEffect, useRef, useState } from 'react'
- 
+
  import { Badge } from '@/components/ui/badge'
 @@ -322,7 +323,7 @@
              <span className="text-xs text-muted-foreground">{r.waiting}</span>
@@ -254,11 +254,11 @@
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { useEffect, useMemo, useState } from 'react'
- 
+
  import { Badge } from '@/components/ui/badge'
 @@ -367,7 +368,7 @@
            </div>
- 
+
            <div className="flex flex-col items-center gap-2">
 -            <img alt="Telegram setup QR code" className="size-56 rounded-md bg-white p-2" src={qrDataUrl} />
 +            <PrivateImage alt="Telegram setup QR code" className="size-56 rounded-md bg-white p-2" src={qrDataUrl} />
@@ -286,7 +286,7 @@
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { useState } from 'react'
- 
+
  import { ImageLightbox } from '@/components/chat/zoomable-image'
 @@ -21,7 +22,7 @@
    return (
@@ -295,7 +295,7 @@
 -        <img alt={name} className="size-4 rounded-md object-cover" src={src} />
 +        <PrivateImage alt={name} className="size-4 rounded-md object-cover" src={src} />
        </button>
- 
+
        <span className="max-w-40 truncate text-[0.64rem] font-medium text-foreground/50">{name || 'Reference'}</span>
 --- a/apps/desktop/src/app/settings/appearance-settings.tsx
 +++ b/apps/desktop/src/app/settings/appearance-settings.tsx
@@ -316,7 +316,7 @@
 @@ -1060,7 +1063,12 @@
              />
            )}
- 
+
 -          {show('chat-display') && (
 +          {show('chat-display') && isBrowserHostedDesktop() && <ListRow
 +            title="External content deployment policy"
@@ -348,7 +348,7 @@
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { isValidElement, type ReactElement, type ReactNode, useMemo } from 'react'
- 
+
  import { ErrorBoundary } from '@/components/error-boundary'
 @@ -32,7 +33,7 @@
    /** Plain text chip after core's own chips (`$3/M`, `NEW`). */
@@ -358,16 +358,16 @@
 +   *  (`<PrivateImage>`, `<svg>`, a component) or short text (an emoji, a monogram). */
    icon?: ReactNode
  }
- 
+
 --- a/apps/desktop/src/components/Backdrop.tsx
 +++ b/apps/desktop/src/components/Backdrop.tsx
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { useStore } from '@nanostores/react'
- 
+
  import { $backdrop } from '@/store/backdrop'
 @@ -13,7 +14,7 @@
- 
+
    return (
      <div aria-hidden className="pointer-events-none absolute inset-0 z-2 opacity-[0.025] mix-blend-difference">
 -      <img
@@ -381,12 +381,12 @@
  'use client'
 +
 +import { PrivateImage } from '@/components/ui/private-content'
- 
+
  import type { Unstable_DirectiveFormatter, Unstable_DirectiveSegment, Unstable_TriggerItem } from '@assistant-ui/core'
  import type { TextMessagePartComponent, TextMessagePartProps } from '@assistant-ui/react'
 @@ -442,7 +444,7 @@
          }
- 
+
          // Full resolution powers the click-to-zoom lightbox and Save; the inline
 -        // <img> gets a bounded thumbnail so a turn full of screenshots does not
 +        // <PrivateImage> gets a bounded thumbnail so a turn full of screenshots does not
@@ -399,9 +399,9 @@
  'use client'
 +
 +import { PrivateFrame } from '@/components/ui/private-content'
- 
+
  import { type CSSProperties } from 'react'
- 
+
 @@ -25,7 +27,7 @@
    if (isMap) {
      return (
@@ -413,7 +413,7 @@
            loading="lazy"
 @@ -40,7 +42,7 @@
    }
- 
+
    return (
 -    <iframe
 +    <PrivateFrame
@@ -426,9 +426,9 @@
  'use client'
 +
 +import { PrivateImage } from '@/components/ui/private-content'
- 
+
  import { useEffect, useState } from 'react'
- 
+
 @@ -238,7 +240,7 @@
          onClick={onOpen}
          type="button"
@@ -444,12 +444,12 @@
  'use client'
 +
 +import { PrivateImage } from '@/components/ui/private-content'
- 
+
  import { useStore } from '@nanostores/react'
  import katex from 'katex'
 @@ -20,7 +22,7 @@
  const loadPele = createRetryableLoader(() => import('pele/lazy'))
- 
+
  // Pele colors a diagram through `--pele-*` custom properties. The SVG is shown
 -// as an <img>: its own document, with no scripts and no access to the app's
 +// as an <PrivateImage>: its own document, with no scripts and no access to the app's
@@ -458,7 +458,7 @@
  // names are `@theme inline`, so they never exist as runtime properties.
 @@ -103,7 +105,7 @@
  }
- 
+
  // Pele leaves typesetting $$TeX$$ labels to the host. KaTeX's MathML output
 -// needs no stylesheet or webfonts, so it draws inside the isolated <img> SVG
 +// needs no stylesheet or webfonts, so it draws inside the isolated <PrivateImage> SVG
@@ -485,9 +485,9 @@
  'use client'
 +
 +import { PrivateFrame } from '@/components/ui/private-content'
- 
+
  import { useEffect, useMemo, useRef, useState } from 'react'
- 
+
 @@ -102,7 +104,7 @@
    // Canvas behind it. The embed pages resolve to `light`, so the iframe is
    // forced to `light` to match; theme=dark still gives the dark tweet card.
@@ -503,12 +503,12 @@
  'use client'
 +
 +import { PrivateFrame } from '@/components/ui/private-content'
- 
+
  import { type CSSProperties, useMemo } from 'react'
- 
+
 @@ -33,7 +35,7 @@
    }
- 
+
    return (
 -    <iframe
 +    <PrivateFrame
@@ -522,12 +522,12 @@
 +
 +import { ExternalFallback, useExternalPolicy } from '@/components/ui/private-content'
 +import { isBrowserHostedDesktop } from '@/lib/platform'
- 
+
  import { useStore } from '@nanostores/react'
  import { type CSSProperties, lazy, Suspense, useState } from 'react'
 @@ -45,9 +48,14 @@
  }
- 
+
  export function UrlEmbed({ descriptor }: { descriptor: EmbedDescriptor }) {
 +  const deployment = useExternalPolicy()
    const mode = useStore($embedMode)
@@ -537,7 +537,7 @@
 +  if (isBrowserHostedDesktop() && deployment?.mode !== 'browser_native') {
 +    return <ExternalFallback src={descriptor.sourceUrl} reason="Social and interactive players are unavailable in private modes." />
 +  }
- 
+
    // Privacy gate: don't reach out to the provider until consented. `off` keeps
    // it a plain link; otherwise the placeholder shows until "Load" (this embed)
 --- a/apps/desktop/src/components/assistant-ui/embeds/youtube-embed.tsx
@@ -546,11 +546,11 @@
  'use client'
 +
 +import { PrivateFrame } from '@/components/ui/private-content'
- 
+
  import { useEffect, useMemo, useState } from 'react'
- 
+
 @@ -72,7 +74,7 @@
- 
+
    // Width is capped to the ratio by UrlEmbed, so aspect-video sizes height ≤ cap.
    return (
 -    <iframe
@@ -564,7 +564,7 @@
  'use client'
 +
 +import { PrivateAudio, PrivateImage, PrivateVideo } from '@/components/ui/private-content'
- 
+
  import { TextMessagePartProvider, useMessagePartText } from '@assistant-ui/react'
  import {
 @@ -188,7 +190,7 @@
@@ -578,7 +578,7 @@
            onError={onError}
 @@ -407,9 +409,9 @@
  }
- 
+
  // Generated/inline media often arrives as image markdown — `![clip](clip.mp4)`.
 -// A raw <img> with a video/audio source renders a broken-image icon (the file is
 +// A raw <PrivateImage> with a video/audio source renders a broken-image icon (the file is
@@ -594,10 +594,10 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { type ToolCallMessagePartProps } from '@assistant-ui/react'
  import { type FC, useEffect, useState } from 'react'
- 
+
 @@ -139,7 +140,7 @@
    }, [handle])
- 
+
    return avatar ? (
 -    <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" src={avatar} />
 +    <PrivateImage alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" src={avatar} />
@@ -626,9 +626,9 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { cn } from '@/lib/utils'
  import { useTheme } from '@/themes'
- 
+
 @@ -15,7 +16,7 @@
- 
+
    return (
      <span className={cn('inline-flex size-14 shrink-0 items-center justify-center', className)} {...props}>
 -      <img alt="" className="size-full object-contain" src={assetPath(dark ? 'nous-girl-dark.png' : 'nous-girl.png')} />
@@ -644,13 +644,13 @@
 +import { isBrowserHostedDesktop } from '@/lib/platform'
 +
 +import { PrivateImage } from '@/components/ui/private-content'
- 
+
  import { useStore } from '@nanostores/react'
  import { type FC, useState } from 'react'
 @@ -71,6 +75,8 @@
      preservePendingFrame: true
    })
- 
+
 +  const browser = isBrowserHostedDesktop()
 +  const ImageOpener = browser ? 'span' : 'button'
    const { src, loaded, failed } = media
@@ -691,7 +691,7 @@
 +import { PrivateVideo } from '@/components/ui/private-content'
  import { useStore } from '@nanostores/react'
  import { type ComponentProps, useCallback, useEffect, useRef } from 'react'
- 
+
 @@ -6,7 +7,7 @@
  // Playback position per source, remembered across remounts. Transcript rows
  // legitimately unmount while a turn streams (the render-budget slice recycles
@@ -704,7 +704,7 @@
 @@ -33,7 +34,7 @@
    return rememberedPositions.get(src)
  }
- 
+
 -// A transcript <video> that remembers the playback rate. The native controls'
 +// A transcript <PrivateVideo> that remembers the playback rate. The native controls'
  // rate menu is the only speed UI; picking a rate there persists it as the
@@ -712,7 +712,7 @@
  // from. Ported from block/buzz#7336.
 @@ -105,5 +106,5 @@
    }, [])
- 
+
    // iPhone otherwise takes a transcript clip fullscreen when playback starts.
 -  return <video onRateChange={onRateChange} playsInline ref={videoRef} {...props} preload={props.preload ?? 'none'} />
 +  return <PrivateVideo onRateChange={onRateChange} playsInline ref={videoRef} {...props} preload={props.preload ?? 'none'} />
@@ -725,10 +725,10 @@
 +import { isBrowserHostedDesktop } from '@/lib/platform'
 +
 +import { PrivateImage } from '@/components/ui/private-content'
- 
+
  import { useStore } from '@nanostores/react'
  import { type ComponentProps, useEffect, useRef } from 'react'
-@@ -15,7 +19,7 @@
+@@ -17,7 +21,7 @@
    containerClassName?: string
    slot?: string
    /** Full-resolution source for the lightbox and download. When set, the inline
@@ -737,7 +737,7 @@
     * zoom view and Save action use the original — so a click-to-zoom shows real
     * detail instead of an upscaled thumbnail. Defaults to `src`. */
    zoomSrc?: string
-@@ -42,6 +46,8 @@
+@@ -45,6 +49,8 @@
    const copy = t.desktop
    // The lightbox and Save action prefer the full-resolution source; the inline
    // thumbnail (`src`) stays the cheap paint.
@@ -746,14 +746,17 @@
    const fullSrc = zoomSrc || src || ''
    const { download, saving } = useImageDownload(fullSrc)
    // The open flag lives in a store keyed by source identity, not local state:
-@@ -60,15 +66,17 @@
+@@ -63,18 +69,20 @@
          className={cn('group/image relative inline-block max-w-full align-top', containerClassName)}
          data-slot={slot ?? 'aui_zoomable-image'}
        >
 -        <button
 +        <ImageOpener
            aria-label={canOpen ? copy.openImage : undefined}
-           className="block max-w-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
+           className={cn(
+             'block max-w-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2',
+             buttonClassName
+           )}
 -          disabled={!canOpen}
 -          onClick={() => canOpen && openTranscriptLightbox(fullSrc)}
 -          type="button"
@@ -770,7 +773,7 @@
          {src && (
            <ImageActionButton className="group-hover/image:opacity-100" copy={copy} onClick={download} saving={saving} />
          )}
-@@ -200,7 +208,7 @@
+@@ -206,7 +214,7 @@
          showCloseButton={false}
        >
          <div className="group/lightbox relative inline-block">
@@ -801,7 +804,7 @@
 +import { isBrowserHostedDesktop } from '@/lib/platform'
 +import { PrivateImage } from '@/components/ui/private-content'
  import { useEffect, useRef, useState } from 'react'
- 
+
  import { PawPrint } from '@/lib/icons'
 @@ -11,7 +13,7 @@
  /**
@@ -814,16 +817,16 @@
    slug,
 @@ -32,6 +34,7 @@
    const height = Math.round((size * 208) / 192)
- 
+
    useEffect(() => {
 +    if (isBrowserHostedDesktop()) return
      const el = boxRef.current
- 
+
      if (!el || src) {
 @@ -57,6 +60,8 @@
      return () => observer.disconnect()
    }, [slug, url, src, load])
- 
+
 +  if (isBrowserHostedDesktop() && url) return <PrivateImage src={url} alt={alt} style={{width:size,height}} />
 +
    return (
@@ -844,7 +847,7 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { brandFor } from '@/lib/mcp-brands'
  import { cn } from '@/lib/utils'
- 
+
 @@ -84,7 +85,7 @@
        title={connector.title}
      >
@@ -859,7 +862,7 @@
 @@ -1,3 +1,4 @@
 +import { PrivateImage } from '@/components/ui/private-content'
  import { type ReactNode, useEffect, useState } from 'react'
- 
+
  import { Loader2 } from '@/lib/icons'
 @@ -78,7 +79,7 @@
    return (
@@ -875,16 +878,16 @@
 @@ -1,3 +1,4 @@
 +import { PrivateFrame } from '@/components/ui/private-content'
  import { type IframeHTMLAttributes, useCallback, useEffect, useRef } from 'react'
- 
+
  import { browserBootstrap, endpointUrl } from '@/lib/browser-transport'
 @@ -23,9 +24,9 @@
    useEffect(send, [send])
- 
+
    if (!browser) {
 -    return <iframe {...props} sandbox={sandbox} srcDoc={srcDoc} />
 +    return <PrivateFrame {...props} sandbox={sandbox} srcDoc={srcDoc} />
    }
- 
+
 -  return <iframe {...props} onLoad={send} ref={frame}
 +  return <PrivateFrame {...props} onLoad={send} ref={frame}
      referrerPolicy="no-referrer" sandbox="allow-scripts" src={src} />
@@ -895,10 +898,10 @@
 +import { PrivateFrame } from '@/components/ui/private-content'
  import type * as React from 'react'
  import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
- 
+
 @@ -116,7 +117,7 @@
    }
- 
+
    return (
 -    <iframe
 +    <PrivateFrame
@@ -907,7 +910,7 @@
        onError={onError}
 @@ -267,7 +268,7 @@
    )
- 
+
    return (
 -    <iframe
 +    <PrivateFrame
@@ -922,7 +925,7 @@
 -
 +import { afterEach, expect, it, vi } from 'vitest'
  import { useMediaImage } from './use-media-image'
- 
+
 -// useMediaImage's gateway-proxy retry (#74564): a direct inline https image
 -// that fails to load (client blocked from the CDN) is fetched once through
 -// the gateway's authenticated /api/media/proxy and swapped in as a data URL.
@@ -1021,7 +1024,7 @@
  import { useStore } from '@nanostores/react'
 -import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 +import { type CSSProperties, useEffect, useMemo, useState } from 'react'
- 
+
  import { useComposerScope } from '@/app/chat/composer/scope'
  import {
 -  gatewayImageProxyDataUrl,
@@ -1031,7 +1034,7 @@
 @@ -80,33 +79,6 @@
      setState(inheritsPendingFrame ? { ...next, frameStyle: state.frameStyle } : next)
    }
- 
+
 -  // One proxy retry per inline https source (#74564): when the direct load
 -  // fails (client blocked from the image CDN), ask the gateway — which
 -  // generated the image and can reach the CDN — to fetch the bytes through
@@ -1061,14 +1064,14 @@
 -
    useEffect(() => {
      let cancelled = false
- 
+
 @@ -143,7 +115,6 @@
    const onError = () => {
      rememberMediaImageFailure(key)
      setState(current => ({ ...current, failed: true, loaded: false }))
 -    retryThroughGatewayProxy()
    }
- 
+
    return {
 --- a/apps/desktop/src/lib/media.remote.test.ts
 +++ b/apps/desktop/src/lib/media.remote.test.ts
@@ -1083,7 +1086,7 @@
 @@ -316,56 +315,6 @@
    })
  })
- 
+
 -describe('gatewayImageProxyDataUrl (#74564)', () => {
 -  const api = vi.fn(async ({ path }: { path: string }) => {
 -    if (path.startsWith('/api/media/proxy?')) {
@@ -1136,13 +1139,13 @@
 -
  describe('downloadGatewayMediaFile', () => {
    const saveGatewayFile = vi.fn(async () => ({ path: '/Users/me/Downloads/report.md', saved: true }))
- 
+
 --- a/apps/desktop/src/lib/media.ts
 +++ b/apps/desktop/src/lib/media.ts
-@@ -361,30 +361,6 @@
+@@ -391,30 +391,6 @@
    return readDesktopFileDataUrl(filePathFromMediaPath(path))
  }
- 
+
 -/** Retry an inline remote image through the gateway's authenticated proxy
 - * (#74564). A client on a restricted network cannot reach the image CDN
 - * directly, but the gateway that GENERATED the image can; ask it to fetch the
@@ -1179,7 +1182,7 @@
   * faces, the shared face clock that animates them, and `BotFace` — the one
 @@ -996,7 +997,7 @@
  }
- 
+
  /**
 - * Live math face. Photos still use <img>. Shape avatars stay SVG so
 + * Live math face. Photos still use <PrivateImage>. Shape avatars stay SVG so
@@ -1187,7 +1190,7 @@
   */
  export function BotFace({ shape, color, image, size = 36, name = 'agent', mood = 'idle' }: BotFaceProps) {
 @@ -1004,7 +1005,7 @@
- 
+
    if (image) {
      return (
 -      <img
@@ -1218,14 +1221,14 @@
  import * as sdk from '@hermes/plugin-sdk'
  import { Codicon, Tip } from '@hermes/plugin-sdk'
  import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-@@ -165,7 +166,7 @@
+@@ -169,7 +170,7 @@
      return () => { cancel(); URL.revokeObjectURL(url); setSrc(''); setNear(false) }
    }, [connectionId, profile, roomId, eventId, attachmentId, disabled, near, previewable])
- 
+
 -  return previewable ? <div ref={box}>{src && <img alt={attachment.name} className="max-h-64 max-w-full rounded object-contain" src={src} />}</div> : null
 +  return previewable ? <div ref={box}>{src && <PrivateImage alt={attachment.name} className="max-h-64 max-w-full rounded object-contain" src={src} />}</div> : null
  }
- 
+
  export function CanonicalGroupHistory({ avatarFor, binding, events, members = [], disabled = false, downloads = true, onReply, pause }: CanonicalGroupHistoryProps) {
 --- a/apps/desktop/src/plugins/hermes-bots/group-chat-legacy-parts.tsx
 +++ b/apps/desktop/src/plugins/hermes-bots/group-chat-legacy-parts.tsx
@@ -1234,7 +1237,7 @@
  /**
   * Presentational pieces of the Desktop-driven (legacy) room view that share the gateway-owned
   * room's parts, kept out of `group-chat-view.tsx` so that file does not grow.
-@@ -45,7 +46,7 @@
+@@ -43,7 +44,7 @@
  }) {
    return <span className="flex min-w-0 items-center gap-2">
      {image
@@ -1266,7 +1269,7 @@
  /**
   * The group-chat room surface: the merged room view, its settings dialog, the
   * MAIN-window tab it opens into, and the two room-lifecycle mutations that
-@@ -1348,7 +1349,7 @@
+@@ -1384,7 +1385,7 @@
                  name={img.kind === 'pdf' ? 'file-pdf' : 'file'}
                />
              ) : (
@@ -1275,7 +1278,7 @@
              )}
              <span className="max-w-32 truncate text-[0.65rem] text-(--ui-text-tertiary)">{img.name || 'image'}</span>
              <Tip label={b.group.removeAttachment}>
-@@ -1534,7 +1535,7 @@
+@@ -1565,7 +1566,7 @@
                    <span className="max-w-48 truncate">{img.name || 'attached file'}</span>
                  </div>
                ) : (
@@ -1294,7 +1297,7 @@
   * frame as the bot's profile picture.
 @@ -35,6 +37,7 @@
  }
- 
+
  function petThumbIcon(slug: string, spriteUrl: null | string | undefined): Promise<null | string> {
 +  if (isBrowserHostedDesktop()) return Promise.resolve(null)
    if (!slug) {
@@ -1314,12 +1317,12 @@
    }, [slug, spriteUrl])
 +
 +  if (isBrowserHostedDesktop() && spriteUrl) return <PrivateImage src={spriteUrl} alt="Pet image" style={{width:size,height:size,objectFit:'cover',objectPosition:'top left'}} />
- 
+
    if (!icon) {
      return (
 @@ -100,7 +106,7 @@
    }
- 
+
    return (
 -    <img
 +    <PrivateImage
@@ -1328,7 +1331,7 @@
        style={{
 @@ -143,7 +149,7 @@
    })
- 
+
    const [query, setQuery] = useState('')
 -  // Windowed rendering: the gallery is 4500+ pets — mounting an <img> per pet
 +  // Windowed rendering: the gallery is 4500+ pets — mounting an <PrivateImage> per pet
@@ -1367,52 +1370,192 @@
                // The hub page needs three capabilities beyond the bare sandbox
                // posture (#91612): same-origin so its own routing and storage
                // work, popups so its external links (docs, GitHub, Discord)
---- a/hermes_cli/web_server.py
-+++ b/hermes_cli/web_server.py
-@@ -580,6 +580,8 @@
- # Without this, an OPTIONS preflight from a cross-origin SPA hits the auth
- # middlewares before CORS can answer, producing 401 instead of 204 + headers.
- app.add_middleware(_LocalOriginCORSMiddleware, allow_methods=["*"], allow_headers=["*"])
-+from hermes_cli.private_browser_policy import PrivateContentMiddleware
-+app.add_middleware(PrivateContentMiddleware)
- 
- 
- # Authenticated-route self-test: one in-process request per minute against a
---- a/hermes_cli/webapp_page_policy.py
-+++ b/hermes_cli/webapp_page_policy.py
-@@ -55,4 +55,4 @@
-         "form-action 'none'",
-         "frame-ancestors 'none'",
-     ))
--    return {**headers, "Content-Security-Policy": policy, "X-Content-Type-Options": "nosniff"}
-+    return {**headers, "X-Private-Hermes-Trusted-Page": "1", "Content-Security-Policy": policy, "X-Content-Type-Options": "nosniff"}
---- a/hermes_cli/webapp_previews.py
-+++ b/hermes_cli/webapp_previews.py
-@@ -4,6 +4,7 @@
- from fastapi.responses import HTMLResponse, Response
- 
- from hermes_cli.web_server_surface import route_on
-+from hermes_cli.private_browser_policy import private_preview
- 
- # Previews keep the freedom they have under no policy at all (any http(s) library, image,
- # fetch, worker or embed); their isolation is the opaque sandbox, not a source list.
-@@ -115,6 +116,9 @@
- 
-     @application.get("/assets/webapp-preview.html", dependencies=dependencies)
-     async def preview_document():
-+        inert = private_preview()
-+        if inert is not None:
-+            return inert
-         return HTMLResponse(PREVIEW_HTML, headers={
-             "Content-Security-Policy": PREVIEW_POLICY,
-             "Cache-Control": "no-store",
-@@ -124,6 +128,9 @@
- 
-     @application.get("/assets/webapp-guest.html", dependencies=dependencies)
-     async def guest_document():
-+        inert = private_preview()
-+        if inert is not None:
-+            return inert
-         return HTMLResponse(PREVIEW_HTML, headers={
-             "Content-Security-Policy": GUEST_POLICY,
-             "Cache-Control": "no-store",
+--- a/apps/desktop/src/lib/browser-files.ts
++++ b/apps/desktop/src/lib/browser-files.ts
+@@ -1,3 +1,5 @@
++import { privateImageDownloadSource } from '@/components/ui/private-content'
++
+ import { fileUrlToNativePath } from '@hermes/shared'
+
+ import type { HermesApiRequest } from '@/global'
+@@ -162,6 +164,13 @@
+     },
+     saveImageFromUrl: async (url: string) => {
+       try {
++        const source = await privateImageDownloadSource(url)
++        if (source === null) return false
++        if (source !== url) {
++          const image = await (await fetch(source)).blob()
++          downloadBlob(image, downloadFilename(url, image.type))
++          return true
++        }
+         return await downloadUrl(url)
+       } catch (error) {
+         // Context-menu consumers fire and forget; surface failures here.
+--- a/apps/desktop/src/lib/private-image-download.test.ts
++++ b/apps/desktop/src/lib/private-image-download.test.ts
+@@ -0,0 +1,120 @@
++import { afterEach, expect, it, vi } from 'vitest'
++
++import { clearNotifications } from '@/store/notifications'
++
++const SRC = 'https://images.example/hash'
++const originalClipboard = navigator.clipboard
++const DATA = 'data:image/jpeg;base64,aW1hZ2U='
++
++afterEach(() => {
++  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard })
++  vi.restoreAllMocks()
++  vi.unstubAllGlobals()
++  clearNotifications()
++  vi.resetModules()
++})
++
++async function setup(mode: string, approve = true, fail = false, data = DATA) {
++  vi.resetModules()
++  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(approve)
++  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
++    const url = String(input)
++    if (url === '/api/private-content/policy') return new Response(JSON.stringify({mode, origins: []}))
++    if (url === '/api/private-content/image') return new Response(JSON.stringify(fail ? {detail: 'Controlled Tor failure'} : {data_url: data}), {status: fail ? 502 : 200})
++    if (url === data) return new Response('image', {headers: {'Content-Type': data.startsWith('data:image/png') ? 'image/png' : 'image/jpeg'}})
++    // Only browser_native may use the original external URL.
++    if (mode === 'browser_native' && url === SRC) return new Response('native', {headers: {'Content-Type': 'image/png'}})
++    throw new Error('Unexpected browser request: ' + url)
++  })
++  vi.stubGlobal('fetch', fetchMock)
++  const clicked: HTMLAnchorElement[] = []
++  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function(this: HTMLAnchorElement) { clicked.push(this) })
++  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/download')
++  const {createBrowserFilesBridge} = await import('./browser-files')
++  const bridge = createBrowserFilesBridge({api: vi.fn(), bootstrap: {} as never, currentProfile: () => null})
++  return {bridge, fetchMock, confirm, clicked}
++}
++
++it.each(['tor_proxied', 'ask'])('saves public image bytes through Tor in %s, preserving the filename', async mode => {
++  const {bridge, fetchMock, confirm, clicked} = await setup(mode)
++  expect(await bridge.saveImageFromUrl(SRC)).toBe(true)
++  expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual(['/api/private-content/policy', '/api/private-content/image', DATA])
++  expect(fetchMock.mock.calls[1][1]).toMatchObject({credentials: 'same-origin', method: 'POST', body: JSON.stringify({url: SRC, load_once: true})})
++  expect(clicked[0].download).toBe('hash.jpg')
++  expect(confirm).toHaveBeenCalledTimes(mode === 'ask' ? 1 : 0)
++  if (mode === 'ask') expect(confirm.mock.calls[0][0]).toContain('https://images.example')
++})
++
++it('cancelling ask approval performs no image retrieval or download', async () => {
++  const {bridge, fetchMock, clicked} = await setup('ask', false)
++  expect(await bridge.saveImageFromUrl(SRC)).toBe(false)
++  expect(fetchMock).toHaveBeenCalledTimes(1)
++  expect(clicked).toEqual([])
++})
++
++it('off refuses external Save, and Tor failure never falls back to a browser request', async () => {
++  for (const mode of ['off', 'tor_proxied']) {
++    const {bridge, fetchMock, clicked} = await setup(mode, true, true)
++    expect(await bridge.saveImageFromUrl(SRC)).toBe(false)
++    expect(fetchMock.mock.calls.some(call => String(call[0]) === SRC)).toBe(false)
++    expect(clicked).toEqual([])
++  }
++})
++
++it('preserves browser_native external downloads', async () => {
++  const {bridge, fetchMock, confirm, clicked} = await setup('browser_native')
++  expect(await bridge.saveImageFromUrl(SRC)).toBe(true)
++  expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual(['/api/private-content/policy', SRC])
++  expect(confirm).not.toHaveBeenCalled()
++  expect(clicked[0].download).toBe('hash.png')
++})
++
++it.each(['/local.png', 'data:image/png;base64,aW1hZ2U=', 'blob:http://localhost/local'])('preserves local source %s without policy or external retrieval', async src => {
++  const {bridge, fetchMock, clicked} = await setup('off')
++  expect(await bridge.saveImageFromUrl(src)).toBe(true)
++  expect(fetchMock).not.toHaveBeenCalled()
++  expect(clicked).toHaveLength(1)
++})
++
++async function clipboard(mode: string, approve = true, fail = false) {
++  const state = await setup(mode, approve, fail, 'data:image/png;base64,aW1hZ2U=')
++  const blobs: Blob[] = []
++  class Item {
++    constructor(readonly items: Record<string, Promise<Blob>>) {}
++  }
++  vi.stubGlobal('ClipboardItem', Item)
++  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
++    write: async (items: Item[]) => { blobs.push(await items[0].items['image/png']) }
++  } })
++  const {copyImageFromUrl} = await import('./browser-image-copy')
++  return {...state, blobs, copy: () => copyImageFromUrl(SRC)}
++}
++
++it.each(['tor_proxied', 'ask'])('copies external image bytes through the authenticated reader in %s', async mode => {
++  const {copy, blobs, fetchMock, confirm} = await clipboard(mode)
++  expect(await copy()).toBe(true)
++  expect(blobs).toHaveLength(1)
++  expect(blobs[0].type).toBe('image/png')
++  expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
++    '/api/private-content/policy', '/api/private-content/image', 'data:image/png;base64,aW1hZ2U='
++  ])
++  expect(confirm).toHaveBeenCalledTimes(mode === 'ask' ? 1 : 0)
++})
++
++it.each([['off', true, false], ['ask', false, false], ['tor_proxied', true, true]] as const)(
++  'refuses image Copy without browser fallback: %s approval=%s failure=%s', async (mode, approve, fail) => {
++    const {copy, blobs, fetchMock} = await clipboard(mode, approve, fail)
++    expect(await copy()).toBe(false)
++    expect(blobs).toEqual([])
++    expect(fetchMock.mock.calls.some(call => String(call[0]) === SRC)).toBe(false)
++    if (mode !== 'tor_proxied') expect(fetchMock).toHaveBeenCalledTimes(1)
++  }
++)
++
++it('preserves browser_native external image Copy', async () => {
++  const {copy, blobs, fetchMock, confirm} = await clipboard('browser_native')
++  expect(await copy()).toBe(true)
++  expect(blobs).toHaveLength(1)
++  expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual(['/api/private-content/policy', SRC])
++  expect(confirm).not.toHaveBeenCalled()
++})
+--- a/apps/desktop/src/lib/browser-desktop-bridge-ownership-download.test.ts
++++ b/apps/desktop/src/lib/browser-desktop-bridge-ownership-download.test.ts
+@@ -1,4 +1,9 @@
+ import { afterEach, expect, it, vi } from 'vitest'
++
++// Native browser-download controls; private transport has its own regression file.
++vi.mock('@/components/ui/private-content', () => ({
++  privateImageDownloadSource: async (src: string) => src
++}))
+
+ import { setApiRequestConnection, setApiRequestProfile } from '@/api/client'
+ import { $notifications, clearNotifications } from '@/store/notifications'
+@@ -165,6 +170,7 @@
+   expect(installBrowserDesktopBridge()).toBe(true)
+   let saved: boolean | undefined
+   void win.hermesDesktop.saveImageFromUrl('https://images.example/slow.png').then(result => {saved = result})
++  await vi.advanceTimersByTimeAsync(0) // Resolve private/native routing before observing the stream.
+   const signal = fetchMock.mock.calls[0][1].signal
+   await vi.advanceTimersByTimeAsync(BROWSER_IMAGE_DOWNLOAD_TIMEOUT_MS - 1)
+   expect(saved).toBeUndefined()
+--- a/apps/desktop/src/lib/browser-image-download.ts
++++ b/apps/desktop/src/lib/browser-image-download.ts
+@@ -1,9 +1,13 @@
++import { privateImageDownloadSource } from '@/components/ui/private-content'
++
+ // Match the image attachment byte budget without limiting browser-managed files.
+ export const BROWSER_IMAGE_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024
+ export const BROWSER_IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
+
+ /** Fetch only cross-origin images here; gateway files stay browser-managed. */
+ export async function fetchBrowserImage(url: URL): Promise<Blob> {
++  const source = await privateImageDownloadSource(url.href)
++  if (!source) throw new Error('Image retrieval cancelled.')
+   const controller = new AbortController()
+   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+   let timer: number | undefined
+@@ -15,6 +19,6 @@
+   })
+
+   const download = async () => {
+-    const response = await fetch(url, { credentials: 'omit', mode: 'cors', signal: controller.signal })
++    const response = await fetch(source, { credentials: 'omit', mode: 'cors', signal: controller.signal })
+     controller.signal.throwIfAborted()
+     reader = response.body?.getReader()

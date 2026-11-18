@@ -4,6 +4,7 @@ import os
 import json
 from pathlib import Path
 import tempfile
+import sys
 import smoke
 
 
@@ -18,6 +19,14 @@ def check():
     if result.returncode:
         raise RuntimeError('Executor browser qualification failed')
     check_sandbox()
+    check_tabs()
+
+
+def check_tabs():
+    result = agent_python(Path('tests/fixtures/browser-tabs.py').read_text(), check=False)
+    print(result.stdout, result.stderr, flush=True)
+    if result.returncode:
+        raise RuntimeError('Named browser tab regression failed')
 
 
 def check_sandbox():
@@ -77,7 +86,10 @@ if __name__ == '__main__':
     with smoke.storage_fixture():
         try:
             smoke.start_stack()
-            check()
-            missing_harness()
+            if '--tabs-only' in sys.argv:
+                check_tabs()
+            else:
+                check()
+                missing_harness()
         finally:
             smoke.compose('down', '--volumes', '--remove-orphans', check=False)

@@ -75,3 +75,36 @@ Tor failures, a stale local proxy image and fixture/observation issues were
 resolved separately from the upgrade's build change. The native missing-pnpm
 runtime warning is advisory. Detailed results, independent review and remaining
 limits are in the [v0.23.1 qualification record](development.md#hermes-v0231-integration-qualification).
+
+## Lessons from v0.23.1 to v0.23.2
+
+Treat this point release as a full integration review: the release spans 5,211
+changed files, including policy dispatch, HTTP routes, configuration and browser
+consumers. All eleven pre-existing downstream patches touch files changed by the release.
+Native ARM64 Chromium discovery replaces the former downstream discovery hunk;
+per-hop CDN redirect validation still does not replace the private raster reader
+or consent policy. Preserve the native hosted-tool and argument checks when
+rebasing deployment exclusions, and native no-follow marker publication when
+retaining strict named-tab setup.
+
+The new context-menu Copy image action reaches the shared browser image reader.
+That reader now applies the existing authenticated private-image policy, retaining
+native CORS/size/time handling for `browser_native`. Qualify Copy alongside Save,
+including cancellation, failure without browser fallback and actual menu dispatch.
+A controlled clipboard sink establishes request placement and bytes, not OS
+clipboard permissions. Newly added peer and backup-transfer routes also need
+admission checks beyond patch applicability; do not enable a peer provider merely
+to test the unconfigured deployment.
+
+Native schema remains 53. Exercise both older-schema migration and a populated
+v0.23.1 schema-53 profile across the selected release, preserving settings, sessions
+and identities. The native Python dependency lock, executor harness closure, screenshot
+helper, omitted session fixture, pnpm pin and stock Compose comparison are unchanged;
+verify those facts against the packaged source before reusing their inputs.
+
+New pre-read inspection also exposed a latent native SSH filesystem defect:
+GNU realpath accepts a missing final component, so inspect_file reported
+ENOTREG/400 rather than ENOENT/404. Correct the owning adapter's missing-path
+classification and retain the browser's negative assertion; accepting any error
+response would obscure whether its input-refusal control still works. Regular
+file, symlink and directory controls accompany the missing-file regression.

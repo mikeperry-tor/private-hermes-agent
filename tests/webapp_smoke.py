@@ -126,6 +126,19 @@ def run_suite():
             smoke.compose('up', '-d', '--no-build', '--wait', '--wait-timeout', '600')
             assert not smoke.compose('ps', '-q', 'tailscale').stdout.strip(), 'Real Tailscale must never start in tests'
             wait_ready()
+            if '--image-download-only' in sys.argv:
+                smoke.execute('hermes', '/opt/hermes/.venv/bin/python', '-c',
+                              (ROOT / 'tests/fixtures/content-session.py').read_text(), user='10000:10000')
+                for content_mode in ('tor_proxied', 'ask', 'off', 'browser_native'):
+                    os.environ['WEBAPP_EXTERNAL_CONTENT'] = content_mode
+                    values['external_content'] = content_mode
+                    (folder / 'proxy.cfg').write_text(render_proxy(values))
+                    smoke.compose('up', '-d', '--no-deps', '--force-recreate', 'hermes', 'webapp-proxy')
+                    wait_ready()
+                    subprocess.run([browser_python, str(ROOT / 'tests/image_download_browser.py'),
+                                    str(folder / 'password'), content_mode], check=True)
+                failed = False
+                return
             if '--live-egress' in sys.argv:
                 live_egress_checks(folder)
                 failed = False
@@ -168,9 +181,13 @@ else: raise AssertionError('Funnel reached localhost frontend')
             wait_ready()
             print('PASS: consolidated proxy drops all capabilities; fixed-backend egress and separate local/Funnel listeners survive restart', flush=True)
             for path in ('/api/config', '/api/fs/list?path=/workspace', '/api/fs/read-text?path=/workspace/test.txt',
-                         '/api/fs/download?path=/workspace/test.txt', '/api/webapp/socket-ticket?socket=host-terminal'):
+                         '/api/fs/download?path=/workspace/test.txt', '/api/webapp/socket-ticket?socket=host-terminal',
+                         '/api/ops/backup/chunk?archive=absent.zip'):
                 code, _ = http(path)
                 assert code in (401, 403), (path, code)
+            assert http('/api/ops/transfer/chunk', data=b'{}')[0] in (401, 403)
+            assert http('/api/ops/transfer/restore', data=b'{}')[0] in (401, 403)
+            assert http('/api/peer/health')[0] == 404  # No native peer-pass provider is configured.
             for host in ('attacker.invalid', 'localhost:1', 'localhost:19120.attacker.invalid'):
                 assert http('/login', headers={'Host': host})[0] == 421, host
             print('PASS: real native auth guards API/file/ticket routes; exact Host enforcement rejects forged authorities', flush=True)

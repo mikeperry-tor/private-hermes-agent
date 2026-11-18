@@ -1,5 +1,5 @@
-# Official v0.23.1, source 3b421578588243f920886e6fe79a6faa87ea026e.
-FROM nousresearch/hermes-agent@sha256:276d44685c65c0cb2a25f190b63c65c8906f9dc76486fb1c05ae71b5826bda08 AS upstream
+# Official v0.23.2, source ae2a81ccc00e9b7c06301523e5bb09608397149c.
+FROM nousresearch/hermes-agent@sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459 AS upstream
 
 FROM upstream AS webapp-build
 COPY components/hermes/verify-build.mjs /tmp/verify-build.mjs
@@ -21,7 +21,10 @@ RUN rm -rf apps/desktop/dist-webapp && \
 # empty local directory is separate from the executor mount and contains no
 # executor files; model terminal/code execution still uses SSH.
 FROM upstream
-RUN install -d -m 0755 -o 10000 -g 10000 /workspace
+# COPY overlays inherited directories. Remove the old output so obsolete chunks
+# cannot survive alongside the qualified rebuilt frontend.
+RUN install -d -m 0755 -o 10000 -g 10000 /workspace && \
+    rm -rf /opt/hermes/apps/desktop/dist-webapp
 COPY --from=webapp-build /opt/hermes/hermes_bootstrap.py /opt/hermes/hermes_bootstrap.py
 COPY --from=webapp-build /opt/hermes/hermes_cli/ /opt/hermes/hermes_cli/
 COPY --from=webapp-build /opt/hermes/tools/registry.py /opt/hermes/tools/registry.py
@@ -35,7 +38,6 @@ COPY --from=webapp-build /opt/hermes/agent/context_references.py /opt/hermes/age
 COPY --from=webapp-build /opt/hermes/tools/bot_desktop/ /opt/hermes/tools/bot_desktop/
 COPY --from=webapp-build /opt/hermes/tools/computer_use/ /opt/hermes/tools/computer_use/
 COPY --from=webapp-build /opt/hermes/tui_gateway/methods_display.py /opt/hermes/tui_gateway/methods_display.py
-COPY --from=webapp-build /opt/hermes/hermes_cli/web_routers/display.py /opt/hermes/hermes_cli/web_routers/display.py
 COPY --from=webapp-build /opt/hermes/apps/desktop/dist-webapp/ /opt/hermes/apps/desktop/dist-webapp/
 COPY components/hermes/code_terminal.py /opt/hermes/hermes_cli/private_code_terminal.py
 COPY components/hermes/external_content.py /opt/hermes/hermes_cli/private_external_content.py

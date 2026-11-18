@@ -37,6 +37,20 @@ export async function browserContentMode() {
   return policy?.mode || 'off'
 }
 
+// Browser image Save and Copy actions use the same transport and
+// explicit one-time approval. Never change the shared gateway-file downloader.
+export async function privateImageDownloadSource(src: string): Promise<string | null> {
+  const url = external(src)
+  if (!url) return src
+  const mode = await browserContentMode()
+  if (mode === 'browser_native') return src
+  if (mode === 'off') throw new Error('External images are disabled by deployment policy.')
+  if (mode === 'ask' && !window.confirm(`Retrieve this image once through Tor from ${url.origin}? This does not remember permission for the origin.`)) {
+    return null
+  }
+  return (await request('image', { url: url.href, load_once: true })).data_url
+}
+
 export function useExternalPolicy() {
   const current = useSyncExternalStore(subscribe, () => policy, () => null)
   useEffect(() => { if (isBrowserHostedDesktop()) void loadPolicy() }, [])

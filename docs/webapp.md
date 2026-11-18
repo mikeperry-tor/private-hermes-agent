@@ -331,6 +331,12 @@ Logout and restart preserve them until explicit revocation. Load once persists
 no grant or reusable credential. Revocation stops future retrieval, including
 cached/repeated endpoint requests; already delivered bytes cannot be recalled.
 
+Image Save buttons and the context-menu Save and Copy actions retrieve external
+raster images through Tor in private modes. In `ask`, either action asks for a
+separate one-time retrieval from the displayed origin; cancelling makes no request
+and neither action remembers a grant. `off` refuses external image Save and Copy.
+Local/data/blob images keep their native handling; `browser_native` uses the browser.
+
 The backend supports public IPv4 HTTP(S) PNG, JPEG, GIF, WebP, BMP and ICO, with
 matching raster contents and media type. It pins a validated numeric address,
 retains original Host and TLS identity, checks all redirect destinations and
@@ -509,6 +515,12 @@ Fixture HTTPS is not live Funnel qualification. Tor image retrieval has separate
 exit-control/transparent-route evidence; successful same-origin bytes alone
 are not proof of Tor routing. Provider attestation and funded settlement remain
 outside these browser checks.
+
+When desktop dependency inspection fails, the desktop status reports a connection
+diagnostic instead of claiming the executor dependencies are installed. Restore
+the executor connection and refresh status, or use Start for an explicit reconnect
+attempt. Refreshing status does not start a desktop; retries retain the selected
+SSH placement. No reinitialization is required.
 
 ## Terminal environment
 

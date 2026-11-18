@@ -112,6 +112,12 @@ from tools.browser_use_cli import browser_exec_available
 from tools.bot_desktop import runtime
 assert not check_computer_use_requirements()
 assert not browser_exec_available()
+# A real transport outage must retain usable UI/RPC status, not an installed verdict.
+status = runtime.status()
+assert not status.installed and not status.running and status.blocker, status
+from tui_gateway.methods_display import _display_snapshot
+snapshot = _display_snapshot()
+assert not snapshot['installed'] and snapshot['blocker'], snapshot
 try: runtime.start()
 except (OSError,RuntimeError) as e: assert 'SSH' in str(e) or 'sandbox' in str(e) or 'executor' in str(e), str(e)
 else: raise AssertionError('desktop started with executor stopped')

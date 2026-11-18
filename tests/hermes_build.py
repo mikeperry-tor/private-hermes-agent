@@ -50,7 +50,7 @@ assert _external_content_mode == original
                  '--version', check=False)
     if result.returncode:
         raise RuntimeError(result.stderr)
-    assert '0.23.1' in result.stdout, result.stdout
+    assert '0.23.2' in result.stdout, result.stdout
     result = run('run', '--rm', '--network', 'none', '-e', 'HERMES_UID=10000',
                  '-e', 'HERMES_GID=10000', '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied', IMAGE,
                  PYTHON, '-c', 'import os; assert os.getuid()==10000 and os.getgid()==10000')
@@ -59,6 +59,19 @@ assert _external_content_mode == original
                  "from hermes_cli.webapp import packaged_webapp_dist; "
                  "p=packaged_webapp_dist(); assert str(p)=='/opt/hermes/apps/desktop/dist-webapp'; "
                  "assert (p/'index.html').is_file(); assert (p/'hermes-build.json').is_file()")
+    # Native output verification also rejects stale inherited chunks left by COPY overlays.
+    run('run', '--rm', '--network', 'none', '--entrypoint', 'node', IMAGE,
+        '--input-type=module', '-e',
+        "import {outputIntact} from '/opt/hermes/scripts/build/freshness.mjs'; "
+        "if (!outputIntact('/opt/hermes/apps/desktop/dist-webapp','webapp')) "
+        "throw new Error('Delivered renderer differs from its native build receipt')")
+    run('run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
+        '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied', '-e', 'COMPUTER_USE_ENABLED=true',
+        '-e', 'HERMES_HOME=/tmp/desktop-probe-test', '--entrypoint', PYTHON, IMAGE,
+        '-c', (ROOT / 'tests/fixtures/desktop-dependency-probe.py').read_text())
+    run('run', '--rm', '-i', '--network', 'none', '--cap-drop', 'ALL',
+        '--entrypoint', PYTHON, IMAGE, '-c',
+        (ROOT / 'tests/fixtures/ssh-workspace-files.py').read_text())
     print('PASS: native dispatch/version, selected rebuilt renderer, strict modes and profile-override resistance')
 
 

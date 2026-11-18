@@ -183,13 +183,22 @@ print('POLICY-'+'OK')
                     smoke.python('hermes', "from pathlib import Path; assert Path('/tmp/webapp-agent-terminal-proof').read_text().strip()=='browser-terminal'")
                     smoke.python('executor', "from pathlib import Path; assert not Path('/tmp/webapp-agent-terminal-proof').exists()")
                 # Native detach/reattach retains shell PID and replay.
-                command(page, "printf '%s' $$ > /tmp/webapp-terminal-pid")
+                replay_marker = 'REPLAY-' + secrets.token_hex(10)
+                output = command(page, "printf '%s' $$ > /tmp/webapp-terminal-pid; printf 'REPLAY-%s\\n' " +
+                                 shlex.quote(replay_marker.removeprefix('REPLAY-')))
+                assert replay_marker in output, output
                 page.evaluate('testShell.ws.close()')
                 page.wait_for_function('() => testShell.closed !== null')
                 open_shell(page, attach=meta['terminalId'])
                 resumed = metadata(page)
                 assert resumed['reconnected'] and resumed['terminalId'] == meta['terminalId']
-                assert 'browser-terminal' in command(page, "printf 'REATTACHED-%s\\n' 'OK'")
+                # Metadata precedes replay. Check actual output, independent of
+                # readline's presentation of an earlier command being typed.
+                page.wait_for_function('marker => testShell.output.includes(marker)',
+                                       arg=replay_marker, timeout=30000)
+                output = command(page, 'test "$$" = "$(cat /tmp/webapp-terminal-pid)" && ' +
+                                 "printf 'REATTACHED-%s\\n' 'OK'")
+                assert 'REATTACHED-OK' in output, output
                 page.evaluate("testShell.ws.send('\\x1b[RESIZE:103;37]')")
                 output = command(page, "stty size")
                 assert '37 103' in output, output

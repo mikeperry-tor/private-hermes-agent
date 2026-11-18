@@ -100,7 +100,7 @@
      except TerminalExited:
 --- a/hermes_cli/web_server_dashboard.py
 +++ b/hermes_cli/web_server_dashboard.py
-@@ -205,12 +205,15 @@
+@@ -230,12 +230,15 @@
          # none, so a tab on any other profile names that profile on every request.
          from hermes_cli.web_server_profiles import serving_profile_name as _serving_profile_name
          serving_profile_js = json.dumps(_serving_profile_name()).replace("</", "<\\/")
@@ -128,7 +128,7 @@
        // the window's backend; pass a named profile to dial/reuse that profile's
 --- a/apps/desktop/src/lib/browser-desktop-bridge.ts
 +++ b/apps/desktop/src/lib/browser-desktop-bridge.ts
-@@ -208,7 +208,11 @@
+@@ -210,7 +210,11 @@
        // The host terminal of the gateway the terminal started on, relayed when it is not the serving one.
        websocketUrl: async (profile, connectionId) => {
          if (!relays || connectionId === LOCAL_CONNECTION_ID) {
@@ -141,7 +141,7 @@
          }
 
          // A tab restored before this page read its saved connections.
-@@ -219,7 +223,9 @@
+@@ -221,7 +225,9 @@
          return relays.socketUrl(connectionId, '/api/host-terminal', profile)
        },
        defaultCwd: async (profile, connectionId) =>

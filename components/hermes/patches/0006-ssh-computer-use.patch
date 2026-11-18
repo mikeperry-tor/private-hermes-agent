@@ -1,15 +1,65 @@
 --- a/tools/bot_desktop/placement.py
 +++ b/tools/bot_desktop/placement.py
-@@ -62,28 +62,14 @@
+@@ -1,19 +1,7 @@
+-"""Where this profile's desktop lives: the gateway host or inside the configured terminal backend.
++"""Private Hermes desktop placement: only the configured SSH executor may host it.
+
+-``bot_desktop.placement``:
+-  ``auto``      (default) follow the terminal backend when it is a sandbox that can host a stream
+-                (docker / ssh, or a plugin backend declaring ``supports_streams``); the
+-                gateway host when ``terminal.backend`` is local. A
+-                sandbox backend that CANNOT host one (modal, daytona, vercel) resolves to ``refused``:
+-                the user chose a sandbox for the agent's actions, so quietly running the screen, cua-driver
+-                and the browser on the host beside it would hand the agent a desktop outside that sandbox.
+-  ``terminal``  always the terminal backend; error when it cannot host one.
+-  ``gateway``   always the gateway host (the pre-#108914 behaviour for sandboxed users, now an explicit
+-                opt-in because it is the boundary-crossing shape).
+-
+-``resolve()`` is pure config + backend-class reasoning: it never starts a sandbox. ``terminal_environment()``
+-does acquire the profile's terminal environment (creating the container if needed) because a screen cannot
+-exist before the sandbox does.
++Resolution reads policy/configuration; terminal_environment uses native terminal
++ownership to acquire the executor when requested.
+ """
+ from __future__ import annotations
+
+@@ -26,7 +14,6 @@
+ GATEWAY = "gateway"
+ TERMINAL = "terminal"
+ REFUSED = "refused"
+-_STREAM_BACKENDS = ("docker", "ssh")
 
 
- def resolve() -> Placement:
--    # Backend first (env only): a local terminal IS the gateway host whatever the setting says, and that is
--    # the common case — it must not cost a config load (this runs on every browser / cua-driver spawn).
+ @dataclass(frozen=True)
+@@ -48,42 +35,15 @@
+     return str(_get_env_config().get("env_type") or "local")
+
+
+-def _plugin_streams(backend: str) -> bool:
+-    from tools.terminal_tool_config import _plugin_env_flag
+-    return _plugin_env_flag(backend, "supports_streams") is True
++def resolve() -> Placement:
 +    from hermes_bootstrap import PRIVATE_HERMES_COMPUTER_USE
 +    if not PRIVATE_HERMES_COMPUTER_USE:
 +        return Placement(REFUSED, "ssh", "Computer use requires COMPUTER_USE_ENABLED=true and a rebuilt executor")
-     backend = _terminal_backend()
++    backend = _terminal_backend()
++    if backend != "ssh" or _setting() == GATEWAY:
++        return Placement(REFUSED, backend, "This deployment supports desktop actions only inside the SSH executor")
++    return Placement(TERMINAL, backend)
+
+-
+-def _plugin_host_isolated() -> bool:
+-    # Under host isolation a plugin's environment object reaches Hermes as an opaque placeholder, so its
+-    # exec_prefix() is unreachable. (No bundled plugin backend declares supports_streams, so bundled
+-    # plugins, which stay in-process, are not a case here.)
+-    from hermes_cli.plugin_isolation import ISOLATION_HOST, isolation_mode
+-    return isolation_mode() == ISOLATION_HOST
+-
+-
+-def resolve() -> Placement:
+-    # Backend first (env only): a local terminal IS the gateway host whatever the setting says, and that is
+-    # the common case — it must not cost a config load (this runs on every browser / cua-driver spawn).
+-    backend = _terminal_backend()
 -    if backend == "local":
 -        return Placement(GATEWAY, backend, "terminal.backend is local, so the terminal IS the gateway host")
 -    setting = _setting()
@@ -29,16 +79,12 @@
 -              f"gateway host would put the agent's screen, browser and computer_use outside the sandbox you chose "
 -              f"for it. Set bot_desktop.placement: gateway to allow that explicitly.")
 -    return Placement(REFUSED, backend, reason)
-+    if backend != "ssh" or _setting() == GATEWAY:
-+        return Placement(REFUSED, backend, "This deployment supports desktop actions only inside the SSH executor")
-+    return Placement(TERMINAL, backend)
-+
 
 
  def terminal_environment(*, create: bool = True) -> Optional[Any]:
 --- a/tools/computer_use/tool.py
 +++ b/tools/computer_use/tool.py
-@@ -968,13 +968,9 @@
+@@ -925,10 +925,6 @@
 
  # ── Availability check (used by the tool registry check_fn) ─────────────────
  def check_computer_use_requirements() -> bool:
@@ -52,23 +98,22 @@
 +    """Check actual SSH executor dependencies without starting its display."""
 +    from hermes_cli.private_computer_use import available
 +    return available()
-
- def get_computer_use_schema() -> dict[str, Any]:
-     from tools.computer_use.schema import COMPUTER_USE_SCHEMA
 --- a/tools/computer_use/cua_backend.py
 +++ b/tools/computer_use/cua_backend.py
-@@ -249,6 +249,8 @@
+@@ -256,8 +256,8 @@
      """Default computer-use backend. Cross-platform via cua-driver MCP."""
 
      def __init__(self, permission_mode: str = "standard") -> None:
+-        if permission_mode not in {"standard", "bounded", "unrestricted"}:
+-            raise ValueError(f"unsupported cua-driver permission mode: {permission_mode}")
 +        if permission_mode != "standard":
 +            raise ValueError("SSH computer use supports standard driver permissions only; bounded and approval-bypass modes require an unsupported local daemon")
-         if permission_mode not in {"standard", "bounded", "unrestricted"}:
-             raise ValueError(f"unsupported cua-driver permission mode: {permission_mode}")
          self.permission_mode = permission_mode
+         self._embedded_daemon: Optional[_EmbeddedCuaDaemon] = None
+         if permission_mode != "standard":
 --- a/tools/computer_use/cua_backend_session.py
 +++ b/tools/computer_use/cua_backend_session.py
-@@ -435,35 +435,8 @@
+@@ -426,35 +426,8 @@
              self._redeclare_session(timeout, "cua-driver public session label %s could not be restored: %s")
 
      def _call_tool_via_cli(self, name: str, args: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -108,7 +153,7 @@
          if name not in self._LIFECYCLE_CALLS:
 --- a/tools/bot_desktop/runtime.py
 +++ b/tools/bot_desktop/runtime.py
-@@ -532,30 +532,15 @@
+@@ -529,30 +529,15 @@
      Pure file reads on the common path: this is called from every browser / cua-driver env builder, so it
      must not load config (that initializes HERMES_HOME). A sandbox-hosted screen leaves a host-side marker at
      start; only its presence routes to the sandbox probe."""
@@ -142,7 +187,7 @@
 
 
  def in_sandbox() -> bool:
-@@ -622,6 +607,10 @@
+@@ -619,6 +604,10 @@
      from tools.bot_desktop import resources
      from tools.bot_desktop import sandbox_host
      where = placement.resolve()
@@ -153,7 +198,7 @@
      if where.where == placement.TERMINAL or sandbox_host._read_marker():
          # A screen already running inside a sandbox is reported (and stoppable) even after the placement
          # setting moved: the recorded owner wins over the current policy until it is stopped.
-@@ -667,7 +656,7 @@
+@@ -674,7 +663,7 @@
              f"use {sandbox_host.SANDBOX_IMAGE_HINT} as terminal.{where.backend}_image (the default sandbox base "
              f"plus the desktop stack)")
          blocker = (f"The terminal backend's sandbox image lacks {', '.join(missing)}. {advice[0].upper()}{advice[1:]}, "
@@ -162,7 +207,7 @@
          if where.backend == "docker":
              # The usual reason on an upgraded install: the persisted container predates the default
              # flip and was kept on purpose. The pane offers the switch instead of a config hint.
-@@ -871,7 +860,7 @@
+@@ -879,7 +868,7 @@
          # uses there: the human's browser is the bot's browser, as on the host.
          from tools.bot_desktop.browser import dock_exec_line
          exe = sandbox_host.chromium_executable(env)
@@ -173,25 +218,7 @@
      (sd / "env").write_text("".join(f"{k}={v}\n" for k, v in published.items()), encoding="utf-8")
 --- a/tools/bot_desktop/sandbox_host.py
 +++ b/tools/bot_desktop/sandbox_host.py
-@@ -139,7 +139,7 @@
- _CHROMIUM_PROBE = (
-     'for d in "${PLAYWRIGHT_BROWSERS_PATH:-}" /opt/playwright "$HOME/.cache/ms-playwright"; do'
-     ' [ -n "$d" ] || continue;'
--    ' for c in "$d"/chromium-*/chrome-linux/chrome "$d"/chromium-*/chrome-linux64/chrome; do'
-+    ' for c in "$d"/chromium-*/chrome-linux/chrome "$d"/chromium-*/chrome-linux64/chrome "$d"/chromium-*/chrome-linux-arm64/chrome; do'
-     ' [ -x "$c" ] && { printf %s "$c"; exit 0; }; done; done; exit 1'
- )
-
-@@ -200,6 +200,8 @@
- def missing_binaries(env: Any) -> list[str]:
-     script = "for b in " + " ".join(_REQUIRED) + '; do command -v "$b" >/dev/null 2>&1 || echo "$b"; done'
-     proc = streams.run_in(env, ["bash", "-c", script], user=_user_for(env), timeout=20)
-+    if proc.returncode:
-+        raise RuntimeError("Could not inspect desktop dependencies over executor SSH")
-     return [b for b in proc.stdout.decode("utf-8", "replace").split() if b]
-
-
-@@ -239,7 +241,7 @@
+@@ -276,7 +276,7 @@
              f"terminal.docker_image / modal_image")
          raise RuntimeError(
              f"Bot Desktop needs {', '.join(missing)} inside the terminal backend's sandbox. The configured image "

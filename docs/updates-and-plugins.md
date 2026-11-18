@@ -139,8 +139,8 @@ defaults, not immutable enforcement against arbitrary plugin or agent code.
 For the review sequence and lessons from prior upgrades, see
 [Hermes update workflow](update-workflow.md).
 
-`components/hermes/Dockerfile` derives from the pinned official v0.23.1 image,
-source `3b421578588243f920886e6fe79a6faa87ea026e`. A disposable build stage checks
+`components/hermes/Dockerfile` derives from the pinned official v0.23.2 image,
+source `ae2a81ccc00e9b7c06301523e5bb09608397149c`. A disposable build stage checks
 the clean install stamp and the packaged Webapp source hash against its reviewed
 native build receipt before applying explicit patches with `git apply --check`.
 The image supplies the source and pinned Node. The disposable build stage uses
@@ -154,7 +154,7 @@ dependencies at startup. Runtime, offline setup and qualification fixtures use t
 same derived image. Build contexts still contain only tracked components.
 
 Native plugin commands can report an advisory `pnpm: not installed or outdated`
-from their passive runtime check. The official v0.23.1 runtime intentionally
+from their passive runtime check. The official v0.23.2 runtime intentionally
 omits this frontend build tool; the warning does not block Python plugin
 environment preparation. Dependency download failures still fail the requested
 operation visibly and require a successful retry.
@@ -269,7 +269,7 @@ that setting applies only to the qualification compiler, not runtime containers.
 changed startup or fetch behavior.
 
 The code-terminal patch and `private_code_terminal` helper target the same pinned
-v0.23.1 source. They select ordinary host-terminal preparation using early-captured
+v0.23.2 source. They select ordinary host-terminal preparation using early-captured
 deployment inputs, preserving native saved gateways and the authenticated PTY
 lifecycle. The helper owns remote cwd validation and shell/SSH argument construction;
 the browser bootstrap carries the mode for labeling, stale-page refusal and local

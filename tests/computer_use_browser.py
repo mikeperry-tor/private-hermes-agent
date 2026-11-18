@@ -157,7 +157,8 @@ with sync_playwright() as playwright:
     # View-only input must not execute a command in the already focused fixture terminal.
     page.evaluate('path=>window.cu.keys("first","printf watcher > "+path+"\\n")', watch_path)
     page.wait_for_timeout(400)
-    assert http('/api/fs/read-text?path=' + watch_path)['status'] == 404
+    watch_result = http('/api/fs/read-text?path=' + watch_path)
+    assert watch_result['status'] == 404, watch_result
     rpc('display.lease.acquire', {'viewer_id': observed['viewer_id']})
     assert rpc('display.thumbnail')['suppressed'] == 'human_has_control'
     page.wait_for_timeout(350)
@@ -176,7 +177,8 @@ with sync_playwright() as playwright:
     stale_path = '/workspace/cu-stale-' + nonce
     page.evaluate('path=>window.cu.keys("first","printf stale > "+path+"\\n")', stale_path)
     page.wait_for_timeout(400)
-    assert http('/api/fs/read-text?path=' + stale_path)['status'] == 404
+    stale_result = http('/api/fs/read-text?path=' + stale_path)
+    assert stale_result['status'] == 404, stale_result
     print('PASS: second viewer takeover revokes the first viewer\'s keyboard authority', flush=True)
     rpc('display.lease.release', {'viewer_id': second['viewer_id']})
     assert rpc('display.thumbnail')['data_url'].startswith('data:image/jpeg;base64,')

@@ -155,7 +155,8 @@ def execute(code, session='', timeout_s=300, task_id=None, local=False):
             with current.lock:
                 proc = current.process
                 try:
-                    proc.stdin.write((json.dumps({'code': code, 'timeout': native._clamp_timeout(timeout_s)}) + '\n').encode())
+                    proc.stdin.write((json.dumps({'code': code, 'setup': native._OWN_TAB_PREAMBLE if session else '',
+                                                  'timeout': native._clamp_timeout(timeout_s)}) + '\n').encode())
                     proc.stdin.flush()
                     # Raw reads avoid buffered readline hiding an already-received response.
                     data = bytearray()

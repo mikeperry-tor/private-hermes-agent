@@ -1,15 +1,15 @@
 --- a/hermes_cli/web_server.py
 +++ b/hermes_cli/web_server.py
-@@ -204,6 +204,9 @@
+@@ -206,6 +206,9 @@
  def _get_pty_active_session_files(app: FastAPI) -> dict[str, Path]:
      return _app_state_default(app, "pty_active_session_files", dict)
- 
+
 +
 +from hermes_cli.private_external_content import deployment_mode as _deployment_mode
 +_external_content_mode = _deployment_mode()
- 
+
  app = FastAPI(title="Hermes Agent", version=get_version_info().base_version, lifespan=app_lifespan)
- 
+
 --- a/hermes_bootstrap.py
 +++ b/hermes_bootstrap.py
 @@ -23,6 +23,13 @@
@@ -23,6 +23,6 @@
 +if _private_computer_use not in ("true", "false"):
 +    raise ValueError("COMPUTER_USE_ENABLED must be exactly true or false")
 +PRIVATE_HERMES_COMPUTER_USE = _private_computer_use == "true"
- 
+
  _IS_WINDOWS = sys.platform == "win32"
  _bootstrap_applied = False

@@ -1,0 +1,49 @@
+--- a/hermes_cli/web_server.py
++++ b/hermes_cli/web_server.py
+@@ -591,6 +591,8 @@
+ # Without this, an OPTIONS preflight from a cross-origin SPA hits the auth
+ # middlewares before CORS can answer, producing 401 instead of 204 + headers.
+ app.add_middleware(_LocalOriginCORSMiddleware, allow_methods=["*"], allow_headers=["*"])
++from hermes_cli.private_browser_policy import PrivateContentMiddleware
++app.add_middleware(PrivateContentMiddleware)
+
+
+ # Authenticated-route self-test: one in-process request per minute against a
+--- a/hermes_cli/webapp_page_policy.py
++++ b/hermes_cli/webapp_page_policy.py
+@@ -55,4 +55,4 @@
+         "form-action 'none'",
+         "frame-ancestors 'none'",
+     ))
+-    return {**headers, "Content-Security-Policy": policy, "X-Content-Type-Options": "nosniff"}
++    return {**headers, "X-Private-Hermes-Trusted-Page": "1", "Content-Security-Policy": policy, "X-Content-Type-Options": "nosniff"}
+--- a/hermes_cli/webapp_previews.py
++++ b/hermes_cli/webapp_previews.py
+@@ -4,6 +4,7 @@
+ from fastapi.responses import HTMLResponse, Response
+
+ from hermes_cli.web_server_surface import route_on
++from hermes_cli.private_browser_policy import private_preview
+
+ # Previews keep the freedom they have under no policy at all (any http(s) library, image,
+ # fetch, worker or embed); their isolation is the opaque sandbox, not a source list.
+@@ -115,6 +116,9 @@
+
+     @application.get("/assets/webapp-preview.html", dependencies=dependencies)
+     async def preview_document():
++        inert = private_preview()
++        if inert is not None:
++            return inert
+         return HTMLResponse(PREVIEW_HTML, headers={
+             "Content-Security-Policy": PREVIEW_POLICY,
+             "Cache-Control": "no-store",
+@@ -124,6 +128,9 @@
+
+     @application.get("/assets/webapp-guest.html", dependencies=dependencies)
+     async def guest_document():
++        inert = private_preview()
++        if inert is not None:
++            return inert
+         return HTMLResponse(PREVIEW_HTML, headers={
+             "Content-Security-Policy": GUEST_POLICY,
+             "Cache-Control": "no-store",

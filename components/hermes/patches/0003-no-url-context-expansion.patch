@@ -1,6 +1,6 @@
 --- a/agent/context_references.py
 +++ b/agent/context_references.py
-@@ -203,7 +203,10 @@
+@@ -230,7 +230,10 @@
      message: str, *, cwd: str | Path, context_length: int, url_fetcher: UrlFetcher = None,
      allowed_root: str | Path | None = None, plugins: bool = True,
  ) -> ContextReferenceResult:
@@ -11,4 +11,4 @@
 +            if ref.kind != "url"]
      if not refs:
          return ContextReferenceResult(message=message, original_message=message)
-     cwd_path = Path(cwd).expanduser().resolve()
+     from tools.hosted_tool_policy import host_feature_refusal

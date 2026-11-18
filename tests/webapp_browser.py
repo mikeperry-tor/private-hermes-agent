@@ -67,6 +67,11 @@ with sync_playwright() as playwright:
             page.locator('input[name=password]').fill(password)
             page.locator('button[type=submit]').click()
             page.wait_for_url(lambda url: '/login' not in url, timeout=30000)
+            # Newly introduced JSON transfer routes retain operator auth;
+            # invalid inputs exercise admission without creating/importing state.
+            assert fetch(page, '/api/ops/transfer/chunk', 'POST', {'offset': -1}).status == 400
+            assert fetch(page, '/api/ops/transfer/restore', 'POST', {}).status == 404
+            assert fetch(page, '/api/peer/health').status == 404
             # Load actual SPA scripts, not just a login redirect.
             page.wait_for_load_state('domcontentloaded')
             assert page.locator('input[name=password]').count() == 0

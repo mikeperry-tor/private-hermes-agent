@@ -1,0 +1,177 @@
+--- a/tools/bot_desktop/sandbox_host.py
++++ b/tools/bot_desktop/sandbox_host.py
+@@ -203,6 +203,8 @@
+ def missing_binaries(env: Any) -> list[str]:
+     script = "for b in " + " ".join(_REQUIRED) + '; do command -v "$b" >/dev/null 2>&1 || echo "$b"; done'
+     proc = streams.run_in(env, ["bash", "-c", script], user=_user_for(env), timeout=20)
++    if proc.returncode:
++        raise RuntimeError("Could not inspect desktop dependencies over executor SSH")
+     return [b for b in proc.stdout.decode("utf-8", "replace").split() if b]
+
+
+--- a/tools/bot_desktop/runtime.py
++++ b/tools/bot_desktop/runtime.py
+@@ -648,18 +648,28 @@
+
+
+ def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
+-    """Status of a sandbox-placed screen. Package presence is only known once the sandbox exists; before
+-    that the pane shows "installed" with the image hint carried in ``install_command`` so Start can explain."""
+-    from tools.bot_desktop import sandbox_host
+-    env = _owned_sandbox_env() or _sandbox_env(create=False)
+-    missing = sandbox_host.missing_binaries(env) if env is not None else []
+-    published = sandbox_host.published_env(env, profile or _profile_name()) if env is not None else {}
++    """Inspect sandbox dependencies, retaining native owner reattachment.
++    Unavailable dependencies remain unknown; never install host dependencies here."""
++    from tools.bot_desktop import sandbox_host
++    probe_error = None
++    missing = []
++    published = {}
++    try:
++        env = _owned_sandbox_env() or _sandbox_env(create=False)
++        if env is None:
++            raise RuntimeError("Terminal sandbox connection is not available")
++        missing = sandbox_host.missing_binaries(env) if env is not None else []
++        published = sandbox_host.published_env(env, profile or _profile_name()) if env is not None else {}
++    except (OSError, RuntimeError, subprocess.SubprocessError):
++        # Dependencies are unknown after a failed probe, not installed or absent.
++        # Keep status/UI/RPC usable without exposing raw transport diagnostics.
++        probe_error = "Could not inspect desktop dependencies; check the terminal sandbox connection and retry."
+     running = bool(published.get("DISPLAY"))
+     # No install_command: the pane's Install button runs apt on the HOST, which is the wrong machine here.
+     # A sandbox missing the stack is a blocker (shown in place of Start) naming the image that has it.
+-    blocker = None
++    blocker = probe_error
+     image_switch = None
+-    if missing:
++    if missing and probe_error is None:
+         advice = sandbox_host.plugin_image_advice(where.backend) or (
+             f"use {sandbox_host.SANDBOX_IMAGE_HINT} as terminal.{where.backend}_image (the default sandbox base "
+             f"plus the desktop stack)")
+@@ -679,7 +689,7 @@
+     return DesktopStatus(
+         profile=profile or _profile_name(),
+         supported=True,
+-        installed=True,
++        installed=probe_error is None,
+         missing=missing,
+         running=running,
+         pid=None,
+--- a/apps/desktop/src/plugins/hermes-bots/screen-pane.tsx
++++ b/apps/desktop/src/plugins/hermes-bots/screen-pane.tsx
+@@ -442,7 +442,7 @@
+     return <EmptyState description={t.screen.unsupportedBody} title={t.screen.unsupportedTitle} />
+   }
+
+-  if (status && !status.installed) {
++  if (status && !status.installed && !status.blocker) {
+     return <ScreenNotInstalled bot={bot} onInstalled={next => setScreenStatus(bot, next)} status={status} />
+   }
+
+@@ -477,7 +477,7 @@
+         <div className="flex flex-col items-center gap-2">
+           <div className="text-sm font-medium">{t.screen.stoppedTitle}</div>
+           <div className="text-xs text-muted-foreground">{status.blocker ?? t.screen.stoppedBody}</div>
+-          <Button disabled={busy || Boolean(status.blocker)} onClick={() => void start()} size="sm">
++          <Button disabled={busy || (status.installed && Boolean(status.blocker))} onClick={() => void start()} size="sm">
+             {busy ? <GlyphSpinner /> : <Codicon name="play" />}
+             {t.screen.start}
+           </Button>
+--- a/apps/desktop/src/plugins/hermes-bots/screen-portal.tsx
++++ b/apps/desktop/src/plugins/hermes-bots/screen-portal.tsx
+@@ -60,7 +60,7 @@
+   }
+
+   if (!status.installed) {
+-    return 'missing'
++    return status.blocker ? 'off' : 'missing'
+   }
+
+   if (!status.running) {
+@@ -172,7 +172,7 @@
+     live: t.screen.portalWatching,
+     human: t.screen.portalYouControl,
+     other: t.screen.portalOtherControls,
+-    off: t.screen.portalStopped,
++    off: status?.blocker ?? t.screen.portalStopped,
+     missing: t.screen.portalNotInstalled,
+     unsupported: t.screen.portalUnsupported,
+     unavailable: isManagedBackend(bot) ? t.screen.portalUnavailableManaged : t.screen.portalUnavailable,
+--- a/apps/desktop/src/plugins/hermes-bots/screen-pane-status-events.test.tsx
++++ b/apps/desktop/src/plugins/hermes-bots/screen-pane-status-events.test.tsx
+@@ -42,6 +42,9 @@
+       stoppedTitle: 'Stopped',
+       stoppedBody: 'Body',
+       start: 'Start',
++      notInstalledTitle: 'Desktop not installed',
++      noPackageManager: 'No package manager',
++      installHint: 'Install desktop packages',
+       agentControls: 'Bot controls',
+       takeOver: 'Take over',
+       reconnect: 'Reconnect',
+@@ -121,3 +124,19 @@
+   expect(view.queryByText('Stopped')).toBeNull()
+   view.unmount()
+ })
++
++
++it('shows failed inspection as a connection blocker and recovers on a successful status event', async () => {
++  const blocker = 'Could not inspect desktop dependencies; check the terminal sandbox connection and retry.'
++  vi.mocked(displayRequest).mockResolvedValue({ ...stopped, installed: false, blocker })
++  const view = render(<BotScreenPane bot={bot} />)
++  await waitFor(() => expect(view.getByText(blocker)).toBeTruthy())
++  expect(view.queryByText('Desktop not installed')).toBeNull()
++  expect(view.queryByText('No package manager')).toBeNull()
++  expect(view.queryByText('Install desktop packages')).toBeNull()
++  expect((view.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled).toBe(false)
++  act(() => emitGatewayEvent({ type: 'display.status', connectionId: 'host-a', profile: 'ops', payload: stopped }))
++  await waitFor(() => expect(view.queryByText(blocker)).toBeNull())
++  expect((view.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled).toBe(false)
++  view.unmount()
++})
+--- a/apps/desktop/src/plugins/hermes-bots/screen-portal-status-request.test.tsx
++++ b/apps/desktop/src/plugins/hermes-bots/screen-portal-status-request.test.tsx
+@@ -6,7 +6,7 @@
+  * and `display` backwards (#110037).
+  */
+
+-import { act, renderHook } from '@testing-library/react'
++import { act, render, renderHook } from '@testing-library/react'
+ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+
+ import type { RosterRow } from './types'
+@@ -27,13 +27,13 @@
+
+   return { $lastRoster: atom<RosterRow[]>([]), botSelectionKey: (bot: RosterRow) => bot.name }
+ })
+-vi.mock('./i18n', () => ({ useBots: () => ({ screen: {} }) }))
++vi.mock('./i18n', () => ({ useBots: () => ({ screen: { portalTitle: 'Screen', portalStopped: 'Stopped', portalNotInstalled: 'Desktop not installed' } }) }))
+ vi.mock('./screen-open', () => ({ openBotScreen: vi.fn() }))
+
+ import { host } from '@hermes/plugin-sdk'
+
+ import type { DisplayStatus } from './screen-connection'
+-import { useScreenPortalState } from './screen-portal'
++import { ScreenPortal, useScreenPortalState } from './screen-portal'
+ import { $screenState, beginScreenStatusRequest, screenStateFor, setScreenStatus } from './screen-state'
+
+ const bot: RosterRow = { name: 'ops' }
+@@ -92,3 +92,18 @@
+   expect(status?.display).toBeNull()
+   view.unmount()
+ })
++
++
++it('shows the connection diagnostic instead of installation advice and clears it after recovery', () => {
++  const blocker = 'Could not inspect desktop dependencies; check the terminal sandbox connection and retry.'
++  setScreenStatus(bot, { ...stopped, installed: false, blocker })
++  const view = render(<ScreenPortal bot={bot} />)
++  expect(view.getByText(blocker)).toBeTruthy()
++  expect(view.queryByText('Desktop not installed')).toBeNull()
++  act(() => setScreenStatus(bot, stopped))
++  expect(view.queryByText(blocker)).toBeNull()
++  expect(view.getByText('Stopped')).toBeTruthy()
++  act(() => setScreenStatus(bot, { ...stopped, installed: false }))
++  expect(view.getByText('Desktop not installed')).toBeTruthy()
++  view.unmount()
++})

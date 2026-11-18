@@ -1,5 +1,5 @@
 # Public screenshot helper from the exact packaged Hermes revision, not its runtime.
-FROM nousresearch/hermes-agent@sha256:276d44685c65c0cb2a25f190b63c65c8906f9dc76486fb1c05ae71b5826bda08 AS browser-source
+FROM nousresearch/hermes-agent@sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459 AS browser-source
 
 FROM alpine:3.24 AS executor-false
 RUN apk add --no-cache bash python3 py3-pip py3-yaml git curl openssh-server openssh-client nodejs npm tar coreutils \

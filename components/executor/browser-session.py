@@ -40,12 +40,14 @@ def main():
                 if closed.is_set():
                     raise RuntimeError('Browser session closed during startup; model code was not launched')
                 command = [sys.executable, '-c',
-                           'import sys,runpy; sys.path.insert(0,"/opt/private-hermes"); '
+                           'import sys; sys.path.insert(0,"/opt/private-hermes"); '
                            'import browser_use_shot as shot; import browser_harness.helpers as helpers; '
                            'shot.install(helpers, activate="never"); '
                            'helpers.cdp("Browser.setDownloadBehavior",behavior="allow",'
                            'downloadPath=__import__("os").environ["BH_DOWNLOAD_DIR"]); '
-                           'runpy.run_module("browser_harness.run",run_name="__main__",alter_sys=True)']
+                           'import browser_harness.run as harness; '
+                           'harness.__name__="__main__"; sys.modules["__main__"]=harness; '
+                           'exec(' + repr(request['setup']) + ', vars(harness)); harness.main()']
                 proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True, start_new_session=True,
                                         cwd=os.environ['BH_AGENT_WORKSPACE'])
