@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import uuid
+from contextlib import suppress
 
 
 @dataclass
@@ -16,13 +17,23 @@ class Session:
     env: object
     process: subprocess.Popen
     home: str
-    workspace: str
     endpoint: str
+    browser: dict
     lock: object = field(default_factory=threading.Lock)
 
 
 _sessions = {}
-_lock = threading.RLock()
+_key_locks = {}
+# Lock hierarchy: _key_lock(key) -> _lock and session.lock -> _lock. Never acquire
+# _key_lock(key) or session.lock while holding _lock, and keep slow remote probes
+# and process spawns outside _lock so one cold session never stalls other keys.
+_lock = threading.Lock()
+_PROBE_TIMEOUT_S = 4.0
+
+
+def _key_lock(key):
+    with _lock:
+        return _key_locks.setdefault(key, threading.Lock())
 
 
 def _policy():
@@ -40,33 +51,54 @@ def _policy():
                            'real-profile or alternate-browser settings')
 
 
-def available():
+def _probe_harness(env, *, probe_timeout=_PROBE_TIMEOUT_S, deadline=None):
+    from tools.bot_desktop import sandbox_host
     from tools.environments import streams
-    from tools.bot_desktop import placement
+
+    cached = getattr(env, '_private_browser_harness', None)
+    if cached is not None:
+        return cached
+    probe = streams.run_in(
+        env, ['/opt/browser-harness/bin/python', '-c', 'import browser_harness.run; import browser_harness.daemon'],
+        timeout=sandbox_host.probe_budget(deadline, probe_timeout))
+    ok = probe.returncode == 0
+    with suppress(AttributeError, TypeError):
+        env._private_browser_harness = ok
+    return ok
+
+
+def available(*, deadline=None):
+    from tools.bot_desktop import placement, sandbox_host
     from hermes_cli.private_computer_use import available as desktop_available
     try:
         _policy()
-        if not desktop_available():
+        if deadline is None:
+            deadline = time.monotonic() + sandbox_host._DISCOVERY_BUDGET_S
+        if not desktop_available(deadline=deadline):
             return False
         env = placement.terminal_environment(create=True)
-        probe = streams.run_in(env, ['/opt/browser-harness/bin/python', '-c',
-                                    'import browser_harness.run; import browser_harness.daemon'], timeout=20)
-        return probe.returncode == 0
+        if env is None:
+            return False
+        return _probe_harness(env, probe_timeout=_PROBE_TIMEOUT_S, deadline=deadline)
     except (OSError, RuntimeError, subprocess.SubprocessError):
         return False
 
 
-def close(cache_key=None, home_key=None):
+def close(cache_key=None, home_key=None, session_info=None, owner=None):
     from hermes_cli.process_identity import release_process_group_once_empty
     with _lock:
         keys = [key for key, value in _sessions.items()
                 if (cache_key is None or key == cache_key) and
-                (home_key is None or value.home == home_key)]
+                (home_key is None or value.home == home_key) and
+                (session_info is None or value.browser is session_info) and
+                (owner is None or value is owner)]
         sessions = [_sessions.pop(key) for key in keys]
     for session in sessions:
         proc = session.process
         if proc.stdin:
-            proc.stdin.close()  # Remote EOF stops its CLI group and native daemon.
+            # A failed flush can leave a buffered write that close retries.
+            with suppress(BrokenPipeError):
+                proc.stdin.close()  # Remote EOF stops its CLI group and native daemon.
         # Native daemon shutdown can drain in-flight CDP. Do not kill the SSH
         # owner early and thereby lose the executor's EOF cleanup channel.
         threading.Thread(target=_reap, args=(proc, release_process_group_once_empty), daemon=True).start()
@@ -74,41 +106,62 @@ def close(cache_key=None, home_key=None):
 
 def _reap(proc, release):
     proc.wait()
-    proc.stdout.close()
-    release(proc.pid, timeout=0)
+    try:
+        proc.stdout.close()
+    finally:
+        release(proc.pid, timeout=0)
 
 
-def _session(key, task_id):
-    from hermes_constants import hermes_home_key
-    from hermes_cli.process_identity import own_process_groups
+def _validated_endpoint(key, env, info, expected=None):
     from tools.bot_desktop import runtime, sandbox_host
     from tools.environments import streams
-    from tools.browser_session import get_session_info
-    # Native session lifecycle and startup policy own the shared Chromium.
-    get_session_info(key)
-    env = runtime._sandbox_env(create=True)
+    from tools.browser_session_lifecycle import cleanup_single_session
+    from tools.browser_session_sandbox import GONE, _live_devtools, _shared_key
+
+    if not runtime.owns_tool_sandbox(env):
+        raise RuntimeError('The browser executor changed; start a browser on the recorded desktop')
+    user = sandbox_host._user_for(env)
     udd = sandbox_host.browser_profile_dir(env)
-    found = streams.run_in(env, ['cat', udd + '/DevToolsActivePort'], timeout=10)
-    lines = found.stdout.decode().splitlines()
-    if found.returncode or len(lines) < 2 or not lines[0].isdigit() or not lines[1].startswith('/devtools/browser/'):
+    if info.get('launcher_key') != _shared_key(env, udd):
+        raise RuntimeError('The browser executor changed; retry the command')
+    found = _live_devtools(env, user, udd)
+    if found is None:
         raise RuntimeError('Executor Chromium has no usable DevTools endpoint')
-    endpoint = f'ws://127.0.0.1:{int(lines[0])}{lines[1]}'
-    with _lock:
-        current = _sessions.get(key)
-        if current and current.process.poll() is None and current.endpoint == endpoint:
-            return current
+    if found is not GONE:
+        port, path = found
+        endpoint = f'ws://127.0.0.1:{port}{path}'
+        forwarded = streams.forward_port(env, port, user=user)
+        if (expected is None or endpoint == expected) and info.get('cdp_url') == f'ws://127.0.0.1:{forwarded}{path}':
+            return endpoint
+    cleanup_single_session(key, expected=info)
+    raise RuntimeError('Executor Chromium changed during setup; retry the command')
+
+
+def _session(key):
+    from hermes_constants import hermes_home_key
+    from hermes_cli.process_identity import own_process_groups
+    from tools.bot_desktop import runtime
+    from tools.environments import streams
+    from tools.browser_session import get_session_info
+    with _key_lock(key):
+        # Native session lifecycle and startup policy own the shared Chromium.
+        info = get_session_info(key)
+        env, _ = runtime.tool_sandbox()
+        with _lock:
+            current = _sessions.get(key)
+            if current and current.process.poll() is None and current.env is env and current.browser is info:
+                return current
+        endpoint = _validated_endpoint(key, env, info)
         close(cache_key=key)
         # A replacement must never share IPC with an owner still draining its
-        # native shutdown after cancellation. Workspace identity stays stable.
+        # native shutdown after cancellation.
         digest = uuid.uuid4().hex[:20]
-        task = hashlib.sha256((hermes_home_key() + str(task_id or 'default')).encode()).hexdigest()[:20]
-        workspace = '/workspace/browser-use/' + task
         root = '/tmp/bh/' + digest
         child_env = {
             'HOME': '/home/runner', 'PATH': '/opt/browser-harness/bin:/usr/local/bin:/usr/bin:/bin',
             'LANG': 'C.UTF-8', 'BH_HOME': root, 'BH_CONFIG_DIR': root,
             'BH_RUNTIME_DIR': root + '/r', 'BH_TMP_DIR': root + '/t',
-            'BH_AGENT_WORKSPACE': workspace, 'BU_NAME': 's' + digest,
+            'BH_AGENT_WORKSPACE': root, 'BU_NAME': 's' + digest,
             'BH_DOWNLOAD_DIR': '/workspace/browser-use/downloads',
             'BU_CDP_WS': endpoint, 'BU_AUTOSPAWN': '', 'BH_REQUIRE_EXISTING_DAEMON': '1',
             'BH_TELEMETRY': '0', 'BROWSER_HARNESS_TELEMETRY': '0', 'ANONYMIZED_TELEMETRY': 'false',
@@ -123,16 +176,22 @@ def _session(key, task_id):
         proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, start_new_session=True)
         own_process_groups([proc.pid])
-        current = Session(env, proc, hermes_home_key(), workspace, endpoint)
-        _sessions[key] = current
+        current = Session(env, proc, hermes_home_key(), endpoint, info)
+        with _lock:
+            _sessions[key] = current
         return current
+
+
+def _task_workspace(home, task_id):
+    identity = json.dumps([home, str(task_id or 'default')]).encode()
+    return '/workspace/browser-use/' + hashlib.sha256(identity).hexdigest()[:20]
 
 
 def execute(code, session='', timeout_s=300, task_id=None, local=False):
     from agent.redact import redact_sensitive_text
     from tools.registry import tool_error, tool_result
     from tools import browser_use_cli as native
-    from tools.browser_session import run_fenced
+    from tools.browser_session import run_fenced_dispatch
     from tools.browser_session_lifecycle import update_session_activity
     from tools.interrupt import is_interrupted
     try:
@@ -143,19 +202,29 @@ def execute(code, session='', timeout_s=300, task_id=None, local=False):
             raise RuntimeError('No Python code provided')
         if session and not native._SESSION_RE.fullmatch(session):
             raise RuntimeError('Invalid session name: use 1-64 letters, digits, dashes or underscores')
+        if blocked := native._code_url_verdict(code, force_local=True).blocked:
+            raise RuntimeError(blocked)
         key = native._backend_cache_key(task_id, session, sidecar=True)
 
-        def dispatch():
+        def dispatch(check_lease):
             if is_interrupted():
                 raise RuntimeError('Browser execution interrupted before launch')
-            # Native cold-session creation can release a losing duplicate;
-            # serialize that path before publishing its SSH owner.
-            with _lock:
-                current = _session(key, task_id)
+            current = _session(key)
+            workspace = _task_workspace(current.home, task_id)
+
+            def check_dispatch():
+                if is_interrupted():
+                    raise RuntimeError('Browser execution interrupted before launch')
+                check_lease()
+
             with current.lock:
                 proc = current.process
+                check_dispatch()
+                _validated_endpoint(key, current.env, current.browser, current.endpoint)
+                check_dispatch()
                 try:
                     proc.stdin.write((json.dumps({'code': code, 'setup': native._OWN_TAB_PREAMBLE if session else '',
+                                                  'workspace': workspace,
                                                   'timeout': native._clamp_timeout(timeout_s)}) + '\n').encode())
                     proc.stdin.flush()
                     # Raw reads avoid buffered readline hiding an already-received response.
@@ -178,12 +247,16 @@ def execute(code, session='', timeout_s=300, task_id=None, local=False):
                                                'image-built harness dependencies. Action outcome may be unknown. '
                                                'Do not replay automatically.')
                         data.extend(chunk)
-                    response = json.loads(data)
+                    line, sep, trailing = bytes(data).partition(b'\n')
+                    if not sep or trailing:
+                        raise RuntimeError('Browser SSH session returned malformed output; '
+                                           'action outcome may be unknown. Do not replay automatically.')
+                    response = json.loads(line)
                     if 'error' in response:
                         raise RuntimeError(response['error'])
                     result = {'success': response['returncode'] == 0, 'exit_code': response['returncode'],
                               'output': redact_sensitive_text(response['stdout'], force=True),
-                              'workspace': current.workspace, 'downloads': '/workspace/browser-use/downloads'}
+                              'workspace': workspace, 'downloads': '/workspace/browser-use/downloads'}
                     if session:
                         result['session'] = session
                     if response.get('stderr'):
@@ -205,10 +278,10 @@ def execute(code, session='', timeout_s=300, task_id=None, local=False):
                             return attached
                     return result
                 except BaseException:
-                    close(cache_key=key)
+                    close(cache_key=key, owner=current)
                     raise
 
-        result = run_fenced({'features': {'local': True}}, dispatch)
+        result = run_fenced_dispatch(dispatch)
         return result if result.get('_multimodal') else tool_result(result)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         return tool_error(redact_sensitive_text(str(error), force=True))

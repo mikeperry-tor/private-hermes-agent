@@ -1,7 +1,9 @@
 """Run inside disposable Hermes; exercise actual remote browser_exec, no inference."""
 import concurrent.futures
+from contextlib import contextmanager
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -36,7 +38,331 @@ assert runtime.start().running
 registered = decoded(registry.dispatch('browser_exec', {'code':'print("registry-remote")',
                                   'session':'registry-fixture'}, task_id='browser-fixture'))
 assert registered.get('output','').strip() == 'registry-remote', registered
+# Interleave last-owner cleanup with a real attachment to the same Chromium,
+# after DevTools discovery and before the successor's cache record is published.
+from unittest.mock import Mock, patch
+from tools import browser_session, browser_session_lifecycle, browser_session_sandbox
+from tools import browser_url_policy
+from tools.bot_desktop import sandbox_host
+
+with patch.object(browser_url_policy, 'check_website_access', return_value={
+        'message': 'Blocked by website policy', 'host': 'fixture.invalid', 'rule': 'fixture.invalid', 'source': 'fixture',
+}):
+    refused = decoded(browser.browser_exec("goto_url('https://fixture.invalid')", task_id='browser-fixture'))
+    assert refused.get('error') == 'Blocked by website policy', refused
+
+old_key = browser._backend_cache_key('browser-fixture', 'registry-fixture', sidecar=True)
+old_record = browser_session._active_sessions[old_key]
+original_launch = old_record['sandbox_launch']
+
+
+def attach_during_cleanup(key, _force_local):
+    candidate = browser_session_sandbox.create_sandbox_session(key)
+    assert candidate['sandbox_launch'] == original_launch
+    assert candidate['cdp_url'] == old_record['cdp_url']
+    browser_session_lifecycle.cleanup_single_session(old_key)
+    assert browser_session_sandbox._launched[candidate['launcher_key']][1:3] == original_launch
+    return candidate
+
+
+replacement_name = 'attachment-successor'
+replacement_key = browser._backend_cache_key('browser-fixture', replacement_name, sidecar=True)
+with patch.object(browser_session, '_create_session_for_key', attach_during_cleanup):
+    successor = browser_session.get_session_info(replacement_key)
+assert successor['sandbox_launch'] == original_launch
+assert 'attachment-survived' in run('print("attachment-survived")', replacement_name)['output']
+print('PASS: Chromium survives last-owner cleanup during attachment and publication', flush=True)
 env = placement.terminal_environment()
+user = sandbox_host._user_for(env)
+profile = sandbox_host.browser_profile_dir(env)
+
+# A new named session cannot displace the recorded process while it still
+# holds the Chromium singleton, even if its endpoint file is missing.
+owner = browser_session_sandbox._launched[successor['launcher_key']]
+missing_key = browser._backend_cache_key('browser-fixture', 'missing-endpoint-contender', sidecar=True)
+active_port = f'{profile}/DevToolsActivePort'
+hidden_port = f'{active_port}.fixture-hidden'
+assert streams.run_in(env, ['mv', active_port, hidden_port], user=user, timeout=10).returncode == 0
+try:
+    try:
+        browser_session.get_session_info(missing_key)
+    except RuntimeError as error:
+        assert 'still owns the profile' in str(error), error
+    else:
+        raise AssertionError('published a second browser while the original owned the profile')
+    assert missing_key not in browser_session._active_sessions
+    assert browser_session_sandbox._launched[successor['launcher_key']] is owner
+finally:
+    assert streams.run_in(env, ['mv', hidden_port, active_port], user=user, timeout=10).returncode == 0
+print('PASS: missing DevTools state keeps the live native profile owner', flush=True)
+
+
+def remove_fixture_chromium(pid):
+    # This process belongs to the disposable fixture. Force its exit so the
+    # recovery check does not depend on how Chromium handles suspended TERM.
+    assert streams.run_in(env, ['kill', '-KILL', pid], timeout=10).returncode == 0
+    for _ in range(100):
+        proc = streams.run_in(env, ['ps', '-o', 'stat=', '-p', pid], timeout=10)
+        if proc.returncode != 0 or proc.stdout.lstrip().startswith(b'Z'):
+            return
+        time.sleep(.1)
+    raise AssertionError('The retired Chromium fixture did not exit')
+
+
+def assert_retiring_browser_refuses():
+    try:
+        browser_session.get_session_info(replacement_key)
+    except RuntimeError as error:
+        assert 'still shutting down' in str(error), error
+    else:
+        raise AssertionError('published a retiring Chromium endpoint')
+
+
+wrong_browser_script = """
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+import sys
+
+class DifferentBrowser(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        result = dict(webSocketDebuggerUrl=f'ws://127.0.0.1:{self.server.server_port}/devtools/browser/other')
+        self.wfile.write(json.dumps(result).encode())
+
+with HTTPServer(('127.0.0.1', int(sys.argv[1])), DifferentBrowser) as listener:
+    print(listener.server_port, flush=True)
+    listener.serve_forever()
+"""
+
+# Let TERM queue without exiting so DevTools still listens during the next attach.
+pid = str(original_launch[0])
+assert streams.run_in(env, ['kill', '-STOP', pid], timeout=10).returncode == 0
+try:
+    browser_session_lifecycle.cleanup_single_session(replacement_key)
+    status = streams.run_in(env, ['cat', f'/proc/{pid}/status'], timeout=10)
+    pending = next(line.split()[-1] for line in status.stdout.splitlines() if line.startswith(b'ShdPnd:'))
+    assert status.returncode == 0 and int(pending, 16) & (1 << (signal.SIGTERM - 1)), 'TERM was not sent to the suspended Chromium'
+    assert_retiring_browser_refuses()
+
+    # A different responsive endpoint in the file does not prove that the
+    # suspended original has released the singleton.
+    listener = streams.open_stream(env, ['python3', '-u', '-c', wrong_browser_script, '0'])
+    assert streams.run_in(env, ['mv', active_port, hidden_port], user=user, timeout=10).returncode == 0
+    try:
+        port = int(listener.stdout.readline())
+        path = '/devtools/browser/other'
+        write = streams.run_in(env, ['python3', '-c',
+            'from pathlib import Path; import sys; Path(sys.argv[1]).write_text(sys.argv[2])',
+            active_port, f'{port}\n{path}\n'], user=user, timeout=10)
+        assert write.returncode == 0
+        assert browser_session_sandbox._live_devtools(env, user, profile) == (port, path)
+        assert_retiring_browser_refuses()
+        assert successor['launcher_key'] in browser_session_sandbox._retiring
+    finally:
+        listener.kill()
+        listener.wait()
+        assert streams.run_in(env, ['mv', hidden_port, active_port], user=user, timeout=10).returncode == 0
+finally:
+    remove_fixture_chromium(pid)
+print('PASS: matching and changed DevTools endpoints refuse while the retired owner remains', flush=True)
+
+# Inject port forwarding failure only after a real Chromium has published its
+# endpoint. Hold its shutdown acknowledgement to exercise the immediate retry.
+real_signal = browser_session_sandbox._signal_launch
+pending_signals = []
+
+
+def delay_new_shutdown(launch):
+    if launch[1:3] == original_launch:  # confirm the first fixture really left before starting this one
+        return real_signal(launch)
+    pending_signals.append(launch)
+    return True
+
+
+with patch.object(browser_session_sandbox, '_signal_launch', delay_new_shutdown):
+    try:
+        with patch.object(streams, 'forward_port', side_effect=RuntimeError('fixture forwarding failure')):
+            try:
+                browser_session.get_session_info(replacement_key)
+            except RuntimeError as error:
+                assert 'fixture forwarding failure' in str(error), error
+            else:
+                raise AssertionError('a failed forward published a browser')
+        assert_retiring_browser_refuses()
+        assert len(pending_signals) == 2 and pending_signals[0] == pending_signals[1]
+    finally:
+        if pending_signals:
+            remove_fixture_chromium(str(pending_signals[0][1]))
+print('PASS: failed startup retires the actual Chromium before a forwarding retry', flush=True)
+
+# Lose the SSH reply after the real detached command has returned in the
+# executor. The next session must recover that precise Chromium as its owner.
+real_run = streams.run_in
+launch_reply = []
+
+
+def lose_detached_reply(target, argv, **kwargs):
+    reply = real_run(target, argv, **kwargs)
+    if browser_session_sandbox._LAUNCH_OWNER_ARG in argv[-1] and 'setsid ' in argv[-1]:
+        assert reply.returncode == 0, reply.stderr
+        launch_reply.append(tuple(reply.stdout.decode().split()[-2:]))
+        raise subprocess.TimeoutExpired('fixture detached browser reply', 1)
+    return reply
+
+
+with patch.object(streams, 'run_in', side_effect=lose_detached_reply):
+    try:
+        browser_session.get_session_info(replacement_key)
+    except subprocess.TimeoutExpired:
+        pass
+    else:
+        raise AssertionError('the detached launch reply was not lost')
+assert len(launch_reply) == 1
+endpoint = browser_session_sandbox._wait_for_port(env, user, profile)
+with patch.object(browser_session_sandbox, '_live_devtools',
+                  side_effect=[browser_session_sandbox.GONE, endpoint, endpoint]):
+    recovered = browser_session.get_session_info(replacement_key)
+assert recovered['sandbox_launch'] == (int(launch_reply[0][0]), launch_reply[0][1]), recovered
+with patch.object(browser_session_sandbox, '_signal_launch', wraps=browser_session_sandbox._signal_launch) as stop:
+    browser_session_lifecycle.cleanup_single_session(replacement_key)
+    assert any(call.args[0][1:3] == recovered['sandbox_launch'] for call in stop.call_args_list)
+remove_fixture_chromium(launch_reply[0][0])
+print('PASS: lost detached Chromium reply recovers the exact launcher and allows native cleanup', flush=True)
+# A replacement started outside Hermes' registry on the same desktop profile
+# must stay under its actual owner's control when its attachments are closed.
+managed = browser_session.get_session_info(replacement_key)
+remove_fixture_chromium(str(managed['sandbox_launch'][0]))
+borrowed_pid, _ = browser_session_sandbox._start_chromium(
+    env, user, sandbox_host.chromium_executable(env), profile,
+    {**runtime.published_env(), 'TMPDIR': streams.sandbox_temp_dir(env)})
+borrowed_name = 'independently-started-browser'
+borrowed_key = browser._backend_cache_key('browser-fixture', borrowed_name, sidecar=True)
+try:
+    browser_session_sandbox._wait_for_port(env, user, profile)
+    borrowed = browser_session.get_session_info(borrowed_key)
+    assert borrowed['launcher_key'] == managed['launcher_key']
+    browser_session_lifecycle.cleanup_single_session(replacement_key)
+    browser_session_lifecycle.cleanup_single_session(borrowed_key)
+    again = browser_session.get_session_info(borrowed_key)
+    assert again['cdp_url'] == borrowed['cdp_url']
+    assert 'sandbox_launch' not in borrowed and 'sandbox_launch' not in again
+    assert run('print("borrowed-browser-alive")', borrowed_name)['output'].strip() == 'borrowed-browser-alive'
+finally:
+    browser_session_lifecycle.cleanup_single_session(borrowed_key)
+    remove_fixture_chromium(str(borrowed_pid))
+print('PASS: a same-profile independent Chromium remains attachable after releasing a task', flush=True)
+# Let the independent browser acquire the profile after the managed path has
+# observed no endpoint, while both native launch attempts use the same profile.
+native_spawn = browser_session_sandbox._spawn_owned
+dock_pids = []
+dock_key = browser._backend_cache_key('browser-fixture', 'initial-dock-winner', sidecar=True)
+
+
+def dock_wins_first(env, user, profile, key, published):
+    pid, _ = browser_session_sandbox._start_chromium(
+        env, user, sandbox_host.chromium_executable(env), profile,
+        {**published, 'TMPDIR': streams.sandbox_temp_dir(env)})
+    dock_pids.append(pid)
+    browser_session_sandbox._wait_for_port(env, user, profile)
+    return native_spawn(env, user, profile, key, published)
+
+
+try:
+    with patch.object(browser_session_sandbox, '_spawn_owned', side_effect=dock_wins_first):
+        dock = browser_session.get_session_info(dock_key)
+    browser_session_lifecycle.cleanup_single_session(dock_key)
+    again = browser_session.get_session_info(dock_key)
+    assert again['cdp_url'] == dock['cdp_url']
+    assert 'sandbox_launch' not in dock and 'sandbox_launch' not in again
+    assert run('print("dock-winner-alive")', 'initial-dock-winner')['output'].strip() == 'dock-winner-alive'
+finally:
+    browser_session_lifecycle.cleanup_single_session(dock_key)
+    if dock_pids:
+        remove_fixture_chromium(str(dock_pids[0]))
+print('PASS: a dock Chromium winning cold discovery keeps its endpoint and cleanup authority', flush=True)
+# A recycled port can answer while the profile still names a crashed browser.
+# This listener deliberately advertises a different WebSocket browser path.
+wrong_listener = streams.open_stream(env, ['python3', '-u', '-c', wrong_browser_script, '0'])
+try:
+    recycled_port = int(wrong_listener.stdout.readline())
+    stale_path = '/devtools/browser/previous-browser'
+    write = streams.run_in(env, ['python3', '-c',
+        'from pathlib import Path; import sys; Path(sys.argv[1]).write_text(sys.argv[2])',
+        f'{profile}/DevToolsActivePort', f'{recycled_port}\n{stale_path}\n'])
+    assert write.returncode == 0
+    assert browser_session_sandbox._live_devtools(env, user, profile) is browser_session_sandbox.GONE
+    fresh = browser_session.get_session_info(replacement_key)
+    assert not fresh['cdp_url'].endswith(stale_path) and 'sandbox_launch' in fresh
+    assert run('print("recycled-port-recovered")', replacement_name)['output'].strip() == 'recycled-port-recovered'
+finally:
+    wrong_listener.kill()
+    wrong_listener.wait()
+print('PASS: a recycled TCP port cannot publish a stale DevTools path', flush=True)
+# Verify the live dispatch guard can distinguish temporary probe loss from
+# a stale endpoint even while native lookup has a positive confirmation.
+warm = browser_session._active_sessions[replacement_key]
+warm_runner = remote._sessions[replacement_key]
+observed_stdin = Mock(wraps=warm_runner.process.stdin)
+with (
+    patch.object(warm_runner.process, 'stdin', observed_stdin),
+    patch.object(browser_session_sandbox, '_live_devtools', return_value=None),
+):
+    refusal = decoded(browser.browser_exec(
+        'raise AssertionError("runner accepted an inconclusive probe")',
+        session=replacement_name, task_id='browser-fixture'))
+assert 'no usable DevTools endpoint' in refusal.get('error', ''), refusal
+observed_stdin.write.assert_not_called()
+assert browser_session._active_sessions[replacement_key] is warm
+assert remote._sessions[replacement_key] is warm_runner
+
+
+def check_recycled_runner(recycle_while_queued):
+    # Recycle the exact port while native lookup still has a positive cache.
+    warm = browser_session._active_sessions[replacement_key]
+    old_runner = remote._sessions[replacement_key]
+    original_lock = old_runner.lock
+    warm_port, _ = browser_session_sandbox._live_devtools(env, user, profile)
+    listener = None
+
+    def recycle():
+        nonlocal listener
+        remove_fixture_chromium(str(warm['sandbox_launch'][0]))
+        listener = streams.open_stream(env, ['python3', '-u', '-c', wrong_browser_script, str(warm_port)])
+        assert int(listener.stdout.readline()) == warm_port
+        assert browser_session_sandbox.sandbox_browser_alive(warm), 'warm cache was not exercised'
+
+    @contextmanager
+    def queued():
+        with original_lock:
+            if recycle_while_queued:
+                recycle()
+            yield
+
+    try:
+        if not recycle_while_queued:
+            recycle()
+        observed = Mock(wraps=old_runner.process.stdin)
+        with patch.object(old_runner, 'lock', queued()), patch.object(old_runner.process, 'stdin', observed):
+            refusal = decoded(browser.browser_exec(
+                'raise AssertionError("stale runner received model code")',
+                session=replacement_name, task_id='browser-fixture'))
+        assert 'changed during setup' in refusal.get('error', ''), refusal
+        observed.write.assert_not_called()
+        assert replacement_key not in browser_session._active_sessions
+        assert replacement_key not in remote._sessions
+        recovered = run('print("warm-recycled-port-recovered")', replacement_name)
+        assert recovered['output'].strip() == 'warm-recycled-port-recovered'
+        assert remote._sessions[replacement_key] is not old_runner
+    finally:
+        if listener is not None:
+            listener.kill()
+            listener.wait()
+
+
+check_recycled_runner(recycle_while_queued=False)
+check_recycled_runner(recycle_while_queued=True)
+print('PASS: warm and queued dispatch retire stale runners with zero Python writes and recover on explicit retry', flush=True)
 namespace = streams.run_in(env, ['readlink', '/proc/self/ns/net'], timeout=10)
 assert namespace.returncode == 0, namespace.stderr.decode()
 executor_netns = namespace.stdout.decode().strip()
@@ -44,7 +370,7 @@ assert executor_netns.startswith('net:['), executor_netns
 native_screenshot = browser._native_screenshot_result
 browser._native_screenshot_result = lambda *args: None  # Separate screenshot staging from provider choice.
 server = streams.open_stream(env, ['python3', '-u', '-c', r'''
-from http.server import BaseHTTPRequestHandler,HTTPServer
+from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 class Page(BaseHTTPRequestHandler):
  def do_GET(self):
   self.send_response(200)
@@ -52,7 +378,8 @@ class Page(BaseHTTPRequestHandler):
   self.end_headers()
   self.wfile.write(b'<title>executor-browser-fixture</title><input id="entry"><button onclick="document.title=document.querySelector(\'#entry\').value">save</button><a download="proof.txt" href="data:text/plain,executor-download">download</a>')
  def log_message(self,*args): pass
-s=HTTPServer(('127.0.0.1',0),Page)
+# A speculative browser connection must not block the later Python client.
+s=ThreadingHTTPServer(('127.0.0.1',0),Page)
 print(s.server_port,flush=True)
 s.serve_forever()
 '''])
@@ -92,6 +419,9 @@ try:
     p = Path(shot['screenshot_path'])
     assert p.is_file() and p.read_bytes().startswith(b'\x89PNG'), shot
     assert '/cache/browser-use/screenshots/' in str(p)
+    for filename in ('relative.png', '/tmp/browser fixture screenshot.png'):
+        shot = run(f'print(capture_screenshot({filename!r}))')
+        assert Path(shot['screenshot_path']).read_bytes().startswith(b'\x89PNG'), shot
     # Chromium's live absolute socket symlink must not break intended native
     # file sync. Its profile remains authoritative in the executor bind data.
     from hermes_constants import get_hermes_home
@@ -258,7 +588,7 @@ runpy.run_path('/opt/private-hermes/browser-session.py',run_name='__main__')
     owner = streams.open_stream(env, ['env', '-i', *(k+'='+v for k,v in child_env.items()),
                                 '/opt/browser-harness/bin/python', '-u', '-c', delayed])
     owner.stdin.write((json.dumps({'code':'from pathlib import Path; Path("/workspace/browser-startup-code-ran").touch()',
-                                  'timeout':30})+'\n').encode())
+                                  'workspace':child_env['BH_AGENT_WORKSPACE'], 'setup':'', 'timeout':30})+'\n').encode())
     owner.stdin.flush()
     for _ in range(100):
         entered = streams.run_in(env, ['test','-f','/workspace/browser-startup-entered'])

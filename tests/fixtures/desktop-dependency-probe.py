@@ -31,6 +31,29 @@ with patch.object(streams, 'run_in', return_value=subprocess.CompletedProcess([]
     else:
         raise AssertionError('failed probe became an empty missing-command list')
 
+# Discovery budget shares one absolute deadline across env creation, CUA binary check, and harness probe.
+import time as _time
+from hermes_cli import private_browser_use, private_computer_use
+budget_env = SimpleNamespace(_bd_desktop_user=None)
+clock = {'offset': 0.0}
+real_monotonic = _time.monotonic
+seen_timeouts = []
+with (
+    patch.object(sandbox_host.time, 'monotonic', side_effect=lambda: real_monotonic() + clock['offset']),
+    patch.object(private_computer_use.time, 'monotonic', side_effect=lambda: real_monotonic() + clock['offset']),
+    patch.object(private_browser_use.time, 'monotonic', side_effect=lambda: real_monotonic() + clock['offset']),
+    patch.object(placement, 'resolve', return_value=where),
+    patch.object(placement, 'terminal_environment', side_effect=lambda create=True: (clock.__setitem__('offset', clock['offset'] + 5.0), budget_env)[1]),
+    patch.object(private_browser_use, '_policy'),
+    patch.object(streams, 'run_in', side_effect=lambda _e, argv, **kw: (
+        seen_timeouts.append(kw['timeout']), subprocess.CompletedProcess(argv, 0, b'', b''))[1]),
+):
+    assert private_browser_use.available()
+    assert private_browser_use.available()  # harness probe memoized on env
+assert len(seen_timeouts) == 3  # cua check #1, harness check #1 (memoized on #2), cua check #2
+assert all(0.25 <= t <= 3.1 for t in seen_timeouts), seen_timeouts
+assert sandbox_host.probe_budget(real_monotonic() - 1.0, 4.0) == 0.25
+
 with patch.object(placement, 'resolve', return_value=where), \
         patch.object(runtime, '_owned_sandbox_env', return_value=None), \
         patch.object(runtime, '_sandbox_env', return_value=executor), \

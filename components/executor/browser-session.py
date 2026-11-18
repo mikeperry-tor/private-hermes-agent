@@ -5,10 +5,30 @@ from pathlib import Path
 import queue
 import re
 import signal
+import stat
 import subprocess
 import sys
 import threading
 import time
+
+
+def _printed_screenshot(stdout, workspace, started):
+    """Recognize a printed path in the model's cwd, including spaces."""
+    for line in reversed(stdout.splitlines()):
+        # The helper result may occupy the entire line. Keep the existing
+        # absolute-path scan for callers who print it alongside other text.
+        matches = re.findall(r"""(/[^\s"']+?\.(?:png|jpe?g|webp))""", line, re.IGNORECASE)
+        if line.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            matches.append(line)
+        for candidate in reversed(matches):
+            path = Path(workspace) / candidate
+            try:
+                info = path.stat()
+            except (OSError, ValueError):
+                continue
+            if stat.S_ISREG(info.st_mode) and info.st_mtime >= started - 1:
+                return str(path)
+    return None
 
 
 def main():
@@ -39,6 +59,8 @@ def main():
                 admin.ensure_daemon()
                 if closed.is_set():
                     raise RuntimeError('Browser session closed during startup; model code was not launched')
+                workspace = request['workspace']
+                Path(workspace).mkdir(mode=0o700, parents=True, exist_ok=True)
                 command = [sys.executable, '-c',
                            'import sys; sys.path.insert(0,"/opt/private-hermes"); '
                            'import browser_use_shot as shot; import browser_harness.helpers as helpers; '
@@ -50,7 +72,7 @@ def main():
                            'exec(' + repr(request['setup']) + ', vars(harness)); harness.main()']
                 proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True, start_new_session=True,
-                                        cwd=os.environ['BH_AGENT_WORKSPACE'])
+                                        cwd=workspace, env={**os.environ, 'BH_AGENT_WORKSPACE': workspace})
                 deadline = time.monotonic() + request['timeout']
                 incoming = request['code']
                 while True:
@@ -61,7 +83,11 @@ def main():
                         incoming = None
                         if closed.is_set() or time.monotonic() >= deadline:
                             os.killpg(proc.pid, signal.SIGKILL)
-                            stdout, stderr = proc.communicate()
+                            # Detached descendants may retain these pipes after the CLI dies.
+                            # Reap our killed child without waiting for their EOF.
+                            proc.wait()
+                            proc.stdout.close()
+                            proc.stderr.close()
                             raise TimeoutError('Browser execution interrupted or timed out; already-issued '
                                                'browser actions may have completed. Do not replay automatically.')
                 if closed.is_set():
@@ -69,11 +95,8 @@ def main():
                                        'Do not replay automatically.')
                 result = dict(returncode=proc.returncode, stdout=stdout, stderr=stderr)
                 # These are executor paths. The gateway must fetch, never open them locally.
-                for candidate in reversed(re.findall(r'(/[^\s\"\']+?\.(?:png|jpe?g|webp))', stdout, re.I)):
-                    p = Path(candidate)
-                    if p.is_file() and p.stat().st_mtime >= started - 1:
-                        result['screenshot'] = candidate
-                        break
+                if screenshot := _printed_screenshot(stdout, workspace, started):
+                    result['screenshot'] = screenshot
             except (OSError, RuntimeError, TimeoutError, subprocess.SubprocessError) as error:
                 result = {'error': str(error)}
                 # A timeout ends this identity rather than reusing uncertain in-flight CDP.

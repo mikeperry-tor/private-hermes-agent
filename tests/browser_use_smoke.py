@@ -14,6 +14,10 @@ def agent_python(code, check=True):
 
 
 def check():
+    owner = agent_python(Path('tests/fixtures/browser-owner.py').read_text(), check=False)
+    print(owner.stdout, owner.stderr, flush=True)
+    if owner.returncode:
+        raise RuntimeError('Browser owner regression failed')
     result = agent_python(Path('tests/fixtures/browser-use.py').read_text(), check=False)
     print(result.stdout, result.stderr, flush=True)
     if result.returncode:

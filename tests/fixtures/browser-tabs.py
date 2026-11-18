@@ -14,6 +14,7 @@ def run(code, session):
 
 
 assert browser.browser_exec_available()
+assert remote._task_workspace('/profiles/a', 'bc') != remote._task_workspace('/profiles/ab', 'c')
 assert runtime.start().running
 try:
     first = run('import sys; assert __name__ == "__main__"; '
@@ -35,6 +36,15 @@ try:
     recovered = run('print(current_tab()["targetId"])', 'tab-first')
     assert recovered not in (first, second, switched)
     assert run('print(current_tab()["targetId"])', 'tab-first') == recovered
+    def scratch(task, code):
+        result = json.loads(browser.browser_exec(code, session='scratch-shared-tab', task_id=task))
+        assert result['success'], result
+        return result['workspace'], result['output'].strip()
+
+    first_space, tab = scratch('task-one', 'from pathlib import Path; Path("canary").touch(); print(current_tab()["targetId"])')
+    second_space, same_tab = scratch('task-two', 'from pathlib import Path; assert not Path("canary").exists(); print(current_tab()["targetId"])')
+    returned_space, _ = scratch('task-one', 'from pathlib import Path; assert Path("canary").is_file()')
+    assert first_space == returned_space != second_space and tab == same_tab
     setup = browser._OWN_TAB_PREAMBLE
     try:
         browser._OWN_TAB_PREAMBLE = 'cdp = lambda *args, **kwargs: {}\n' + setup
@@ -48,6 +58,22 @@ try:
     failure = json.loads(browser.browser_exec('# one\n# two\nraise RuntimeError("tab-trace")',
                                              session='tab-first', task_id='tab-regression'))
     assert failure['exit_code'] != 0 and 'line 3' in failure['stderr'], failure
+    # A detached child keeps the CLI's output pipes open. A timeout must still
+    # report outcome-unknown and clean the owner before a successor can run.
+    import uuid
+    stop = '/tmp/browser-pipe-stop-' + uuid.uuid4().hex
+    descendant = (f'import pathlib,threading; stop=pathlib.Path({stop!r}); event=threading.Event()\n'
+                  'while not stop.exists(): event.wait(0.01)')
+    code = ('import subprocess,sys,threading\n'
+            f'subprocess.Popen([sys.executable,"-c",{descendant!r}],start_new_session=True)\n'
+            'threading.Event().wait()')
+    try:
+        interrupted = json.loads(browser.browser_exec(code, session='pipe-timeout',
+            task_id='tab-regression', timeout_s=5))
+        assert 'Do not replay automatically' in interrupted.get('error', ''), interrupted
+    finally:
+        assert streams.run_in(env, ['touch', stop]).returncode == 0
+    assert run('print("after-pipe-timeout")', 'pipe-timeout') == 'after-pipe-timeout'
 finally:
     remote.close()
     runtime.stop()
