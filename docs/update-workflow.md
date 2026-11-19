@@ -1,6 +1,6 @@
 # Hermes update workflow
 
-Use these notes with the [build and patch maintenance guide](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance)
+Use this procedure with the [build and patch maintenance guide](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance)
 and [planning workflow](planning-workflow.md). They describe how to select
 integration checks; the maintained component guides own the operating contracts.
 
@@ -49,62 +49,53 @@ integration checks; the maintained component guides own the operating contracts.
   by earlier browser actions. Record skipped phases and their supporting evidence;
   obtain a complete fixture run when phase dependencies remain uncertain.
 - Report implementation, validation and independent review separately. Record
-  exact reviewed revisions and platform/live-service limits in maintained guides,
-  then remove the completed plan after acceptance. Keep generated private logs
+  the tested source/image, checks establishing current behavior and platform/live-
+  service limits in the owning guide. Keep execution/review chronology and phase
+  identifiers in the plan, not appended guide updates. Keep generated private logs
   and runtime state out of commits.
 
-## Lessons from v0.23.0 to v0.23.1
+## Frontend and dispatch contracts
 
-The upgrade had one build break: the native frontend recipe switched to pnpm,
-which the official runtime omits. The derived frontend stage now installs it
-through upstream's hash-verified PM pin. Only one patch import context needed
-refreshing; all seven hardening patches remain necessary.
+Use upstream's locked frontend recipe and hash-verified package-manager pin in a
+disposable build stage. The official runtime can omit pnpm; its passive warning
+is advisory, while dependency download or build failures must fail visibly.
+Qualify Python plugin environment preparation independently of frontend tooling.
 
-New saved-gateway relays and browser-vault dispatch required tracing beyond the
-changed patch context. Existing response enforcement and tool exclusions covered
-them; controlled relay canaries supplied the missing runtime evidence without
-new network grants or policy machinery. Native threaded availability probes
-required dependency refusal/recovery checks, not another wrapper deadline.
+Trace saved-gateway HTTP/WebSocket relays, inline browser-vault dispatch, peer and
+backup-transfer routes as well as patched files. Retain native authentication,
+exact-host/origin, response enforcement and hosted-tool/argument checks. Test
+unauthorized/invalid-input refusal without mutation and unconfigured-provider
+refusal; do not enable a provider or widen network grants just to test a route.
+Native threaded availability checks own their budgets; test dependency failure
+and recovery before adding another wrapper deadline.
 
-Schema 53 changes the former default clarification timeout from 3600 to 90
-seconds. Populated-profile migration preserved other chosen settings and SSH
-identities. See [configuration semantics](configuration.md#tool-discovery-default).
+Preserve native ARM64 Chromium discovery and no-follow named-tab marker publication.
+Per-hop CDN redirect host checks alone do not replace bounded public-raster
+retrieval, connection-time destination validation, TLS/credential isolation or
+consent. Keep the native restricted-client CDN consumer supported when changing
+image routes.
 
-Qualification found no major hardening regression in the tested scope. Transient
-Tor failures, a stale local proxy image and fixture/observation issues were
-resolved separately from the upgrade's build change. The native missing-pnpm
-runtime warning is advisory. Detailed results, independent review and remaining
-limits are in the [v0.23.1 qualification record](development.md#hermes-v0231-integration-qualification).
+## Image, file and state checks
 
-## Lessons from v0.23.1 to v0.23.2
+Qualify Copy and Save through the shared browser image reader, including actual
+menu dispatch, cancellation, one-time approval, `off` refusal, original filenames,
+saved-gateway behavior and failure without direct-browser fallback. Preserve
+native CORS/size handling for `browser_native`. A controlled clipboard sink proves
+request placement and bytes, not OS clipboard permission or Electron containment.
 
-Treat this point release as a full integration review: the release spans 5,211
-changed files, including policy dispatch, HTTP routes, configuration and browser
-consumers. All eleven pre-existing downstream patches touch files changed by the release.
-Native ARM64 Chromium discovery replaces the former downstream discovery hunk;
-per-hop CDN redirect validation still does not replace the private raster reader
-or consent policy. Preserve the native hosted-tool and argument checks when
-rebasing deployment exclusions, and native no-follow marker publication when
-retaining strict named-tab setup.
+Require ENOENT/404 for a missing SSH file or parent alongside regular-file,
+directory, symlink and sensitive-path controls. GNU realpath can accept a missing
+final component; accepting any error would hide incorrect classification.
 
-The new context-menu Copy image action reaches the shared browser image reader.
-That reader now applies the existing authenticated private-image policy, retaining
-native CORS/size/time handling for `browser_native`. Qualify Copy alongside Save,
-including cancellation, failure without browser fallback and actual menu dispatch.
-A controlled clipboard sink establishes request placement and bytes, not OS
-clipboard permissions. Newly added peer and backup-transfer routes also need
-admission checks beyond patch applicability; do not enable a peer provider merely
-to test the unconfigured deployment.
+Exercise a populated profile from the relevant prior official image, not only
+an empty profile or a schema number. Verify settings, sessions, identities and
+saved env/auth/plugin state after repeated supported loading. Native schema
+migration is not arbitrary database-downgrade support. Inspect clarification and
+other native defaults against [configuration semantics](configuration.md#tool-discovery-default)
+rather than replaying assumptions from a prior release.
 
-Native schema remains 53. Exercise both older-schema migration and a populated
-v0.23.1 schema-53 profile across the selected release, preserving settings, sessions
-and identities. The native Python dependency lock, executor harness closure, screenshot
-helper, omitted session fixture, pnpm pin and stock Compose comparison are unchanged;
-verify those facts against the packaged source before reusing their inputs.
-
-New pre-read inspection also exposed a latent native SSH filesystem defect:
-GNU realpath accepts a missing final component, so inspect_file reported
-ENOTREG/400 rather than ENOENT/404. Correct the owning adapter's missing-path
-classification and retain the browser's negative assertion; accepting any error
-response would obscure whether its input-refusal control still works. Regular
-file, symlink and directory controls accompany the missing-file regression.
+Verify the Python lock, executor harness closure, screenshot helper, omitted
+public session fixture, package-manager pin and stock Compose comparison against
+the selected packaged source before reusing evidence. The [current packaged
+qualification](development.md#packaged-hermes-qualification) records coverage and
+limits; it is not a sequence of upgrade reports.

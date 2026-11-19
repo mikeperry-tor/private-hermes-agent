@@ -192,6 +192,9 @@ named tabs do not provide separate download or cookie authority.
 A named session selects a fresh tab before its first model program and after a
 harness daemon restart. Later calls retain that session's selected tab, including
 intentional tab switches. Failed tab initialization stops before model code runs.
+Browser Python scratch files are scoped to the task even when callers reuse a
+named tab. The scratch key encodes the profile and task separately. Downloads remain
+under the shared executor download path.
 
 The same executor service, Tor namespace, runner UID/GID 10000, SSH identity and
 home/workspace mounts serve both choices. Neither enables sudo or a writable
@@ -322,25 +325,19 @@ container-engine named volumes (`hermes-data` and `x402_treazury-data`). Other
 persistent files use the bind directories below. This keeps lock-sensitive state off the
 host-backed filesystem that failed qualification on this Docker Desktop host.
 `setup init` checks locking on the native volumes before applications start.
-No existing volume contents are copied or deleted by this change.
+Ordinary setup and Compose shutdown preserve existing volume contents.
 
-PrivateOnyxApp's PostgreSQL/OpenSearch initialization was checked as a possible
-workaround. Its Podman path initializes a temporary native volume and copies the
-stopped database into the host bind; its macOS PostgreSQL preparation removes
-only `user.containers.override_stat`. That attribute was absent on our test paths,
-and Docker's `com.docker.grpcfuse.ownership` attribute must remain intact.
-
-Our disposable mount reports filesystem type `fakeowner`. A competing process
-incorrectly acquired an exclusive lock on a freshly created file, but correctly
-failed after the file was closed and reopened. This matches the creation-path
-behavior described in [Docker issue #7004](https://github.com/docker/for-mac/issues/7004).
-Initializing a SQLite database in native container storage, closing it, copying it
-to the bind, and then opening it in WAL mode still allowed two writers to acquire
-the writer lock. Consequently, staging initialization or changing ownership is
-not a sufficient workaround for this host. Qualification must include fresh-file
-locking and SQLite writer exclusion, rather than just successful startup or
-database reads/writes. These observations describe the tested host, not all
-Docker Desktop or Linux bind mounts.
+The tested Docker Desktop host-backed bind filesystem reports `fakeowner` and
+fails fresh-file exclusive locking and competing SQLite WAL writer exclusion.
+Existing-file locking can succeed even when fresh-file locking fails; this
+matches [Docker issue #7004](https://github.com/docker/for-mac/issues/7004).
+Initializing in native storage and copying a closed database into the bind, or
+changing ownership, does not establish safe WAL writer exclusion on this target.
+Native named volumes are required until the actual target filesystem and
+application locking are requalified. These limits do not describe every Docker
+Desktop or Linux bind filesystem. Preserve Docker's
+`com.docker.grpcfuse.ownership` attribute; removing unrelated ownership attributes
+is not a qualified storage workaround.
 
 Track that upstream issue when evaluating Docker Desktop updates. Before moving
 live state to host binds, rerun the fresh-file `flock` and competing SQLite WAL

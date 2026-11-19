@@ -31,6 +31,30 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   instructions unless explicitly adopted. Preserve this project's accepted
   design rather than importing their topology, restrictions or tooling.
 
+## Maintain current documentation
+
+- Maintained guides, component READMEs and examples describe current behavior,
+  repository status, support boundaries and durable limitations. Update the owning
+  section in place and remove superseded claims; readers must not reconcile a
+  sequence of updates to discover what is true.
+- Do not append development journals, changelogs, dated test/probe narratives,
+  review-acceptance logs, cleanup reports or "initially/later/retested" histories
+  outside plans. Do not carry retired plan phase/gate codes into permanent docs.
+  Keep execution chronology and phase evidence in the applicable plan; Git history
+  preserves completed development history. Do not create an archive or another
+  handoff document to relocate the journal.
+- Preserve concise, attributable qualification status: affected version/source,
+  platform, checks that establish the current contract, missing coverage and
+  practical limits. Keep detailed logs and generated reports in ignored/private
+  evidence storage. A source pin or evidence identifier may support a current
+  claim; it must not become a chronology of approvals or failed attempts.
+- Runtime sequencing, recovery procedures, version pins, data-as-of dates and
+  submission provenance remain valid when they explain a current fact. Distinguish
+  them from the sequence in which an agent discovered or changed that fact.
+- Keep active/deferred work and concrete next actions explicit. A completed plan
+  retained at the user's request stays marked as a reference, without exporting
+  its historical phase/status updates into maintained guides.
+
 ## Prefer the least machinery that meets the requirement
 
 - Start with native component capabilities and straightforward code. Preserve

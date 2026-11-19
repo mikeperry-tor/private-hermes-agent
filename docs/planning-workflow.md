@@ -101,11 +101,13 @@ restart coverage where relevant. Keep fixtures separate from production state
 and secrets; serialize checks sharing fixed networks/runtime state. Do not add
 arbitrary resource limits or deadlines to force a test or workflow to finish.
 
-Record concise evidence in the plan: implemented phases, reviewed revisions,
-material findings and dispositions, relevant check results and remaining work.
-Do not create a progress diary, duplicate generated reports or store secrets.
-Update maintained guides as behavior lands; a retained plan is not a substitute
-for operator documentation.
+Record phase/review evidence, findings, dispositions and remaining work in the
+plan. Keep generated reports and private logs outside tracked documentation.
+Maintained guides describe current contracts, repository status, qualification
+scope and limitations in place. Do not append phase/gate codes, approval histories,
+dated probe narratives, cleanup reports or superseding updates to them. Preserve
+useful evidence as a concise current qualification statement, not an execution
+journal. A retained plan is not a substitute for operator documentation.
 
 ## Resolve findings and finish
 
@@ -126,10 +128,12 @@ guides and affected plan consistency. Distinguish implementation, validation and
 review completion; unavailable checks are missing coverage, not passes.
 
 After final independent review acceptance and resolution of material findings,
-remove the completed plan in the completion commit or a focused cleanup commit.
+remove the completed plan in the completion commit or a focused cleanup commit,
+unless the user explicitly requests that it remain as a reference.
 Before removal, ensure maintained guides contain the lasting operating contracts,
-relevant qualification/review evidence and remaining limitations; update inbound
-links and dependent plans to refer to those guides. Git history preserves the
+current qualification scope and remaining limitations without execution chronology
+or retired phase/gate codes. Update inbound links and dependent plans to refer
+to those guides. Git history preserves the
 plan and detailed historical evidence; do not create an archive copy. Do not
 remove a plan merely because implementation is finished while required review
 or acceptance remains pending. Keep active and genuinely deferred plans explicit

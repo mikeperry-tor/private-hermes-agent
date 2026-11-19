@@ -241,69 +241,39 @@ No published endpoint or internal network grant is added.
 
 ### Executor capability requirements
 
-On 2026-11-11, disposable networkless Docker Desktop ARM64 experiments tested
-the optional Debian 13 desktop executor's OpenSSH listener with all capabilities
-dropped, then selectively restoring `SETUID`, `SETGID`, and `SYS_CHROOT`.
-Key-only login to runner UID 10000 succeeded with those three. Removing each
-independently reproduced a native failure:
+The root SSH listener retains four shared container grants; the Debian desktop
+variant also needs `AUDIT_WRITE` for interactive PTYs. These are native OpenSSH
+requirements for the pinned account/privilege-separation setup, not authority
+assigned to model commands.
 
-| Removed capability | Observed authentication failure | Responsibility |
-| --- | --- | --- |
-| `SYS_CHROOT` | `chroot("/run/sshd"): Operation not permitted [preauth]` | OpenSSH's pre-authentication privilege separation |
-| `SETUID` | `setresuid 997: Operation not permitted [preauth]` | Drop to the image's unprivileged SSH account, then create runner sessions |
-| `SETGID` | `setgroups: Operation not permitted [preauth]` | Clear supplementary groups during privilege separation/session setup |
+| Capability | Native responsibility / failure without it |
+| --- | --- |
+| `CHOWN` | Set runner ownership on `/dev/pts`; PTY setup otherwise fails |
+| `SETUID` | Drop to the image's unprivileged SSH account and create runner sessions; `setresuid` otherwise fails |
+| `SETGID` | Clear supplementary groups during privilege separation/session setup; `setgroups` otherwise fails |
+| `SYS_CHROOT` | OpenSSH pre-authentication chroot and Podman Chromium namespace chroot |
+| `AUDIT_WRITE` (desktop only) | Debian OpenSSH PTY audit submission; session exits if `linux_audit_write_entry` is denied |
 
-The test used the pinned desktop base index
-`c7d8607d076f26a64e0bd6828f74e1764af43fe3281368188459bb693bfa7567`,
-Debian OpenSSH `1:10.0p1-7+deb13u4`, a root listener, generated fixture keys,
-`UsePAM=no`, read-only root, writable `/run` and `/tmp`, and
-`no-new-privileges`. No host network, external connection or real credentials
-were involved. This historical non-PTY test establishes why the listener retains those
-grants; it does not establish every alternative SSH design's minimum or qualify Alpine,
-AMD64 or Podman by inference. UID 997 is image-specific.
+The lean Alpine executor has the four shared grants and expected bounding set
+`0x400c1`; the desktop executor has expected bounding set `0x200400c1`.
+`AUDIT_CONTROL` is absent: submitting an audit record does not permit audit-policy
+changes. Read-only root/key mounts and no-new-privileges remain in effect.
 
-Desktop GUI software adds no container capability requirement; Debian sshd’s
-PTY audit requirement is described below. Its Chromium sandbox
-needs user-namespace syscalls allowed by the desktop seccomp profile; those are
-distinct from capability grants. A non-root process can gain capabilities within
-a new child user namespace without acquiring authority over the parent-owned
-executor network namespace. Qualify parent-namespace restrictions separately.
-Actual ARM64 SSH desktop qualification found UID 10000, empty effective,
-permitted, inheritable and ambient sets, and `NoNewPrivs=1` for Xvnc, xfwm4,
-xfdesktop, xfce4-panel and cua-driver. The listener's capability bounding set is
-not a claim that every child retains those effective privileges. Chromium's own
-diagnostics reported namespace, PID/network-namespace and seccomp-BPF sandbox
-layers enabled; nested user-namespace root was unable to rejoin the parent-owned
-network namespace or create a raw socket in it.
-Keep effective/permitted capability evidence for runner processes distinct from
-the root listener's grants and from namespace-local browser sandbox capabilities.
-Historical both-engine Docker/Podman qualification measured authenticated runner
-sessions at UID 10000 with empty effective, permitted, inheritable and ambient sets and
-bounding set `0x400c0`; that residual is not authority in the executor's original
-user namespace under `NoNewPrivs=1` with no file capabilities. `SYS_CHROOT`
-remains a functional desktop/Podman Chromium sandbox requirement and is not
-security-only cleanup. See [development checks](development.md#executor-desktop-qualification) and the
-[qualification record](development.md#qualification-and-maintenance).
+Authenticated runner sessions and GUI processes run as UID 10000 with empty
+effective, permitted, inheritable and ambient capability sets under
+`NoNewPrivs=1`. The listener's bounding set is not a claim that children retain
+those effective privileges. Native terminal fixtures establish PTY behavior on
+both qualified engines; other OpenSSH/account designs require their own evidence.
 
-On 2026-11-14, the lean production WebApp fixture demonstrated that remote PTY
-allocation additionally requires daemon `CHOWN`: sshd otherwise exits after
-`chown(/dev/pts/0, 10000, 5) failed: Operation not permitted`. The shared executor
-grant now includes CHOWN for native PTY ownership setup. No network or runner
-effective capability is added; read-only root/key mounts and no-new-privileges
-remain. The expected lean bounding set is `0x400c1`. The historical `0x400c0`
-evidence above predates interactive PTYs; current coverage and platform limits
-are recorded in [terminal qualification](development.md#code-terminal-qualification).
-
-Debian OpenSSH additionally needs `AUDIT_WRITE` for PTY login: without it,
-authentication succeeds but `linux_audit_write_entry` fails with EPERM and the
-session exits. Networkless probes and production desktop fixtures on both supported
-engines succeeded after adding only that grant. The existing `executor-true` Compose inheritance supplies it only to
-the desktop root daemon; the lean Alpine executor retains the four shared grants.
-It permits audit-record submission, not audit-policy changes (`AUDIT_CONTROL` is
-absent). Expected desktop bounding set is `0x200400c1`; runner effective,
-permitted, inheritable and ambient sets remain zero. The native rootless result is qualified in the
-[terminal evidence](development.md#code-terminal-qualification), rather than
-inferred from an effective model.
+Desktop GUI software requires Chromium user-namespace syscalls in the selected
+seccomp policy, separately from daemon capability grants. Chromium diagnostics
+confirm namespace, PID/network-namespace and seccomp-BPF sandbox layers. Root in
+a child user namespace gains no authority over the parent-owned executor network
+namespace: native checks deny joining it and creating raw sockets there. Keep
+runner capability evidence, root listener grants and namespace-local browser
+capabilities distinct. See [desktop checks](development.md#executor-desktop-qualification)
+and [terminal coverage](development.md#code-terminal-qualification) for commands,
+qualified ARM64 targets and practical limits.
 
 ### Hermes capability boundary
 
@@ -320,16 +290,17 @@ set would require replacing the native s6 drop or adding a helper and is deferre
 Root services and profile wrappers share a `PATH`. The user-writable profile
 wrapper directory `/opt/data/.local/bin` is placed last so root s6, cont-init and
 wrapper command lookup prefers trusted directories, while uniquely named profile
-wrappers still resolve. This closes the demonstrated path where a UID-10000
-`sleep` in the writable directory ran as root after restarting the static service.
+wrappers still resolve. This prevents a UID-10000 executable in the writable
+directory from shadowing a root service command.
 
-Additional Hermes controls were reviewed: `HERMES_WRITE_SAFE_ROOT` guards
-selected file tools but not arbitrary shell code; Python `code_execution.mode:
+Additional Hermes controls have narrower responsibilities:
+`HERMES_WRITE_SAFE_ROOT` guards selected file tools but not arbitrary shell code; Python `code_execution.mode:
 strict` changes staging/interpreter selection, not OS containment. Iron-proxy
 can broker additional SDK credentials and enforce HTTP destination policies;
 its default host-proxy wiring is not enabled here. Cloud microVM backends and
 an external VM executor offer stronger kernel separation, but introduce a
-separate runtime/provider. No newly identified mode replaces this SSH design.
+separate runtime/provider. These optional mechanisms are not part of this stack's
+execution boundary.
 
 ## Ordinary WebApp terminals
 

@@ -137,7 +137,7 @@ If you prefer terminal use, you can use the terminal client with:
 make chat
 ```
 
-## Paid Research APIs and Cryptocurreny Wallet
+## Paid Research APIs and Cryptocurrency Wallet
 
 The stack includes [x402_treazury](https://github.com/mikeperry-tor/x402_treazury/),
 which gives Hermes Agent a full set of x402 APIs to conduct web searches, web page access,
@@ -150,7 +150,7 @@ make x402_treazury-init
 ```
 
 The provided `config/x402_treazury/research_desk.toml` (created after `make
-x402_treazury_init`) has 12 MCP endpoints organized by topic, automatically
+x402_treazury-init`) has 12 MCP endpoints organized by topic, automatically
 connected to your Hermes Agent. Funding this wallet with $5 worth of ZEC will
 enable all endpoints sharing a pair of ~$2.50 USDC wallets.
 
@@ -180,7 +180,7 @@ catalogs, and connects research tools without restarting Hermes. The 12 MCP
 endpoints will be added to Hermes Agent automatically, but the agent will be
 unable to use any x402_treazury APIs until funding and catalog warming complete.
 
-Use `make x402_treazury-status` to inspect current wallet funding status and shielded ZEC fudning address (this also works while the stack is down).
+Use `make x402_treazury-status` to inspect current wallet funding status and shielded ZEC funding address (this also works while the stack is down).
 
 See the [x402_treazury README](https://github.com/mikeperry-tor/x402_treazury/blob/main/README.md),
 [README_ADVANCED.md](https://github.com/mikeperry-tor/x402_treazury/blob/main/README_ADVANCED.md),
@@ -219,11 +219,10 @@ As with everything else in this stack, all swaps are conducted over Tor. Swaps u
 
 ## Web Page Previews
 
-The default stack protects you from IP address leaks through your own web browser,
-regardless of browser version, through a Browser Content Security Policy and internal
-Tor proxy that loads basic images and videos through Tor, and blocks all other content.
-This policy only covers content within the Hermes Agent Web UI. Any links you
-click on will load through your browser's default network.
+By default, the Web UI uses a Content Security Policy and an internal Tor proxy
+to retrieve supported external raster images. External audio/video and interactive
+web previews are blocked. This policy covers content rendered in the Web UI;
+deliberate external links use your browser's normal connection.
 
 To allow Hermes Agent to show you previews of web pages inside the agent Web UI,
 set `WEBAPP_EXTERNAL_CONTENT=browser_native`
@@ -311,7 +310,7 @@ and [backup scope](docs/configuration.md#backup-scope).
 
 ## Updates and Backups
 
-The stack will automatically update componet images with the following sequence:
+The stack will automatically update component images with the following sequence:
 
 ```bash
 make down

@@ -331,11 +331,15 @@ Logout and restart preserve them until explicit revocation. Load once persists
 no grant or reusable credential. Revocation stops future retrieval, including
 cached/repeated endpoint requests; already delivered bytes cannot be recalled.
 
-Image Save buttons and the context-menu Save and Copy actions retrieve external
-raster images through Tor in private modes. In `ask`, either action asks for a
-separate one-time retrieval from the displayed origin; cancelling makes no request
-and neither action remembers a grant. `off` refuses external image Save and Copy.
-Local/data/blob images keep their native handling; `browser_native` uses the browser.
+Image Save buttons that request a fresh external raster retrieve it through Tor
+in private modes. In `ask`, confirm the one-time retrieval from the displayed
+origin. Cancelling makes no request and confirmation saves no grant. The context
+menu on an already rendered Tor image saves or copies the displayed bytes without
+another request. Save suggests a filename from the original image URL.
+`off` refuses external raster retrieval. Local/data/blob images keep their
+native handling, and `browser_native` uses the browser.
+Extensionless raster URLs use the delivered image type for the suggested suffix,
+including `.ico` for supported icons.
 
 The backend supports public IPv4 HTTP(S) PNG, JPEG, GIF, WebP, BMP and ICO, with
 matching raster contents and media type. It pins a validated numeric address,
@@ -345,7 +349,7 @@ redirect is rejected before next-hop DNS/network activity, including load once.
 Unsupported/private/IPv6-only destinations fail without a weaker fallback.
 The native 25 MiB image limit is checked while streaming. Socket operations
 allow 60 seconds for Tor latency; redirects are bounded. Responses are no-store
-and there is no server image cache. The former CDN-only proxy route is removed.
+and there is no server image cache.
 
 ### Local content, previews and links
 
@@ -468,11 +472,10 @@ the separate durable executor workspace.
 
 ### Qualification
 
-The safe-default/passive-media implementation passed final independent review of
-`3db58120e78f003d5b3402d34a4541e9fa39a6a7` against `078e0eb`, with no material
-findings. Its integrated qualification covered 24 browser/mode/ingress cases;
-the scope and practical limits are described below. Detailed historical plan
-evidence remains in Git history. Streaming and interactive opt-in remain deferred.
+The passive-content implementation is qualified within the controlled browser,
+mode and ingress matrix below. Streaming and interactive opt-in remain deferred.
+Source review and fixture results do not extend these platform or live-service
+limits.
 
 `make images-test` uses public-numbered HTTP/TLS canaries on isolated container
 networks, with no uplink or published ports. It qualifies socket destinations,
@@ -531,10 +534,22 @@ does not attach to an existing graphical terminal or automatically inherit a
 running desktop's DISPLAY/session variables.
 
 Set `WEBAPP_TERMINAL_ENVIRONMENT=agent` for a terminal labeled **Agent** using
-Hermes's native local shell and cwd behavior. Apply with `make up`, then reload
+Hermes's native local shell. Apply with `make up`, then reload
 the browser. This is a deployment choice shared by profiles; browser input and
 profile configuration cannot change its target. Saved gateway terminals keep
-their native remote-Hermes behavior.
+their native remote-Hermes behavior. Each tab captures its gateway and profile
+before startup. A saved HTTP gateway can also report the terminal placement,
+which the tab then keeps across retries. Open a new tab to choose a different
+placement. When placement is known, a fresh terminal requires a receiver that
+can honor it. A stale page may need to reload after an update or rollback.
+The browser uses the usual startup metadata timeout until the
+receiving gateway announces cancellable executor preparation. SSH preparation
+can then continue until it finishes or the tab closes. The receiver discards
+an unacknowledged shell if its startup socket closes. Older gateways retain
+token-based close. The gateway that owns an ordinary shell chooses its implicit
+directory, including for HTTP-relayed tabs. Older gateways may use the login home.
+Explicit project directories and saved terminal directories are passed with
+the terminal request.
 
 Code cwd defaults to `/workspace`; explicit project paths resolve in the executor.
 Existing files select their parent. Nonexistent/inaccessible paths fail rather
@@ -543,8 +558,9 @@ changes, preserving spaces, Unicode and shell metacharacters for restoration.
 Control-character paths are unsupported. User/system bash rc files and prompt
 commands remain active. A local SSH process's cwd is never used as remote cwd.
 
-Refresh can reattach to a surviving shell and replay bounded output. Explicit tab
-close ends the shell through native PTY cleanup and SSH remote hangup. Ordinary
+Refresh can reattach to a surviving shell and replay bounded output. Closing a
+Code tab during startup cancels the pending SSH check. Closing an open tab
+ends the shell through native PTY cleanup and SSH remote hangup. Ordinary
 foreground children receive the remote hangup; deliberately detached jobs are
 not promised cleanup. Backend or executor restarts do not promise shell survival.
 After an executor outage or SSH identity/host-key failure, restore the existing

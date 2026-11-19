@@ -29,7 +29,7 @@ and serving diagnostics against the packaged revision before implementation.
 The earlier inspection found native support for named listeners, validation of
 identifiers, references and address uniqueness, and a requirement for at least
 one server.
-Hermes uses the derived official v0.23.1 image and supports native `reload.mcp`.
+Hermes uses the derived official v0.23.2 image and supports native `reload.mcp`.
 No upstream patch or image/source revision change is proposed.
 
 ## Intended operator workflow

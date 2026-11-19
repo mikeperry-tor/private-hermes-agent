@@ -80,7 +80,7 @@ The image builds unmodified upstream commit
 locked dependencies. The renderer changes only the Tor SOCKS endpoint, persistent
 state path, and HTTP Host allowlists. Wallet groups, rotation, funding, payment
 caps, source selection, and tool selection retain upstream policy. Provider
-definitions now supply optional advertised pricing hints for initial payer
+definitions supply optional advertised pricing hints for initial payer
 selection; live observed offers take precedence, and missing hints do not block
 tools. External pricing discovery follows the catalog Tor/relay policy. Ordinary
 serving schedules independent refill opportunities per group, nominally every
@@ -109,7 +109,7 @@ shared payer links those payments; separate groups cannot undo earlier links or
 hide sensitive request content from providers.
 
 Saved TOML is preserved. Without `[wallet_bootstrap]`, explicit preparation still
-captures every declared managed group. Omitted small reserve bounds now use the
+captures every declared managed group. Omitted small reserve bounds use the
 native $2–3 default even in saved policies; explicit bounds remain unchanged.
 To keep separate API groups from the outset, omit the entire table. When reducing
 or renaming groups, update its group references along with wallet/source/listener
@@ -345,7 +345,7 @@ stopping the serving treasury or replaying any accepted financial work.
 
 Each phase streams native output. A failure stops the sequence, reports the
 native exit status and recent redacted output, and leaves Hermes available.
-Default INFO diagnostics on stderr now show catalog warming start, per-source
+Default INFO diagnostics on stderr show catalog warming start, per-source
 results and the final `ok` or `degraded` outcome after native cleanup. Stdout
 remains the native JSON summary. The wrapper neither parses warming output nor
 matches wallet-sync progress messages to determine completion. Warming's message
@@ -509,62 +509,29 @@ make paid research calls. The main test uses the same unfunded x402_treazury fix
 and checks host/VM isolation and normal SSH, inference, and transparent Tor
 behavior separately.
 
-The `cb4cfd32bc12e3eeab643a7bf4f555175939a3b7` pin update passed all
-174 unit tests, Compose model validation, image build, and the native endpoint
-readiness, research configuration and treasury smoke fixtures on Docker 29.9.3
-(Linux arm64, Compose 5.7.0). Treasury qualification used
-`make -o check x402_treazury-test`, reusing the successful `make check` result.
-It confirmed degraded zero-exit warming with Tor stopped while offline inspection
-retained the accepted cache. Independent source review found no material
-integration issues.
+### Current qualification
 
-On 2026-11-14, the same affected checks passed on `debvm23`: Debian 13 ARM64,
-kernel `6.12.116+deb13-arm64`, rootless Podman 5.4.2 with overlay storage and
-Docker Compose provider 5.7.1. Runtime fixtures used a normal-permission source
-export of `1511b28` in `~/private-hermes-agent`, with freshly built treasury,
-Hermes, executor, Tor and Teep images. Endpoint readiness, offline research
-configuration and `make -o check x402_treazury-test` passed, including empty
-endpoint activation, Tor catalog persistence, degraded warming during Tor outage,
-retained accepted cache and executor isolation. No funds or paid APIs were used.
-A fresh, uninitialized export of `4a88f52` passed all 174 unit tests, four Compose
-models and compilation after isolating two startup-ordering tests from real
-operator bind state. The runtime implementation was unchanged by that test fix.
-Logs remain on the VM at `/tmp/x402-pin-cb4cfd32-{build,endpoints,config,treasury,clean-check}.log`.
-Independent source and recorded-evidence review found no material issues without
-rerunning tests. Qualification containers, networks and volumes were removed;
-generated checkout configuration was cleared. Pre-existing named volumes and
-unrelated VM resources were preserved.
+The packaged treasury pin is `ee92a067655d8d34d5cbc490ddbeb938635d0144`.
+Qualification covers Linux ARM64 images on Docker 29.9.3 / Compose 5.7.0 and
+Debian 13 ARM64 rootless Podman 5.4.2 / Compose 5.7.1. Source checks include 178
+unit tests, four effective models and compilation; native treasury builds,
+endpoint readiness, offline configuration and unfunded smoke fixtures pass on
+both engines.
 
-The `ee92a067655d8d34d5cbc490ddbeb938635d0144` refresh in `a619eae` retains
-native exit status as preparation completion authority. Inspection of the new
-upstream diagnostics found no wallet-sync/warming message parser in the workflow,
-and both recognized terminal MCP endpoint diagnostics are unchanged. No log-message
-tests were added; the smoke fixture only updates its expected build revision.
+Native process exit status owns preparation completion. Endpoint activation
+recognizes only the pinned native terminal MCP endpoint diagnostics; it does not
+parse wallet-sync/warming messages into completion authority. Controlled checks
+cover empty endpoint inventory, delayed readiness, terminal endpoint errors,
+restart without stale-error replay, catalog persistence, degraded warming during
+Tor outage, retained accepted cache and executor isolation. Offline status remains
+available when unrelated serving policy is invalid.
 
-On 2026-11-14, this refresh passed all 174 existing unit tests, four Compose
-models, compilation, native treasury image builds, endpoint readiness, offline
-research configuration and the unfunded treasury smoke fixture on both Docker
-29.9.3 / Compose 5.7.0 and Debian 13 ARM64 rootless Podman 5.4.2 / Compose 5.7.1.
-Both runtime targets used Linux ARM64 images. Full treasury checks reused the
-successful `make check` result via `make -o check x402_treazury-test`.
-
-The Podman run reused the already-built ARM64 Teep dependency image after its
-ancillary Git fetch stalled. Docker-format native health metadata was restored
-from the unchanged Teep Dockerfile after import; the treasury itself was built
-natively on Podman. This does not qualify a new native Podman Teep build or
-provider attestation. Successful local fixture logs are
-`/tmp/x402-pin-ee92a067-docker-{endpoints,config,treasury}.log`; successful VM
-logs are `/tmp/x402-pin-ee92a067-podman-{check,treasury-build,endpoints,config,treasury-final}.log`
-on `debvm23`. Earlier dependency-build and
-import-metadata failures are retained separately and are not passing evidence.
-Live wallet sync, funded bootstrap and paid relay work were not exercised.
-
-Current qualification containers, networks and runtime volumes were removed.
-The normal Docker stack was shut down gracefully with operator approval and left
-stopped; its persistent state and unrelated working-tree changes were preserved.
-Independent final review accepted `a619eae` and this qualification evidence with
-no material findings, using source inspection and recorded results without
-rerunning tests.
+The Podman treasury build is native. Its Teep dependency uses an imported ARM64
+image with health metadata matching the unchanged Dockerfile; this evidence does
+not qualify a new native Podman Teep build or provider attestation. Unfunded free
+API/MCP checks establish neither live wallet sync nor funded bootstrap, paid relay
+work or settlement. Current live financial limits and required operator actions
+are listed below.
 
 ## Pending live qualification
 
@@ -592,7 +559,7 @@ qualification remains pending. When undertaking it, follow this guide:
    MCP initialization/listing alone does not qualify paid research calls; record
    any separately authorized paid-call testing distinctly.
 
-This remaining operator qualification requires deliberate wallet/funding actions;
-removing the completed implementation plan does not perform or authorize them.
+Live financial qualification requires deliberate, explicitly authorized wallet
+and funding actions. Local fixtures do not perform or authorize them.
 
 Upstream: [x402_treazury](https://github.com/mikeperry-tor/x402_treazury).
