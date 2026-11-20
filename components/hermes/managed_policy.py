@@ -33,7 +33,6 @@ def policy(env):
         "ssh_user": env["TERMINAL_SSH_USER"],
         "ssh_key": env["TERMINAL_SSH_KEY"],
         "ssh_config": SSH_CONFIG,
-        "cwd": "/workspace",
     }
     config = {
         "terminal": terminal,

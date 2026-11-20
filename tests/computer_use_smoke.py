@@ -97,6 +97,8 @@ from tools.browser_use_cli import browser_exec_available, browser_exec
 from tools.bot_desktop import runtime
 assert not check_computer_use_requirements()
 assert not browser_exec_available()
+status = runtime.status()
+assert not status.installed and 'COMPUTER_USE_ENABLED=true' in status.blocker, status
 import json
 assert json.loads(browser_exec('raise AssertionError("must not run beside Hermes")')).get('error')
 try: runtime.start()

@@ -418,7 +418,6 @@ services:
       HERMES_CONFIG_BACKEND: file
       HERMES_MANAGED_DIR: /etc/hermes
       TERMINAL_ENV: ssh
-      TERMINAL_CWD: /workspace
       TERMINAL_SSH_CONFIG: /etc/ssh/ssh_config.d/99-private-hermes.conf
       TERMINAL_SSH_HOST: 10.203.82.3
       TERMINAL_SSH_PORT: "2222"

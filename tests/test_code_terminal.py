@@ -28,10 +28,11 @@ class ManagedPolicyTests(unittest.TestCase):
                 self.assertEqual(config["webapp"]["terminal_environment"], mode)
                 self.assertEqual(config["webapp"]["executor_ssh_config"], config["terminal"]["ssh_config"])
                 self.assertEqual(config["terminal"]["backend"], "ssh")
-                self.assertEqual(config["terminal"]["cwd"], "/workspace")
+                self.assertNotIn("cwd", config["terminal"])
+                self.assertNotIn("TERMINAL_CWD", env)
                 self.assertEqual(env["HERMES_CONFIG_BACKEND"], "file")
                 self.assertEqual(env["TERMINAL_ENV"], "ssh")
-                for field in ("ssh_host", "ssh_port", "ssh_user", "ssh_key", "ssh_config", "cwd"):
+                for field in ("ssh_host", "ssh_port", "ssh_user", "ssh_key", "ssh_config"):
                     self.assertEqual(env[f"TERMINAL_{field.upper()}"], config["terminal"][field])
                 self.assertEqual(config["context_references"], {"fetch_urls": False})
                 self.assertTrue(config["bot_desktop"]["executor_only"])

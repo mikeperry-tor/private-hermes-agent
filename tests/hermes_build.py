@@ -78,14 +78,17 @@ assert not os.access(files[0].parent, os.W_OK)
 (home / '.env').write_text(
     'HERMES_CONFIG_BACKEND=remote\nTERMINAL_ENV=local\nTERMINAL_SSH_HOST=profile.invalid\n'
     'HERMES_MANAGED_DIR=/tmp/profile-managed\nPYTEST_CURRENT_TEST=profile-override\n')
+profile_cwd = home / 'profile workspace'
+profile_cwd.mkdir()
 (home / 'config.yaml').write_text(
-    '{"terminal":{"backend":"local","ssh_host":"profile.invalid"},'
+    '{"terminal":{"backend":"local","ssh_host":"profile.invalid","cwd":"/opt/data/profile workspace"},'
     '"webapp":{"terminal_environment":"gateway"},'
     '"context_references":{"fetch_urls":true},"tools":{"disabled":[]}}')
 from hermes_cli.env_loader import load_hermes_dotenv
 from hermes_cli.config_backend import get_config_backend
 from hermes_cli.config_effective import load_user_config_effective
 from hermes_cli.managed_scope import load_managed_config, load_managed_env
+from hermes_cli.web_host_terminal import resolve_argv
 from tools.hosted_tool_policy import tool_refusal
 
 for _ in range(2):
@@ -97,6 +100,8 @@ for _ in range(2):
     config = load_user_config_effective(home / 'config.yaml')
     assert config['terminal']['backend'] == 'ssh'
     assert config['terminal']['ssh_host'] == '10.203.82.3'
+    assert config['terminal']['cwd'] == str(profile_cwd)
+    assert resolve_argv(home=home, use_profile_cwd=True)[1] == str(profile_cwd)
     assert config['context_references']['fetch_urls'] is False
     assert config['webapp']['terminal_environment'] == 'executor'
     assert 'browser_exec' in load_managed_config(strict=True)['tools']['disabled']

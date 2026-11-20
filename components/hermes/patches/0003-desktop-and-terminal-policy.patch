@@ -12,7 +12,7 @@ index 825def968..bd4e194e8 100644
    }
    const socket = state.socket = new WebSocket(url)
 diff --git a/hermes_cli/web_host_terminal.py b/hermes_cli/web_host_terminal.py
-index dc75310f4..db4b7479e 100644
+index dc75310f4..0a80c1be0 100644
 --- a/hermes_cli/web_host_terminal.py
 +++ b/hermes_cli/web_host_terminal.py
 @@ -242,6 +242,14 @@ def _executor_settings(home):
@@ -30,21 +30,25 @@ index dc75310f4..db4b7479e 100644
  async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
      """Prepare before the PTY spawn lock; no sandbox, sync or remote Hermes server is created."""
      from hermes_cli.gateway_connections_ssh_transport import build_exec_args
-@@ -252,7 +260,7 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+@@ -252,8 +260,8 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
          if mode == 'gateway':
              argv, cwd, env, shell = await asyncio.to_thread(
                  resolve_argv, home=home, requested_cwd=requested_cwd, use_profile_cwd=True)
 -            return argv, cwd, env, shell, cwd
+-        env, (binary, endpoint, default_cwd) = await asyncio.to_thread(_executor_settings, home)
 +            return argv, cwd, env, 'Agent · ' + shell, cwd
-         env, (binary, endpoint, default_cwd) = await asyncio.to_thread(_executor_settings, home)
++        env, (binary, endpoint, _) = await asyncio.to_thread(_executor_settings, home)
      except ConfigBackendUnavailable:
          # Native unavailable reads deliberately bypass Exception/default handlers.
-@@ -262,8 +270,7 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+         # Contain this operation before SystemExit reaches the admission task.
+@@ -261,9 +269,8 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+             'Terminal configuration is unavailable; restore its backend and retry') from None
      if ssh_config and endpoint.key_path and not await asyncio.to_thread(Path(endpoint.key_path).is_file):
          raise ExecutorTerminalError('Executor terminal: configured SSH identity is missing')
-     requested = default_cwd if requested_cwd is None else requested_cwd
+-    requested = default_cwd if requested_cwd is None else requested_cwd
 -    if not isinstance(requested, str) or not requested or '\x00' in requested:
 -        raise ExecutorTerminalError('Executor terminal cwd must be a nonempty path without NUL')
++    requested = '/workspace' if requested_cwd is None else requested_cwd
 +    requested = _executor_cwd(requested)
      from hermes_cli.gateway_connections_ssh_transport import login_shell_quote
      probe_command = 'python3 -c ' + login_shell_quote(_PROBE) + ' ' + login_shell_quote(requested)
@@ -98,6 +102,22 @@ index 3909f401a..7f2e43bc1 100644
      try:
          required = executor_only()
      except RuntimeError as exc:
+diff --git a/tools/bot_desktop/runtime.py b/tools/bot_desktop/runtime.py
+index 07bb4b2f5..566b1c7e9 100644
+--- a/tools/bot_desktop/runtime.py
++++ b/tools/bot_desktop/runtime.py
+@@ -706,7 +706,10 @@ def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
+             f"plus the desktop stack)")
+         blocker = (f"The terminal backend's sandbox image lacks {', '.join(missing)}. {advice[0].upper()}{advice[1:]}, "
+                    f"or set bot_desktop.placement: gateway.")
+-        if where.backend == "docker":
++        if where.backend == "ssh":
++            blocker = (f"The SSH executor lacks {', '.join(missing)}. "
++                       "Set COMPUTER_USE_ENABLED=true and rebuild the desktop executor with make up.")
++        elif where.backend == "docker":
+             # The usual reason on an upgraded install: the persisted container predates the default
+             # flip and was kept on purpose. The pane offers the switch instead of a config hint.
+             from hermes_cli.sandbox_image_switch import pending
 diff --git a/tools/browser_use_cli.py b/tools/browser_use_cli.py
 index aef13e3ad..ee094509e 100644
 --- a/tools/browser_use_cli.py

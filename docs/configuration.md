@@ -547,7 +547,8 @@ metacharacters remain path data. SSH failure gives an error without falling back
 to Hermes. Restore the executor/identity/known-host configuration and open a fresh
 terminal; do not replace saved identities as a shortcut.
 
-In `agent`, native cwd selection remains local. Workspace file APIs still use
-the executor, so their files may not exist in the agent shell. Agent-side
+The profile's `terminal.cwd` still applies to model execution and the native
+Agent shell. In Agent mode, Hermes resolves the path locally. Workspace file
+APIs still use the executor, so their files may not exist in the agent shell. Agent-side
 `/workspace` is ephemeral and separate; persistent agent state is under `/opt/data`.
 See [terminal lifecycle and authority](webapp.md#terminal-environment).
