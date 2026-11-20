@@ -189,22 +189,31 @@ The build incorporates four upstream candidates and the remaining
 | Check / contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
 | --- | --- | --- |
 | 196 wrapper unit checks, four effective Compose models and compilation | Passed | Passed |
-| Build, source delivery and native renderer receipt | Passed | Pending |
-| Native TypeScript and 218 targeted renderer tests | Passed | Pending |
-| Managed URL-context and tool-denial matrix with disposable profiles | Passed | Pending |
-| Populated official v0.23.2 profile opened twice by v0.23.3 | Passed | Pending |
-| Full lean WebApp, including Code/Agent terminals, authentication, cross-browser content and native MCP activation | Passed | Pending |
-| Networkless desktop startup and coordination-file recovery | Passed | Pending |
-| Repeated setup, native CLI edits, identity repair and named-volume persistence | Passed | Pending |
+| Build, source delivery and native renderer receipt | Passed | Passed |
+| Native TypeScript and 218 targeted renderer tests | Passed | Passed |
+| Managed URL-context and tool-denial matrix with disposable profiles | Passed | Passed |
+| Populated official v0.23.2 profile opened twice by v0.23.3 | Passed | Passed |
+| Full lean WebApp, including Code/Agent terminals, authentication, cross-browser content and native MCP activation | Passed | Passed |
+| Desktop Code and Agent terminals over local and simulated HTTPS | Passed | Passed |
+| Networkless desktop startup and coordination-file recovery | Passed | Passed |
+| Executor browser, named tabs, ownership, cancellation, harness loss and recovery | Passed | Passed |
+| CUA display, lease, sandbox, dependency loss and persistent executor switching | Passed | Passed |
+| Native dependency-bearing plugin install, update and persistence | Passed | Passed |
+| Authenticated image endpoint and connection destination controls | Passed | Passed |
+| Repeated setup, native CLI edits, identity repair and named-volume persistence | Passed | Passed |
+| Real SSH terminal and code execution, Teep/MCP grants, forbidden paths, Tor outage and recovery | Passed | Passed |
+| Cold launch, maintenance scope and namespace cleanup | Passed | Passed |
+| Dedicated cross-browser image Save/Copy and authenticated desktop viewer/download | Passed | Prior v0.23.2 evidence |
 
 The migration check preserves model and terminal settings, selected operator
 preferences, a stored transcript and saved env/auth/plugin files in a disposable
-named volume. It establishes native schema 53 to 54 loading. The release still
-requires native Podman checks and affected launch, SSH, browser, ingress,
-storage and plugin qualification where results are absent from this table.
-Earlier v0.23.2 behavior remains evidence for the unchanged network, storage
-and supporting images within their qualified scope. Absence of runtime
-coverage matters where v0.23.3 changes the Hermes path through those components.
+named volume. It establishes native schema 53 to 54 loading. The current
+desktop and terminal fixtures use the same procedure on both engines.
+Dedicated Save/Copy and desktop viewer fixtures cover exact downloaded bytes,
+consent and request placement. Clipboard checks use a test sink.
+The authenticated WebApp checks use simulated HTTPS, and Tor routing uses
+a separate live network fixture. Live public ingress, provider attestation,
+funded activity and AMD64 runtime remain outside these checks.
 
 ## Onion ingress qualification
 
@@ -311,9 +320,9 @@ confirm namespace, PID/network-namespace and seccomp-BPF layers. Nested namespac
 root cannot rejoin the parent network namespace or create a raw socket there.
 The harness adds no container capabilities, ports or network grants.
 
-Both qualified engines cover authenticated local/simulated HTTPS screenshots and
-downloads without external viewer requests, plus executor switching that preserves
-SSH identity, workspace, actual cookies and localStorage. Coverage is one active
+Executor switching preserves SSH identity, workspace, cookies and localStorage
+on both qualified engines. Current authenticated local and simulated HTTPS
+screenshot and download coverage is recorded in the [packaged qualification table](#packaged-hermes-qualification). Coverage is one active
 default-profile screen and programmatic native display transport. Concurrent
 profile screens are unsupported; full visual noVNC-pane interaction and other
 profile arrangements remain unqualified. CDP/dialog/vault routes are excluded;
