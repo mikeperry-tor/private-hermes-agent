@@ -55,7 +55,13 @@ The live test uses a separate disposable Compose project with the actual pinned
 Hermes image, the real SSH executor, real Tor, teep with a dummy provider
 key, and the x402_treazury server with an unfunded fixture wallet. It performs no
 inference or paid research calls. Stop a normal deployment before running it:
-projects use the same fixed subnets, and preflight refuses overlaps.
+projects use the same fixed subnets, and preflight refuses overlaps. Every network
+subnet is pinned in the `networks:` block of `compose.yaml` (`compose.funnel.yaml`
+for the Funnel networks). If a pinned subnet overlaps another stack's network, or
+a project network already exists with a different subnet, preflight stops before
+changing anything and reports where to edit the plan. When an overlapping network
+was allocated automatically, it also points to Docker's `default-address-pools`
+(Docker Desktop > Settings > Docker Engine, `~/.docker/daemon.json`).
 
 Tests cover actual Hermes terminal and Python execution over SSH, absence of
 agent keys/environment in the executor, Tor versus direct inference egress,

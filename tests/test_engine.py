@@ -648,10 +648,41 @@ class EngineDependentCheckTests(unittest.TestCase):
                     patch.object(preflight, 'check_engine'), patch.object(preflight, 'engine', return_value='podman'), \
                     patch.object(sys, 'argv', ['preflight.py']), patch('sys.stdout', new_callable=io.StringIO):
                 if conflict:
-                    with self.assertRaisesRegex(SystemExit, 'Address conflict: 10.203.83.0/24 overlaps other'):
+                    with self.assertRaisesRegex(SystemExit, 'Address conflict: subnet 10.203.83.0/24 for network '
+                                                            '"inference" overlaps existing network other'):
                         preflight.main()
                 else:
                     preflight.main()
+
+    def test_preflight_points_to_the_address_plan_and_docker_pools(self):
+        config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
+        existing = [{'name': 'other', 'labels': {}, 'subnets': [{'subnet': '10.203.88.0/24'}]}]
+        with self.assertRaises(SystemExit) as raised:
+            preflight.check_address_conflicts('private-hermes', config, existing)
+        message = str(raised.exception)
+        self.assertIn('networks: block of compose.yaml', message)
+        self.assertIn('default-address-pools', message)
+        self.assertIn('Docker Desktop', message)
+
+    def test_preflight_reports_overlapping_declared_subnets(self):
+        config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}},
+                               'teep-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/25'}]}}}}
+        with self.assertRaisesRegex(SystemExit, 'overlapping subnets.*networks: block of compose.yaml'):
+            preflight.check_address_conflicts('private-hermes', config, [])
+
+    def test_preflight_requires_make_down_when_a_project_network_subnet_changed(self):
+        config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
+        existing = [{'name': 'private-hermes_tor-uplink',
+                     'labels': {'com.docker.compose.project': 'private-hermes',
+                                'com.docker.compose.network': 'tor-uplink'},
+                     'subnets': [{'subnet': '192.168.240.0/20'}]}]
+        with self.assertRaisesRegex(SystemExit, 'make down.*make up'):
+            preflight.check_address_conflicts('private-hermes', config, existing)
+
+    def test_preflight_accepts_a_clean_pinned_plan(self):
+        config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
+        existing = [{'name': 'other', 'labels': {}, 'subnets': [{'subnet': '172.18.0.0/16'}]}]
+        preflight.check_address_conflicts('private-hermes', config, existing)
 
     def test_preflight_reads_docker_and_podman_network_subnets(self):
         docker = {'Name': 'other', 'Labels': {}, 'IPAM': {'Config': [{'Subnet': '10.203.83.0/24'}]}}

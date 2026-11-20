@@ -500,8 +500,12 @@ networks:
     <<: *isolated
     ipam:
       config: [{subnet: 10.203.86.0/24}]
-  tor-uplink: {}
-  teep-uplink: {}
+  tor-uplink:
+    ipam:
+      config: [{subnet: 10.203.88.0/24}]
+  teep-uplink:
+    ipam:
+      config: [{subnet: 10.203.89.0/24}]
   agent-route:
     <<: *isolated
     ipam:
@@ -528,6 +532,8 @@ networks:
     ipam:
       config: [{subnet: 10.203.85.0/24}]
   webapp-publish:
+    ipam:
+      config: [{subnet: 10.203.90.0/24}]
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "false"
 

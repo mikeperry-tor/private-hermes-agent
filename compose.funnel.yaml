@@ -47,4 +47,6 @@ networks:
     <<: *isolated
     ipam:
       config: [{subnet: 10.203.87.0/24}]
-  tailscale-uplink: {}
+  tailscale-uplink:
+    ipam:
+      config: [{subnet: 10.203.91.0/24}]

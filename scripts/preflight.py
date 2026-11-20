@@ -8,6 +8,9 @@ import sys
 import deployment
 from deployment import compose_base, compose_files, engine, engine_command
 
+ADDRESS_PLAN_HELP = ('Pinned subnets live in the networks: block of compose.yaml '
+                     '(compose.funnel.yaml for funnel-link and tailscale-uplink).')
+
 
 def output(*args):
     return subprocess.check_output(args, text=True).strip()
@@ -42,6 +45,56 @@ def subnets(network):
     return [ipaddress.ip_network(value) for value in found if value]
 
 
+def labels(network):
+    return network.get('Labels') or network.get('labels') or {}
+
+
+def name(network):
+    return network.get('Name') or network.get('name')
+
+
+def declared_subnets(config):
+    return [(key, ipaddress.ip_network(entry['subnet']))
+            for key, network in (config.get('networks') or {}).items()
+            if not network.get('external')
+            for entry in (network.get('ipam') or {}).get('config') or [] if 'subnet' in entry]
+
+
+def check_address_conflicts(project, config, existing):
+    declared = declared_subnets(config)
+    for index, (key, candidate) in enumerate(declared):
+        for other_key, other in declared[index + 1:]:
+            if candidate.version == other.version and candidate.overlaps(other):
+                raise SystemExit(f'Address conflict: networks "{key}" ({candidate}) and "{other_key}" '
+                                 f'({other}) declare overlapping subnets. No network was changed. '
+                                 f'Give each network a distinct, non-overlapping subnet. {ADDRESS_PLAN_HELP}')
+    for network in existing:
+        network_labels, network_name = labels(network), name(network)
+        occupied = subnets(network)
+        if network_labels.get('com.docker.compose.project') == project:
+            key = network_labels.get('com.docker.compose.network')
+            desired = sorted(str(value) for declared_key, value in declared if declared_key == key)
+            actual = sorted(str(value) for value in occupied)
+            if key and desired and actual != desired:
+                raise SystemExit(f'Address plan changed: network {network_name} ("{key}") already uses '
+                                 f'{", ".join(actual) or "no subnet"}, but the stack now declares '
+                                 f'{", ".join(desired)}. No network was changed. '
+                                 f'Run make down so the project networks are removed, then make up to recreate them. '
+                                 f'{ADDRESS_PLAN_HELP}')
+            continue
+        for occupied_network in occupied:
+            for key, candidate in declared:
+                if candidate.version != occupied_network.version or not candidate.overlaps(occupied_network):
+                    continue
+                raise SystemExit(f'Address conflict: subnet {candidate} for network "{key}" overlaps existing '
+                                 f'network {network_name} ({occupied_network}). No network was changed. '
+                                 f'Choose a different subnet for "{key}". {ADDRESS_PLAN_HELP} '
+                                 f'If {network_name} was allocated automatically from Docker\'s default address '
+                                 f'pools, you can instead add or enlarge "default-address-pools" under '
+                                 f'Docker Desktop > Settings > Docker Engine (~/.docker/daemon.json) and apply '
+                                 f'the change; that restarts Docker and all running containers.')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('project', nargs='?', default='private-hermes')
@@ -52,19 +105,9 @@ def main():
     command = [*compose_base(), '-p', project, *compose_files(arguments.funnel)]
     config = json.loads(output(*command, 'config', '--format', 'json'))
     check_security_options(config)
-    selected = [ipaddress.ip_network(c['subnet']) for n in config['networks'].values()
-                for c in n.get('ipam', {}).get('config', []) if 'subnet' in c]
     identifiers = output(*engine_command(), 'network', 'ls', '-q').split()
     existing = json.loads(output(*engine_command(), 'network', 'inspect', *identifiers)) if identifiers else []
-    for network in existing:
-        labels = network.get('Labels') or network.get('labels') or {}
-        if labels.get('com.docker.compose.project') == project:
-            continue
-        name = network.get('Name') or network.get('name')
-        for occupied in subnets(network):
-            for candidate in selected:
-                if candidate.version == occupied.version and candidate.overlaps(occupied):
-                    raise SystemExit(f'Address conflict: {candidate} overlaps {name} ({occupied}). Stop the test/normal stack or coordinate a new address plan; no network was changed.')
+    check_address_conflicts(project, config, existing)
     print('Engine features and address pools checked.')
 
 
