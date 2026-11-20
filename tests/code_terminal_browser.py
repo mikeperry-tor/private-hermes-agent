@@ -261,7 +261,7 @@ def run(password_path, mode):
                 open_shell(page, environment=receiver_mode, action='start', startup=True)
                 meta = metadata(page)
                 assert meta['environment'] == receiver_mode and meta['shell'].startswith(mode.title() + ' · '), meta
-                assert page.evaluate('testShell.preparing') == (mode == 'code')
+                assert page.evaluate('testShell.preparing && testShell.ackStartup') is True
                 if mode == 'code':
                     assert meta['cwd'] == '/workspace', meta
                     output = command(page, "printf 'USER-%s\\n' \"$(id -u)\"; printf 'browser-terminal\\n' > /workspace/webapp-terminal-proof; pwd")
