@@ -1,5 +1,37 @@
 # Hermes patch reorganization and upstream preparation
 
+## Review corrections in progress
+
+The wrapper correction branch is `hermes-v0.23.3-review`, starting at
+`500515c`. The release and submission baselines are listed below. The
+correction keeps the executor, Tor, Teep, WebApp ingress and wallet boundaries.
+PR5 and interactive content remain deferred.
+
+1. **Managed configuration.** Keep administrator-owned dotenv values effective
+   during bootstrap and single-profile reload, including when live operations
+   read the active backend concurrently. Preserve ordinary profile reload when
+   there is no managed claim. Test the shared prerequisite upstream and test
+   native reload in the built serving image with disposable state.
+2. **Native topics.** Verify browser discovery and routing recover in one
+   executor environment, with independent dependency checks and documented
+   stock fallback. Enforce the stated SSH forwarding policy in PR2. Clarify
+   PR3 gateway coverage. Preserve permitted deferred tools in PR4 background
+   review while retaining policy denial. Put behavioral tests and documentation
+   with the owning changes.
+3. **Wrapper parity.** Carry equivalent fixes in the exact v0.23.3 replay and
+   regenerate the candidate patch. Preserve saved WebApp configuration and
+   effective profile cwd in its original consumers while keeping the Code
+   default. Restore deployment-specific desktop recovery guidance.
+4. **Review and qualification.** Rebuild upstream histories around the shared
+   prerequisite, standalone SSH fixes and focused browser and tool-policy
+   topics. Replay across both bases, check artifact provenance and overlap with
+   retained deployment patches, and run focused upstream and packaged checks.
+   Qualify affected serving behavior with disposable Docker and rootless
+   Podman fixtures, recording actual coverage. Obtain fresh independent design
+   and final combined reviews, resolving findings and rechecking affected
+   behavior. Update maintained guides and local submission drafts. Keep
+   publication out of this work.
+
 ## 1. Branches to submit
 
 Use **only the `upstream-pr/*` branches listed below** for PR1–PR4. Each
