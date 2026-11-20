@@ -86,13 +86,15 @@ profile_cwd.mkdir()
     '"context_references":{"fetch_urls":true},"tools":{"disabled":[]}}')
 from hermes_cli.env_loader import load_hermes_dotenv
 from hermes_cli.config_backend import get_config_backend
+from hermes_cli.config import reload_env
 from hermes_cli.config_effective import load_user_config_effective
 from hermes_cli.managed_scope import load_managed_config, load_managed_env
 from hermes_cli.web_host_terminal import resolve_argv
 from tools.hosted_tool_policy import tool_refusal
 
+load_hermes_dotenv(hermes_home=home, load_external_secrets=False)
 for _ in range(2):
-    load_hermes_dotenv(hermes_home=home, load_external_secrets=False)
+    reload_env()
     assert os.environ['HERMES_MANAGED_DIR'] == '/etc/hermes'
     assert get_config_backend().name == 'file'
     assert os.environ['TERMINAL_ENV'] == 'ssh'
