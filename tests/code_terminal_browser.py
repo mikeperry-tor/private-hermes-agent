@@ -43,7 +43,7 @@ def open_shell(page, cwd=None, attach=None, environment=None, *, action=None, st
           } else {
             state.meta=frame;
             if (state.ackStartup && acknowledge && frame.terminalId) {
-              ws.send('\\0HERMES_TERMINAL_META:'+JSON.stringify({attached:true}));
+              ws.send('\\0HERMES_TERMINAL_META:'+JSON.stringify({attached:frame.terminalId}));
             }
           }
         } else state.output += typeof e.data==='string' ? e.data : new TextDecoder().decode(e.data);

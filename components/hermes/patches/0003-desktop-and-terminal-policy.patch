@@ -84,7 +84,7 @@ index 14de1ba94..d5714f7e2 100644
 -            if (ws.query_params.get("startup") == "1" and getattr(ws.state, "ssh_terminal", None) is None
 -                    and environment(ws.app) == "executor"):
 +            if ws.query_params.get("startup") == "1" and getattr(ws.state, "ssh_terminal", None) is None:
-                 startup_ack = asyncio.Event()
+                 startup_ack = _StartupAck()
                  await ws.send_text(META_PREFIX + '{"preparing":true,"ackStartup":true}')
              inbox = _InputQueue()
 diff --git a/tools/bot_desktop/placement.py b/tools/bot_desktop/placement.py
