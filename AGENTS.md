@@ -92,17 +92,40 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   extend financial authority, and a reporting cadence must not become a failure
   deadline. Let valid work continue while it makes progress.
 
-## No prerelease compatibility layer
+## Compatibility for deployed stacks
 
-This stack has not been deployed and has no installed user base requiring legacy
-compatibility. Change interfaces and all consumers directly. Do not add old-name
-aliases, deprecated formats, legacy readers, version-detection branches,
-migration commands or transitional services without an explicit user requirement.
+The supported end-user upgrade is the in-place workflow in
+[Updates and Backups](README.md#updates-and-backups). Users will run `make down`,
+take the [pre-upgrade backup](docs/configuration.md#backup-scope), then run
+`git pull`, and `make up`. They will use their existing checkout, container
+engine, Compose project, bind mounts and named volumes. `make up` builds
+the selected images and runs offline setup against the existing state.
+Upgrades outside this workflow are currently unsupported.
 
-Repeated initialization must preserve current-format credentials, keys, wallets
-and operator configuration. Safe retries, native wallet recovery and ordinary
-state persistence are functional requirements, not legacy compatibility. Do not
-delete private state as a shortcut to simplifying implementation or tests.
+- Private Hermes owns its deployment contract: root `.env` settings and their
+  defaults and precedence, wrapper-owned files under `config/`, documented
+  operator commands, and the storage and identity layout. The layout includes
+  Compose project and volume names, bind paths, permissions, and the inputs
+  needed to back up and restore a deployment. Preserve the meaning of existing
+  settings, especially those governing exposure, authentication and spending.
+- Hermes and the other components own their native formats, schema migrations
+  and downgrade limits. Keep their saved state attached to the upgraded
+  services with the required ownership and mounts. Let the components read and
+  migrate it. Private Hermes still owns state written by its setup helpers and
+  downstream features, including saved WebApp credentials and private image
+  consent, even when those files live beside component-owned state.
+- Preserve supported deployments across updates. When a wrapper-owned change
+  requires operator action, document the affected releases, the smallest safe
+  upgrade step, and backup and recovery requirements. Use a focused
+  compatibility read or migration when it is necessary to preserve state or
+  behavior. Keep it scoped to the affected format or interface. Regenerate
+  derived files from authoritative state when possible.
+- Qualify affected upgrades through this workflow using populated fixtures
+  from an affected release.
+  Check effective configuration, credential and identity preservation, and
+  safe retry of changed setup or migration steps. Never discard private state,
+  rotate credentials or initialize another wallet to recover from an upgrade
+  failure. Document when rollback requires a pre-upgrade backup.
 
 ## Scope enforcement to the operation
 
