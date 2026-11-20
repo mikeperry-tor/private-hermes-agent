@@ -15,7 +15,7 @@ The goal is to let an agent research and write code while keeping your network
 address, inference requests, and agent payment history private, and
 [sandboxing the agent](#service-hardening) from accessing your local machine.
 You can use Hermes through your browser or terminal, and optionally enable public
-HTTPS access through Tailscale Funnel or Tor Browser access through an onion service.
+HTTPS access through Tailscale Funnel, or access through a Tor onion service.
 
 By default, the webapp also prevents [displayed content](#web-page-previews) from
 bypassing Tor through your own browser: supported external images load through
@@ -25,20 +25,18 @@ still use your browser's connection.
 
 ## Components and the problems they solve
 
-- **Hermes Agent v0.23.2** provides chat, tool use, skills, and subagent orchestration.
-  Its webapp and terminal client let you work with the same persistent agent.
-  This stack supports both Docker and Rootless podman with strong network isolation
-  between containers, no host access by default, and least-priviledge operation.
-- **SSH code executor** runs model-issued shell commands and Python code in a
-  separate container and workspace. It keeps that code away from the agent's
-  stored state, inference provider keys, and research wallet files. Sessions and
-  subagents share this executor; each task does not get a separate sandbox.
-- **Tor gateway** routes public TCP traffic and DNS from Hermes and its executor
+- **[Hermes Agent v0.23.2](https://github.com/NousResearch/hermes-agent)**
+  provides chat, tool use, skills, and subagent orchestration.  Its webapp
+  and terminal client let you work with the same persistent agent. This stack
+  supports both Docker and Rootless podman with [hardened services](#service-hardening): strong network isolation between containers,
+  no host access by default, an SSH executor, and least-priviledge operation.
+- **[Tor gateway](https://hub.docker.com/r/dockurr/tor)** routes public TCP
+  traffic and DNS from Hermes and its executor
   through Tor, hiding their source network address from Internet destinations.
   Network rules block direct Internet fallback and access to host, VM, and
   private-network services except the stack's explicit internal connections.
-  Optional [onion ingress](#tor-onion-service) allows you to reach the Hermes
-  Admin Webapp via an onion URL (requires Tor Browser or Brave's Tor Window).
+  Optional [Tor onion service ingress](#tor-onion-service) allows you to reach
+  the Hermes Admin Webapp via an onion URL (requires [Tor Browser]() or Brave's Tor Window).
 - **[Teep](https://github.com/13rac1/teep)** connects Hermes to confidential-computing
   inference providers through an OpenAI-compatible API. It handles provider
   credentials and upstream attestation checks in a separate service with its own
@@ -128,8 +126,8 @@ make up
 
 Builds need Internet access, and use your host's default networking for this purpose, not Tor.
 
-Once the stack is up, open **http://127.0.0.1:9120** and log in as `admin` with
-the password saved in the file `config/webapp/password`.
+Once the stack is up, open **[http://localhost:9120](http://localhost:9120)** and log
+in as `admin` with the password saved in the file `config/webapp/password`.
 
 The browser’s Code terminal opens in the same executor workspace as the agent.
 For an agent administration shell, set `WEBAPP_TERMINAL_ENVIRONMENT=agent`, run
@@ -234,7 +232,7 @@ in `.env`, run `make up`, reload the webapp and start a new conversation.
 
 If IP address privacy is important to you, use this mode only with Tor Browser or
 Brave Browser's Private Window with Tor. For remote access, choose
-[Funnel or onion ingress](#ingress); the stack does not detect or verify browser
+[Funnel or onion ingress](#webapp-ingress); the stack does not detect or verify browser
 Tor routing in `browser_native` content access mode.
 
 See the [webapp content policy](docs/webapp.md#external-content-policy) for modes and
@@ -248,12 +246,15 @@ To give Hermes Agent a full Linux graphical desktop environment inside an isolat
 This selects a substantially larger image and enables computer-use
 and browser automation tools for the agent to use.
 
-## Ingress
+## WebApp Ingress
 
-Local access at **http://127.0.0.1:9120** or **http://localhost:9120** is always
-included. Remote ingress is optional: enable Tailscale Funnel, an onion service,
-or both. Each hostname requires its own login using the same username and saved
-password. Enabling one does not require the other.
+Local access at **[http://localhost:9120](http://localhost:9120)** is always
+enabled. Remote ingress is optional: you can enable Tailscale Funnel, a
+Tor onion service, or both.
+
+Each hostname requires its own login using the same username and saved
+password: log in as `admin` with the password saved in the file
+`config/webapp/password`.
 
 ### Tor onion service
 
@@ -469,7 +470,7 @@ Bradley Erickson (as team Hardened Minds) in the following three
    shielded ZCash swaps via Near Intents to fund rotating, small denomination, isolated
    USDC:Base wallets to pay these x402 APIs micropayments.
 
-2. **Trust, but verify**
+3. **Trust, but verify**
 
    On the cryptocurrency side, per-transaction payment limits can be configured,
    and the agent is otherwise isolated from cryptocurrency keys through the
