@@ -155,10 +155,12 @@ The runtime omits pnpm. Its passive absence warning does not block Python plugin
 setup. See the [Hermes update workflow](update-workflow.md).
 
 The candidate patch is the packaged Python and renderer diff of release-based
-replay `087222ccf6cbd04ac89096bab4182e05e2af6b0f`. Exclude upstream Python test,
+replay [`087222ccf6cbd04ac89096bab4182e05e2af6b0f`](https://github.com/mikeperry-tor/hermes-agent/commit/087222ccf6cbd04ac89096bab4182e05e2af6b0f).
+Exclude upstream Python test,
 website, contributor and Electron-only files from that export. The local clone
 and reference checkouts are source references. The Docker build uses the
-tracked patch and pinned official image.
+tracked patch and pinned official image. For the next Hermes release, see
+[how to rebuild the candidate patch](update-workflow.md#rebuild-the-candidate-patch-for-a-new-release).
 
 ### Downstream responsibility inventory
 
@@ -194,44 +196,19 @@ against both engines when changing the adopted source or deployment patch series
 
 ### Local preparation package dispositions
 
-The preparation clone is `upstream_work/hermes-agent/`. Drafts under
-`upstream_work/submissions/` describe the release-based candidates and their
-qualification. Use the refreshed head and matching validation when preparing a
-submission. The
-[retained preparation plan](plans/hermes-upstream-prep.md) records execution and
-review details for PR creation and merge.
+The PR1–PR4 drafts in `upstream_work/submissions/` use the
+`upstream-pr/*` branches. The working clone `upstream_work/hermes-agent/`
+uses the `fork` remote for those refs and the release refs. Submit one branch per
+PR using the heads and merge order in the [submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit).
+See the [fork repository](https://github.com/mikeperry-tor/hermes-agent).
+The `stack-patches/v0.23.3/*` refs preserve the
+[v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
 
-`origin` is `https://github.com/nousresearch/hermes-agent`. Human submissions target
-`https://github.com/mikeperry-tor/hermes-agent/` by fork URL or an optional fork
-remote. Local preparation has no push, PR, issue, merge or maintainer-message
-authority. No upstream submission is recorded in these local packages.
-
-| Package / purpose | Local branch | Exact head | Base / prerequisites | Disposition |
-| --- | --- | --- | --- | --- |
-| PR1: executor desktop/browser correctness | `candidate/executor-desktop-browser` | `53043aeb9d0dc1f90528504e4b88c66bb8bb6398` | `caafe5389ae585ef77387a962aee05b1bcf17029`; shared strict-reader commit `15de33f3a` | Rebased, qualified and independently reviewed locally |
-| PR2: operator terminals and exact cwd | `candidate/executor-terminals` | `f7f0b244545b2943a58b8f915c14066463262cec` | `caafe5389ae585ef77387a962aee05b1bcf17029`; shared strict-reader commit `15de33f3a` | Rebased, qualified and independently reviewed locally |
-| PR3: selectable URL context | `candidate/url-reference-fetching` | `50ab0a4cfe9dc08f85b62ed5991d10f3bc39cec1` | `caafe5389ae585ef77387a962aee05b1bcf17029`; shared strict-reader commit `15de33f3a` | Rebased, qualified and independently reviewed locally |
-| PR4: managed tool denial | `candidate/deployment-restrictions` | `7495b47bc25f8b8ac8cfb8c939ffd6c5eec3fa35` | `caafe5389ae585ef77387a962aee05b1bcf17029`; shared strict-reader commit `15de33f3a` | Rebased, qualified and independently reviewed locally |
-| PR5: Webapp content privacy | `candidate/webapp-content-privacy` | `caafe5389ae585ef77387a962aee05b1bcf17029` (base only) | head is its base; no implementation prerequisites yet | Independently reviewed deferred design; not submission-ready |
-
-The release builds use the branches in this table. For future submission,
-the adjacent `candidate-main/*` refs are based on the work clone's fetched
-`origin/main` at `2de9f51b8008a7d49a49221c184f2f11cbfc4af1`. PR1 carries
-a follow-up that rechecks the managed executor owner before vault trusted typing.
-PR5 tracks the main base without an implementation. See the
-[refreshed heads and validation](plans/hermes-upstream-prep.md#refreshed-main-candidates).
-
-The four implemented branches contain ten, four, two and four topical
-commits, respectively. Each has problem, approach and validation notes and
-applies independently on `origin/main` `caafe5389ae585ef77387a962aee05b1bcf17029`.
-Recheck the target revision, overlapping PRs and affected qualification before
-submission. PR1 and PR4 both touch `tools/browser_use_cli.py`: keep PR1's
-executor result helpers and PR4's shared `tool_refusal` gate when combining
-them. PR1–PR4 include the same strict managed-reader commit `15de33f3a`; PR2
-and PR3 also share the effective reader's validated-snapshot option. PR4's
-final prompt-refresh commit also merges upstream's
-`_refresh_name_dependent_defs` with the managed `permitted` filter in
-`tools/mcp_tool_agent.py`.
+Human submissions target `NousResearch/hermes-agent`, which is the clone's
+`origin` remote. The four PRs share the strict managed reader.
+PR2 and PR3 also share the effective reader's validated-snapshot option.
+Follow the [merge-order checklist](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist)
+for overlap and validation.
 
 Candidate identities use `Mike Perry <mikeperry-git@untrusted.systems>`.
 Exact identity/history translations and qualification logs remain in ignored

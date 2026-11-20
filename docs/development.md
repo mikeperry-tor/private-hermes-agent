@@ -465,10 +465,10 @@ additional startup deadline. Reporting cadence is independent of failure policy.
 
 ## Local upstream candidate qualification
 
-The upstream work clone holds the v0.23.3 release-based candidates and
-separate `candidate-main/*` branches for future submission. The tracked release
-patch carries their reviewed v0.23.3 replay. Current heads and evidence are
-recorded in the [candidate inventory](updates-and-plugins.md#local-preparation-package-dispositions)
+The `fork` remote holds the `stack-patches/v0.23.3/*` release refs and
+`upstream-pr/*` submission branches once they are pushed. The tracked release
+patch carries the reviewed v0.23.3 replay. See the [fork repository](https://github.com/mikeperry-tor/hermes-agent),
+[candidate inventory](updates-and-plugins.md#local-preparation-package-dispositions)
 and [retained preparation plan](plans/hermes-upstream-prep.md).
 
 Qualification uses native pytest and renderer suites in disposable Docker

@@ -1,66 +1,35 @@
 # Hermes patch reorganization and upstream preparation
 
-This is the retained reference for Private Hermes's upstream-preparation work.
-Current candidate revisions are in the table below.
+## 1. Branches to submit
 
-## 1. Current status and authoritative candidate table
+Use **only the `upstream-pr/*` branches listed below** for PR1–PR4. Each
+row is one PR. The `stack-patches/v0.23.3/*` refs preserve the source history
+of the stack's pinned replay. See [v0.23.3 build provenance](#v0233-build-provenance).
 
-Upstream candidates live in the ignored clone `upstream_work/hermes-agent`
-(remote `origin` = `https://github.com/nousresearch/hermes-agent`). They were
-rebased onto `origin/main` and are not pushed.
+Publish both ref namespaces to the `fork` remote before using the GitHub
+branch and commit links below. The local working clone is
+`upstream_work/hermes-agent/`, and submission drafts live under
+`upstream_work/submissions/`. [Fork repository](https://github.com/mikeperry-tor/hermes-agent)
 
-| Branch | Head | Commits | Scope | Status |
-| --- | --- | --- | --- | --- |
-| `candidate/executor-desktop-browser` (PR1) | `53043aeb9d0dc1f90528504e4b88c66bb8bb6398` | 10 | Desktop/browser execution placement, SSH config, sandbox launch policy | Rebased, qualified, `G-UPSTREAM` PASS |
-| `candidate/executor-terminals` (PR2) | `f7f0b244545b2943a58b8f915c14066463262cec` | 4 | Executor-backed WebApp terminals, cancellable startup | Rebased, qualified, `G-UPSTREAM` PASS |
-| `candidate/url-reference-fetching` (PR3) | `50ab0a4cfe9dc08f85b62ed5991d10f3bc39cec1` | 2 | Selectable inline URL context fetching | Rebased, qualified, `G-UPSTREAM` PASS |
-| `candidate/deployment-restrictions` (PR4) | `7495b47bc25f8b8ac8cfb8c939ffd6c5eec3fa35` | 4 | Managed `tools.disabled` ceiling and prompt/worker policy | Rebased, qualified, `G-UPSTREAM` PASS |
-| `candidate/webapp-content-privacy` (PR5) | `caafe5389ae585ef77387a962aee05b1bcf17029` (base only) | 0 | Webapp external-content ceiling and gateway raster retrieval | Deferred design; not implemented |
+The submission branches are based on upstream `origin/main` at
+`2de9f51b8008a7d49a49221c184f2f11cbfc4af1`. Their commits use
+`Mike Perry <mikeperry-git@untrusted.systems>`.
 
-- Base for every branch: `origin/main` `caafe5389ae585ef77387a962aee05b1bcf17029`.
-- Shared first commit (PR1–PR4): `15de33f3af9d2fc2e63f05abdade39b1750bb038`
-  (`fix(config): fail closed on invalid managed configuration when strict`),
-  including the contributor-email mapping.
-- Combined four-branch replay: `tmp/combined-replay`
-  `087222ccf6cbd04ac89096bab4182e05e2af6b0f` (17 commits).
-- Candidate identities: `Mike Perry <mikeperry-git@untrusted.systems>`. No push,
-  PR creation or upstream write has been performed.
-- Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
-  `cf27eab..a9f24a0`).
-- Wrapper baseline at completion of this preparation: `v0.23.2`, source
-  `ae2a81ccc00e9b7c06301523e5bb09608397149c`, digest
-  `sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459`.
-  Qualification applies to the packaged `v0.23.2` wrapper; a released upstream
-  artifact still needs the [adoption checks](../update-workflow.md).
+| PR | Submission branch | Head | Validation |
+| --- | --- | --- | --- |
+| PR1 | [`upstream-pr/executor-desktop-browser`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/executor-desktop-browser) | `3b02fb7268f45ea5027102829e1f0b95718a15b7` | Reconciles upstream pinned vault channels and executor ownership. 78 focused vault/managed desktop tests passed |
+| PR2 | [`upstream-pr/executor-terminals`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/executor-terminals) | `f616392b522872342b03ed5be3a28f46f2a54df7` | 89 focused native tests passed |
+| PR3 | [`upstream-pr/url-reference-fetching`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/url-reference-fetching) | `22eb62cb37a0d612cb679f9733c1e868b7dad982` | 67 focused native tests passed |
+| PR4 | [`upstream-pr/deployment-restrictions`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/deployment-restrictions) | `8f37dcb7916fbbf7936f590aea16405e27b47674` | 83 focused native tests passed |
 
-Qualification summary (Linux ARM64 Docker against the base above): every branch
-and the combined replay pass docs-drift, contributor-email, 47 guard tests and
-all 22 `scripts/check` checks; every intermediate commit is `git show --check`
-clean and passes its changed tests. Branch suites: PR1 424 passed (13 skipped),
-PR2 114, PR3 75, PR4 965, combined 1,554 (13 skipped), plus managed-policy
-`test_doctor.py` checks. Combined Webapp build and Vitest: 221 passed (4
-skipped). Live POSIX SSH executor fixtures pass for PR1 and PR2.
-
-### Refreshed main candidates
-
-The release-based candidates above remain the source for the stack's v0.23.3
-patch. The adjacent `candidate-main/*` refs in the same clone are based on
-fetched `origin/main` `2de9f51b8008a7d49a49221c184f2f11cbfc4af1`.
-
-| Main-based branch | Head | Validation or status |
-| --- | --- | --- |
-| `candidate-main/executor-desktop-browser` | `cabb218bd1eb173883f6994f04fd0cfdc05c572a` | Reconciles upstream pinned vault channels and executor ownership. 78 focused vault/managed desktop tests passed |
-| `candidate-main/executor-terminals` | `34b50347068192f6de11bcee2dadbbf39f60b642` | 89 focused native tests passed |
-| `candidate-main/url-reference-fetching` | `6d5f66712dda23eb006f612a86506e2e23d53143` | 67 focused native tests passed |
-| `candidate-main/deployment-restrictions` | `60337a82736d0e6a3ab24b1d7fc3e65ced2b2d9e` | 83 focused native tests passed |
-| `candidate-main/webapp-content-privacy` | `2de9f51b8008a7d49a49221c184f2f11cbfc4af1` | Base only. Deferred design |
+PR5 remains deferred. Its reserved ref, `upstream-pr/webapp-content-privacy`,
+contains only the base commit.
 
 ## 2. Upstream submission and merge-order checklist
 
-1. Use the refreshed main-based branches for submission and recheck them against
-   the target `origin/main`. PR1–PR4 share `3b3f0d591` on the refreshed base.
-   After PR1 merges, rebase the other branches so the shared commit can drop by
-   patch identity. The release-based replay keeps the original `15de33f3a`.
+1. Recheck the submission branches against the target `origin/main`. Open
+   PR1 first. PR1–PR4 share `66652468b`. After PR1 merges, rebase the other
+   branches so the shared commit can drop by patch identity.
 2. Reconcile known adjacency points:
    - `website/docs/user-guide/managed-scope.md` (strict-reader paragraph and
      later additions),
@@ -123,6 +92,44 @@ tenant-isolation claim; no funded-wallet or Funnel enrollment action; keep
 `reference_repos/` read-only.
 
 ## 4. Execution and qualification record
+
+### v0.23.3 build provenance
+
+The `stack-patches/v0.23.3/*` refs preserve the release-based source history.
+The stack's tracked v0.23.3 patch was exported from the combined replay below.
+For a later release, use the
+[candidate patch update workflow](../update-workflow.md#rebuild-the-candidate-patch-for-a-new-release).
+
+| Branch | Head | Commits | Scope | Status |
+| --- | --- | --- | --- | --- |
+| `stack-patches/v0.23.3/executor-desktop-browser` (PR1) | `53043aeb9d0dc1f90528504e4b88c66bb8bb6398` | 10 | Desktop/browser execution placement, SSH config, sandbox launch policy | Rebased, qualified, `G-UPSTREAM` PASS |
+| `stack-patches/v0.23.3/executor-terminals` (PR2) | `f7f0b244545b2943a58b8f915c14066463262cec` | 4 | Executor-backed WebApp terminals, cancellable startup | Rebased, qualified, `G-UPSTREAM` PASS |
+| `stack-patches/v0.23.3/url-reference-fetching` (PR3) | `50ab0a4cfe9dc08f85b62ed5991d10f3bc39cec1` | 2 | Selectable inline URL context fetching | Rebased, qualified, `G-UPSTREAM` PASS |
+| `stack-patches/v0.23.3/deployment-restrictions` (PR4) | `7495b47bc25f8b8ac8cfb8c939ffd6c5eec3fa35` | 4 | Managed `tools.disabled` ceiling and prompt/worker policy | Rebased, qualified, `G-UPSTREAM` PASS |
+| `stack-patches/v0.23.3/webapp-content-privacy` (PR5) | `caafe5389ae585ef77387a962aee05b1bcf17029` (base only) | 0 | Webapp external-content ceiling and gateway raster retrieval | Deferred design; not implemented |
+
+- Base for the release references: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
+- Shared first commit (PR1–PR4): `15de33f3af9d2fc2e63f05abdade39b1750bb038`
+  (`fix(config): fail closed on invalid managed configuration when strict`),
+  including the contributor-email mapping.
+- Combined four-branch replay: `stack-patches/v0.23.3/combined`
+  [`087222ccf6cbd04ac89096bab4182e05e2af6b0f`](https://github.com/mikeperry-tor/hermes-agent/commit/087222ccf6cbd04ac89096bab4182e05e2af6b0f) (17 commits).
+- Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
+  `cf27eab..a9f24a0`).
+- Wrapper baseline at completion of this preparation: `v0.23.2`, source
+  `ae2a81ccc00e9b7c06301523e5bb09608397149c`, digest
+  `sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459`.
+  Current packaged evidence is in the [qualification guide](../development.md#packaged-hermes-qualification).
+
+Release-reference qualification (Linux ARM64 Docker): each implemented branch
+and the combined replay pass docs-drift, contributor-email, 47 guard tests and
+all 22 `scripts/check` checks; every intermediate commit is `git show --check`
+clean and passes its changed tests. Branch suites: PR1 424 passed (13 skipped),
+PR2 114, PR3 75, PR4 965, combined 1,554 (13 skipped), plus managed-policy
+`test_doctor.py` checks. Combined Webapp build and Vitest: 221 passed (4
+skipped). Live POSIX SSH executor fixtures pass for PR1 and PR2.
+
+### Preparation baseline
 
 The wrapper series was reorganized, integrated on `v0.23.2`, reviewed, and then
 the four reusable candidates were extracted, folded into topical commits, rebased

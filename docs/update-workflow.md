@@ -30,6 +30,35 @@ integration checks; the maintained component guides own the operating contracts.
    behavioral fixture for an uncovered route. Upstream feature completeness is
    outside this wrapper's qualification scope.
 
+## Rebuild the candidate patch for a new release
+
+Publish the `stack-patches/<release>/*` refs to the `fork` remote to preserve
+the release's topic histories. Together with the pinned combined replay, they let
+maintainers reproduce the candidate patch and trace each topic to its
+release-based checks after the submission branches move. The local working
+clone is `upstream_work/hermes-agent/`. See the [fork repository](https://github.com/mikeperry-tor/hermes-agent)
+and the [v0.23.3 provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
+
+Use these steps when the next release still needs candidate changes.
+
+1. Start a temporary replay from the exact source revision shipped in the new
+   official image. Use the current release replay to inventory the behavior
+   Private Hermes carries. Compare the corresponding `upstream-pr/*` topic
+   commits for fixes that belong on the new base.
+2. Replay the selected topic changes that the new release still needs. Include
+   the shared managed reader once and reconcile overlaps. Check the new release's
+   behavior before dropping a change it already supplies. A merge into upstream
+   main is only relevant to removal once the selected release provides the behavior.
+3. Export the diff from the new release base to the new combined replay as
+   `0001-upstream-candidates.patch`. Exclude upstream Python tests, website files,
+   contributor metadata and Electron-only files. Record the exact base and replay
+   head in the patch header. Rebase the downstream deployment and privacy patches
+   separately and verify the complete series against the packaged source.
+4. Record the selected topics, overlap resolutions and qualification in the
+   upgrade plan. Update the build provenance with the exact combined replay
+   SHA and its ref under `stack-patches/<release>/combined`. Keep the
+   `upstream-pr/*` branches available for their PRs.
+
 ## Keep qualification evidence attributable
 
 - Build every image used by the selected fixture, including unchanged supporting
