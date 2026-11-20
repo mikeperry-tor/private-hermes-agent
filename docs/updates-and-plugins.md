@@ -31,8 +31,7 @@ Hermes/Tor use their `latest` image channels, the optional executor desktop uses
 its `desktop` channel, Tailscale uses `stable`, and
 HAProxy stays on the pinned reference's version channel. Unpinned build-base
 tags are listed separately: there is no recorded digest to compare for those.
-The desktop check follows the `hermes-sandbox` image stage even when the executor
-also copies helpers from a pinned Hermes stage.
+The desktop check follows the `hermes-sandbox` image stage.
 The command changes no pins, installs no packages, and pulls no image layers.
 Checks are operator-invoked; plugin notifications have their own cadence below.
 
