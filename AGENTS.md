@@ -7,11 +7,6 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
 
 ## Read the project before changing it
 
-- Keep [README.md](README.md) user-facing only: explain the stack, its components,
-  the problems they solve, setup, everyday operation and practical limitations.
-  Put implementation details, development procedures and qualification evidence in
-  appropriate documents under `docs/`, and link to them instead of expanding the
-  README with maintainer material.
 - Read [README.md](README.md) for the user-facing overview and operator commands.
   Read [architecture and isolation](docs/architecture.md) and
   [development and qualification](docs/development.md) for implementation and checks.
@@ -37,6 +32,11 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   repository status, support boundaries and durable limitations. Update the owning
   section in place and remove superseded claims; readers must not reconcile a
   sequence of updates to discover what is true.
+- Keep [README.md](README.md) user-facing only: explain the stack, its components,
+  the problems they solve, setup, everyday operation and practical limitations.
+  Put implementation details, development procedures and qualification evidence in
+  appropriate documents under `docs/`, and link to them instead of expanding the
+  README with maintainer material.
 - Do not append development journals, changelogs, dated test/probe narratives,
   review-acceptance logs, cleanup reports or "initially/later/retested" histories
   outside plans. Do not carry retired plan phase/gate codes into permanent docs.

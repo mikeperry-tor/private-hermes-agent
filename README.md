@@ -30,19 +30,17 @@ still use your browser's connection.
   and terminal client let you work with the same persistent agent. This stack
   supports both Docker and Rootless podman with [hardened services](#service-hardening): strong network isolation between containers,
   no host access by default, an SSH executor, and least-priviledge operation.
-- **[Tor gateway](https://hub.docker.com/r/dockurr/tor)** routes public TCP
-  traffic and DNS from Hermes and its executor
-  through Tor, hiding their source network address from Internet destinations.
-  Network rules block direct Internet fallback and access to host, VM, and
-  private-network services except the stack's explicit internal connections.
-  Optional [Tor onion service ingress](#tor-onion-service) allows you to reach
-  the Hermes Admin Webapp via an onion URL (requires [Tor Browser]() or Brave's Tor Window).
-- **[Teep](https://github.com/13rac1/teep)** connects Hermes to confidential-computing
-  inference providers through an OpenAI-compatible API. It handles provider
-  credentials and upstream attestation checks in a separate service with its own
-  direct Internet connection. The stack preserves Teep's upstream verification
-  policy, including its allowed failures; service health alone does not prove
-  successful attestation.
+- **[Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel)** provides
+  access to the Hermes Admin WebApp over a public HTTPS domain. It does not require
+  using a Tailnet or their VPN, and is available on the free tier. This allows
+  you to access your Hermes Admin panel from anywhere.
+- **[Tor](https://hub.docker.com/r/dockurr/tor)** is used to route TCP
+  traffic and DNS from Hermes and its executor through Tor, hiding their source
+  network address from Internet destinations. Network rules block direct Internet
+  fallback and access to host, VM, and private-network services except the stack's
+  explicit internal connections. Optional [Tor onion service ingress](#tor-onion-service)
+  allows you to reach the Hermes Admin Webapp via an onion URL (requires
+  [Tor Browser](https://www.torproject.org/download/) or [Brave's Tor Window](https://support.brave.app/hc/en-us/articles/360018121491-What-is-a-Private-Window-with-Tor-Connectivity)).
 - **[x402_treazury](https://github.com/mikeperry-tor/x402_treazury)** gives Hermes
   research tools backed by paid information APIs. These provide an alternative
   to directly browsing websites that subject Tor users to extra CAPTCHAs,
@@ -51,11 +49,12 @@ still use your browser's connection.
   Rotating wallets and changing the Tor isolation identity reduce the linkability
   of API usage across payments. Hermes receives authenticated tool access while
   wallet files and spending keys stay in a separate container.
-- **[Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel)** provides
-  access to the Hermes Admin WebApp over a public HTTPS domain. It does not require
-  using a Tailnet or their VPN, and is available on the free tier. This allows
-  you to access your Hermes Admin panel from anywhere. Tailscale is not routed
-  over Tor: this remote access remains separate from the agent's Tor egress.
+- **[Teep](https://github.com/13rac1/teep)** connects Hermes to confidential-computing
+  inference providers through an OpenAI-compatible API. It handles provider
+  credentials and upstream attestation checks in a separate service with its own
+  direct Internet connection. The stack preserves Teep's upstream verification
+  policy, including its allowed failures; service health alone does not prove
+  successful attestation.
 
 x402_treazury exposes twelve research tool groups covering web, science,
 shopping, world, social, property, travel, health, business, finance, security,
