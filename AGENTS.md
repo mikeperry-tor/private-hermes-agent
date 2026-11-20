@@ -94,14 +94,13 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
 
 ## Compatibility for deployed stacks
 
-The supported end-user upgrade is the in-place workflow in
-[Updates and Backups](README.md#updates-and-backups). Users will run `make down`,
-take the [pre-upgrade backup](docs/configuration.md#backup-scope), then run
-`git pull`, and `make up`. They will use their existing checkout, container
-engine, Compose project, bind mounts and named volumes. `make up` builds
-the selected images and runs offline setup against the existing state.
-Upgrades outside this workflow are currently unsupported.
-
+- The supported end-user upgrade is the in-place workflow in
+  [Updates and Backups](README.md#updates-and-backups). Users will run `make down`,
+  take the [pre-upgrade backup](docs/configuration.md#backup-scope), then run
+  `git pull`, and `make up`. They will use their existing checkout, container
+  engine, Compose project, bind mounts and named volumes. `make up` builds
+  the selected images and runs offline setup against the existing state.
+  Upgrades outside this workflow are currently unsupported.
 - Private Hermes owns its deployment contract: root `.env` settings and their
   defaults and precedence, wrapper-owned files under `config/`, documented
   operator commands, and the storage and identity layout. The layout includes
