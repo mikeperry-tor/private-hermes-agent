@@ -22,19 +22,19 @@ down:
 
 test: check
 	$(COMPOSE) -f compose.yaml build hermes executor
-	python3 scripts/preflight.py private-hermes-test
+	python3 scripts/preflight.py private-hermes-test --skip-ports
 	python3 -u tests/smoke.py
 
 .PHONY: computer-use-test
 computer-use-test: check
 	COMPUTER_USE_ENABLED=true $(COMPOSE) -f compose.yaml build hermes executor
-	COMPUTER_USE_ENABLED=true python3 scripts/preflight.py private-hermes-test
+	COMPUTER_USE_ENABLED=true python3 scripts/preflight.py private-hermes-test --skip-ports
 	COMPUTER_USE_ENABLED=true python3 -u tests/computer_use_smoke.py
 
 .PHONY: browser-use-test
 browser-use-test: check
 	COMPUTER_USE_ENABLED=true $(COMPOSE) -f compose.yaml build hermes executor
-	COMPUTER_USE_ENABLED=true python3 scripts/preflight.py private-hermes-test
+	COMPUTER_USE_ENABLED=true python3 scripts/preflight.py private-hermes-test --skip-ports
 	COMPUTER_USE_ENABLED=true python3 -u tests/browser_use_smoke.py
 
 .PHONY: storage-test
@@ -56,7 +56,7 @@ x402_treazury-prepare:
 .PHONY: x402_treazury-test
 x402_treazury-test: check
 	$(COMPOSE) -f compose.yaml build x402_treazury
-	python3 scripts/preflight.py private-hermes-x402-treazury-test
+	python3 scripts/preflight.py private-hermes-x402-treazury-test --skip-ports
 	python3 -u tests/x402_treazury_smoke.py
 
 .PHONY: webapp-credentials webapp-rotate webapp-test webapp-live-test
@@ -66,13 +66,13 @@ webapp-rotate:
 	python3 scripts/webapp-credentials.py --rotate
 webapp-test: check
 	$(COMPOSE) -f compose.yaml build hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-webapp-test --funnel
+	python3 scripts/preflight.py private-hermes-webapp-test --funnel --skip-ports
 	python3 -u tests/webapp_smoke.py
 
 # Explicit public-network Tor image/outage/recovery qualification.
 webapp-live-test: check
 	$(COMPOSE) -f compose.yaml build hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-webapp-test --funnel
+	python3 scripts/preflight.py private-hermes-webapp-test --funnel --skip-ports
 	python3 -u tests/webapp_smoke.py --live-egress
 
 .PHONY: chat gateway
@@ -83,14 +83,14 @@ onion-address:
 .PHONY: onion-test
 onion-test: check
 	$(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-onion-test --funnel
+	python3 scripts/preflight.py private-hermes-onion-test --funnel --skip-ports
 	python3 -u tests/onion_smoke.py
 
 # Explicitly publishes a disposable authenticated onion service for qualification.
 .PHONY: onion-live-test
 onion-live-test: check
 	$(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-onion-test --funnel
+	python3 scripts/preflight.py private-hermes-onion-test --funnel --skip-ports
 	python3 -u tests/onion_smoke.py --live
 
 chat:
@@ -105,7 +105,7 @@ plugins:
 
 .PHONY: plugins-test
 plugins-test: check
-	python3 scripts/preflight.py private-hermes-plugins-test
+	python3 scripts/preflight.py private-hermes-plugins-test --skip-ports
 	python3 -u tests/plugins_smoke.py
 
 .PHONY: images-test

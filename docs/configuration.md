@@ -302,8 +302,11 @@ capabilities, or changes to the isolated namespace firewall rules.
 If another host process already listens on 8337, set `TEEP_HOST_PORT` to an unused
 port such as `18337` before starting the stack. A collision prevents Docker from
 starting Teep with its configured publication; there is no silent port change,
-omitted endpoint or fallback to the host process. The disposable integration
-fixtures use ephemeral host ports and leave an existing host Teep alone.
+omitted endpoint or fallback to the host process. Preflight checks the declared
+published ports before startup and names the service, address and owning
+container when another stack holds the port. The same check covers the webapp's
+`WEBAPP_BIND`/`WEBAPP_PORT` publication. The disposable integration fixtures use
+ephemeral host ports and leave an existing host Teep alone.
 
 Hermes continues to use `10.203.83.3:8337` internally. The executor cannot reach
 Teep, and neither isolated namespace gains access to host/VM addresses through

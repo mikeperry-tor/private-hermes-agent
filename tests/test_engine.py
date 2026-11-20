@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tempfile
@@ -602,7 +603,7 @@ class PreflightSecurityOptionTests(unittest.TestCase):
         with patch.object(preflight, 'engine', return_value='podman'):
             preflight.check_security_options(self.config())
             preflight.check_security_options(self.config('seccomp=unconfined'))
-            with self.assertRaisesRegex(SystemExit, 'executor.*seccomp-desktop.json.*inline JSON.*native Podman default'):
+            with self.assertRaisesRegex(SystemExit, '(?s)executor.*seccomp-desktop.json.*inline JSON.*native Podman default'):
                 preflight.check_security_options(self.config('seccomp=./components/executor/seccomp-desktop.json'))
 
     def test_docker_keeps_custom_seccomp_profiles(self):
@@ -639,36 +640,99 @@ class EngineDependentCheckTests(unittest.TestCase):
         def output(*args):
             if 'config' in args:
                 return model
-            if args[-2:] == ('ls', '-q'):
+            if args[-3:] == ('network', 'ls', '-q'):
                 return 'a b'
-            return json.dumps(self.networks)
+            if 'network' in args and 'inspect' in args:
+                return json.dumps(self.networks)
+            if args[-2:] == ('ps', '-q'):
+                return ''
+            raise AssertionError(f'Unexpected command: {args}')
         for networks, conflict in (([own], False), ([own, foreign], True)):
             self.networks = networks
             with self.subTest(conflict=conflict), patch.object(preflight, 'output', side_effect=output), \
                     patch.object(preflight, 'check_engine'), patch.object(preflight, 'engine', return_value='podman'), \
                     patch.object(sys, 'argv', ['preflight.py']), patch('sys.stdout', new_callable=io.StringIO):
                 if conflict:
-                    with self.assertRaisesRegex(SystemExit, 'Address conflict: subnet 10.203.83.0/24 for network '
-                                                            '"inference" overlaps existing network other'):
+                    with self.assertRaises(SystemExit) as raised:
                         preflight.main()
+                    message = str(raised.exception)
+                    self.assertIn('Address conflict', message)
+                    self.assertIn('10.203.83.0/24', message)
+                    self.assertIn('inference', message)
+                    self.assertIn('other', message)
                 else:
                     preflight.main()
 
-    def test_preflight_points_to_the_address_plan_and_docker_pools(self):
+    def test_preflight_skip_ports_skips_container_inspection_and_port_checks(self):
+        model = json.dumps({
+            'services': {'teep': {'ports': [{'host_ip': '127.0.0.1', 'published': '8337', 'protocol': 'tcp'}]}},
+            'networks': {'inference': {'ipam': {'config': [{'subnet': '10.203.83.0/24'}]}}},
+        })
+        def output(*args):
+            if 'config' in args:
+                return model
+            if args[-3:] == ('network', 'ls', '-q'):
+                return ''
+            raise AssertionError(f'Should not inspect containers with --skip-ports: {args}')
+        with patch.object(preflight, 'output', side_effect=output), \
+                patch.object(preflight, 'check_engine'), patch.object(preflight, 'engine', return_value='docker'), \
+                patch.object(preflight, 'check_published_ports', side_effect=AssertionError('port check ran')), \
+                patch.object(sys, 'argv', ['preflight.py', 'private-hermes-test', '--skip-ports']), \
+                patch('sys.stdout', new_callable=io.StringIO):
+            preflight.main()
+
+    def test_preflight_tolerates_vanished_container_during_inspect(self):
+        kept = {'Name': '/other', 'Config': {'Labels': {}}}
+        def output(*args):
+            if args[-2:] == ('gone', 'alive'):
+                raise subprocess.CalledProcessError(1, args)
+            if args[-1] == 'gone':
+                raise subprocess.CalledProcessError(1, args)
+            if args[-1] == 'alive':
+                return json.dumps([kept])
+            raise AssertionError(f'Unexpected command: {args}')
+        with patch.object(preflight, 'output', side_effect=output), \
+                patch.object(preflight, 'engine', return_value='docker'):
+            self.assertEqual(preflight.inspect_resources((), ['gone', 'alive']), [kept])
+
+    def test_preflight_points_to_the_address_plan_and_engine_pools(self):
         config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
         existing = [{'name': 'other', 'labels': {}, 'subnets': [{'subnet': '10.203.88.0/24'}]}]
-        with self.assertRaises(SystemExit) as raised:
+        with patch.object(preflight, 'engine', return_value='docker'), self.assertRaises(SystemExit) as raised:
             preflight.check_address_conflicts('private-hermes', config, existing)
         message = str(raised.exception)
         self.assertIn('networks: block of compose.yaml', message)
         self.assertIn('default-address-pools', message)
         self.assertIn('Docker Desktop', message)
+        with patch.object(preflight, 'engine', return_value='podman'), self.assertRaises(SystemExit) as raised:
+            preflight.check_address_conflicts('private-hermes', config, existing)
+        podman_message = str(raised.exception)
+        self.assertIn('default_subnet_pools', podman_message)
+        self.assertNotIn('Docker Desktop', podman_message)
+
+    def test_preflight_detects_lingering_project_network_overlap_and_ignores_extra_address_family(self):
+        config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
+        dual_stack = [{'name': 'private-hermes_tor-uplink',
+                       'labels': {'com.docker.compose.project': 'private-hermes',
+                                  'com.docker.compose.network': 'tor-uplink'},
+                       'subnets': [{'subnet': '10.203.88.0/24'}, {'subnet': 'fd00:1::/64'}]}]
+        preflight.check_address_conflicts('private-hermes', config, dual_stack)
+        lingering = [{'name': 'private-hermes_tailscale-uplink',
+                      'labels': {'com.docker.compose.project': 'private-hermes',
+                                 'com.docker.compose.network': 'tailscale-uplink'},
+                      'subnets': [{'subnet': '10.203.88.0/24'}]}]
+        with self.assertRaises(SystemExit) as raised:
+            preflight.check_address_conflicts('private-hermes', config, lingering)
+        self.assertIn('stale project networks', str(raised.exception))
 
     def test_preflight_reports_overlapping_declared_subnets(self):
         config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}},
                                'teep-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/25'}]}}}}
-        with self.assertRaisesRegex(SystemExit, 'overlapping subnets.*networks: block of compose.yaml'):
+        with self.assertRaises(SystemExit) as raised:
             preflight.check_address_conflicts('private-hermes', config, [])
+        message = str(raised.exception)
+        self.assertIn('overlapping subnets', message)
+        self.assertIn('networks: block of compose.yaml', message)
 
     def test_preflight_requires_make_down_when_a_project_network_subnet_changed(self):
         config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
@@ -676,13 +740,199 @@ class EngineDependentCheckTests(unittest.TestCase):
                      'labels': {'com.docker.compose.project': 'private-hermes',
                                 'com.docker.compose.network': 'tor-uplink'},
                      'subnets': [{'subnet': '192.168.240.0/20'}]}]
-        with self.assertRaisesRegex(SystemExit, 'make down.*make up'):
+        with self.assertRaises(SystemExit) as raised:
             preflight.check_address_conflicts('private-hermes', config, existing)
+        message = str(raised.exception)
+        self.assertIn('Run make down to remove the project networks.', message)
+        self.assertIn('Run make up to recreate them.', message)
 
     def test_preflight_accepts_a_clean_pinned_plan(self):
         config = {'networks': {'tor-uplink': {'ipam': {'config': [{'subnet': '10.203.88.0/24'}]}}}}
         existing = [{'name': 'other', 'labels': {}, 'subnets': [{'subnet': '172.18.0.0/16'}]}]
         preflight.check_address_conflicts('private-hermes', config, existing)
+
+    def test_preflight_accepts_a_matching_project_network(self):
+        config = {'networks': {'inference': {'ipam': {'config': [{'subnet': '10.203.83.0/24'}]}}}}
+        existing = [{'name': 'private-hermes_inference',
+                     'labels': {'com.docker.compose.project': 'private-hermes',
+                                'com.docker.compose.network': 'inference'},
+                     'subnets': [{'subnet': '10.203.83.0/24'}]}]
+        preflight.check_address_conflicts('private-hermes', config, existing)
+
+    def test_preflight_reports_a_foreign_container_holding_a_published_port_even_when_probe_succeeds(self):
+        # On macOS, binding 127.0.0.1 succeeds even when a foreign container holds 0.0.0.0:port.
+        config = {'services': {'teep': {'ports': [
+            {'mode': 'ingress', 'host_ip': '127.0.0.1', 'target': 8337,
+             'published': '8337', 'protocol': 'tcp'}]}}}
+        foreign = [{'Name': '/onyx-teep-1',
+                    'Config': {'Labels': {'com.docker.compose.project': 'onyx'}},
+                    'NetworkSettings': {'Ports': {'8337/tcp': [
+                        {'HostIp': '0.0.0.0', 'HostPort': '8337'}]}}}]
+        with patch.object(preflight.socket, 'socket') as factory, self.assertRaises(SystemExit) as raised:
+            preflight.check_published_ports('private-hermes', config, foreign)
+        factory.assert_not_called()
+        message = str(raised.exception)
+        self.assertIn('Host port conflict', message)
+        self.assertIn('onyx-teep-1', message)
+        self.assertIn('TEEP_HOST_PORT', message)
+        self.assertIn('docs/configuration.md', message)
+
+    def test_preflight_matches_own_and_foreign_bindings_by_ip_and_protocol(self):
+        # Own container on 127.0.0.1:9120/tcp must not suppress a conflict on 127.0.0.2:9120/tcp or 9120/udp.
+        own = [{'Name': '/private-hermes-webapp-proxy-1',
+                'Config': {'Labels': {'com.docker.compose.project': 'private-hermes'}},
+                'NetworkSettings': {'Ports': {'9120/tcp': [
+                    {'HostIp': '127.0.0.1', 'HostPort': '9120'}]}}}]
+        foreign_udp = [{'Name': '/other-udp',
+                        'Config': {'Labels': {'com.docker.compose.project': 'other'}},
+                        'NetworkSettings': {'Ports': {'9120/udp': [
+                            {'HostIp': '127.0.0.1', 'HostPort': '9120'}]}}}]
+        foreign_other_ip = [{'Name': '/other-ip',
+                             'Config': {'Labels': {'com.docker.compose.project': 'other'}},
+                             'NetworkSettings': {'Ports': {'9120/tcp': [
+                                 {'HostIp': '127.0.0.2', 'HostPort': '9120'}]}}}]
+        # Matching own binding is allowed.
+        config_same = {'services': {'webapp-proxy': {'ports': [
+            {'host_ip': '127.0.0.1', 'target': 9120, 'published': '9120', 'protocol': 'tcp'}]}}}
+        preflight.check_published_ports('private-hermes', config_same, own)
+        # Moving to 127.0.0.2 collides with foreign_other_ip even though own holds 127.0.0.1:9120.
+        config_moved = {'services': {'webapp-proxy': {'ports': [
+            {'host_ip': '127.0.0.2', 'target': 9120, 'published': '9120', 'protocol': 'tcp'}]}}}
+        with self.assertRaises(SystemExit) as raised:
+            preflight.check_published_ports('private-hermes', config_moved, [*own, *foreign_other_ip])
+        self.assertIn('other-ip', str(raised.exception))
+        # A foreign UDP container must not be blamed for a host TCP listener.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            config_tcp = {'services': {'teep': {'ports': [
+                {'host_ip': '127.0.0.1', 'target': 8337, 'published': str(port), 'protocol': 'tcp'}]}}}
+            udp_same_port = [{'Name': '/other-udp',
+                              'Config': {'Labels': {'com.docker.compose.project': 'other'}},
+                              'NetworkSettings': {'Ports': {f'{port}/udp': [
+                                  {'HostIp': '127.0.0.1', 'HostPort': str(port)}]}}}]
+            with self.assertRaises(SystemExit) as raised:
+                preflight.check_published_ports('private-hermes', config_tcp, udp_same_port)
+            self.assertNotIn('other-udp', str(raised.exception))
+
+    def test_preflight_probes_for_a_non_container_listener(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            config = {'services': {'teep': {'ports': [
+                {'host_ip': '127.0.0.1', 'target': 8337, 'published': str(port), 'protocol': 'tcp'}]}}}
+            with self.assertRaises(SystemExit) as raised:
+                preflight.check_published_ports('private-hermes', config, [])
+            message = str(raised.exception)
+            self.assertIn('Host port conflict', message)
+            self.assertIn('TEEP_HOST_PORT', message)
+
+    def test_preflight_accepts_an_available_published_port(self):
+        config = {'services': {'teep': {'ports': [
+            {'host_ip': '127.0.0.1', 'target': 8337, 'published': '8339', 'protocol': 'tcp'}]}}}
+        with patch.object(preflight.socket, 'socket') as factory:
+            preflight.check_published_ports('private-hermes', config, [])
+        factory.return_value.__enter__.return_value.bind.assert_called_once_with(('127.0.0.1', 8339))
+
+    def test_preflight_checks_every_published_port(self):
+        free = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        free.bind(('127.0.0.1', 0))
+        free_port = free.getsockname()[1]
+        free.close()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+            busy.bind(('127.0.0.1', 0))
+            busy.listen()
+            busy_port = busy.getsockname()[1]
+            config = {'services': {
+                'teep': {'ports': [{'host_ip': '127.0.0.1', 'published': str(free_port), 'protocol': 'tcp'}]},
+                'webapp-proxy': {'ports': [{'host_ip': '127.0.0.1', 'published': str(busy_port),
+                                            'protocol': 'tcp'}]}}}
+            with self.assertRaises(SystemExit) as raised:
+                preflight.check_published_ports('private-hermes', config, [])
+        message = str(raised.exception)
+        self.assertIn(f':{busy_port}/tcp', message)
+        self.assertNotIn(f':{free_port}/tcp', message)
+
+    def test_preflight_detects_duplicate_declared_host_ports(self):
+        config = {'services': {
+            'teep': {'ports': [{'host_ip': '::1', 'published': '9120', 'protocol': 'tcp'}]},
+            'webapp-proxy': {'ports': [{'host_ip': '::1', 'published': '9120', 'protocol': 'tcp'}]}}}
+        with self.assertRaises(SystemExit) as raised:
+            preflight.check_published_ports('private-hermes', config, [])
+        message = str(raised.exception)
+        self.assertIn('Host port conflict', message)
+        self.assertIn('[::1]:9120/tcp', message)
+        self.assertIn('teep', message)
+        self.assertIn('webapp-proxy', message)
+
+    def test_preflight_detects_wildcard_host_port_overlap(self):
+        config = {'services': {
+            'teep': {'ports': [{'host_ip': '0.0.0.0', 'published': '9120', 'protocol': 'tcp'}]},
+            'webapp-proxy': {'ports': [{'host_ip': '127.0.0.1', 'published': '9120', 'protocol': 'tcp'}]}}}
+        with self.assertRaises(SystemExit):
+            preflight.check_published_ports('private-hermes', config, [])
+
+    def test_preflight_expands_published_port_ranges_and_ignores_port_zero(self):
+        config = {'services': {'teep': {'ports': [
+            {'host_ip': '127.0.0.1', 'published': '9000-9002', 'protocol': 'tcp'}]}}}
+        self.assertEqual([port for _, _, port, _ in preflight.published_ports(config)], [9000, 9001, 9002])
+        self.assertEqual(preflight.published_values(''), [])
+        self.assertEqual(preflight.published_values('0'), [])
+        self.assertEqual(preflight.published_values('65536'), [])
+        self.assertEqual(preflight.published_values('0-10'), [])
+        self.assertEqual(preflight.published_values('abc'), [])
+        self.assertEqual(preflight.published_values('9002-9000'), [])
+        ephemeral = {'services': {
+            'teep': {'ports': [{'host_ip': '127.0.0.1', 'published': '0', 'protocol': 'tcp'}]},
+            'webapp-proxy': {'ports': [{'host_ip': '127.0.0.1', 'published': '0', 'protocol': 'tcp'}]}}}
+        preflight.check_published_ports('private-hermes', ephemeral, [])
+
+    def test_preflight_compares_bind_addresses_and_families(self):
+        self.assertTrue(preflight.bindings_overlap('0.0.0.0', '127.0.0.1'))
+        self.assertTrue(preflight.bindings_overlap('::', '::1'))
+        self.assertTrue(preflight.bindings_overlap('::', '127.0.0.1'))
+        self.assertTrue(preflight.bindings_overlap('127.0.0.1', '127.0.0.1'))
+        self.assertFalse(preflight.bindings_overlap('127.0.0.1', '127.0.0.2'))
+        self.assertFalse(preflight.bindings_overlap('127.0.0.1', '::1'))
+
+    def test_preflight_reads_docker_and_podman_port_bindings(self):
+        docker = {'NetworkSettings': {'Ports': {'8337/tcp': [
+            {'HostIp': '0.0.0.0', 'HostPort': '8337'},
+            {'HostIp': '::', 'HostPort': '8337'}]}},
+            'HostConfig': {'PortBindings': {'8337/tcp': [{'HostIp': '', 'HostPort': '0'}]}}}
+        podman = {'HostConfig': {'PortBindings': {'8339/udp': [
+            {'HostIp': '127.0.0.1', 'HostPort': '8339'}]}}}
+        self.assertEqual(preflight.port_bindings(docker),
+                         [('0.0.0.0', 8337, 'tcp'), ('::', 8337, 'tcp')])
+        self.assertEqual(preflight.port_bindings(podman), [('127.0.0.1', 8339, 'udp')])
+        self.assertEqual(preflight.display_address('', 8337), '0.0.0.0:8337')
+        self.assertEqual(preflight.display_address('::', 8337), '[::]:8337')
+        self.assertEqual(preflight.display_address('127.0.0.1', 8337), '127.0.0.1:8337')
+
+    def test_preflight_allows_duplicate_port_on_different_protocols(self):
+        config = {'services': {
+            'teep': {'ports': [{'host_ip': '127.0.0.1', 'published': '9120', 'protocol': 'tcp'}]},
+            'webapp-proxy': {'ports': [{'host_ip': '127.0.0.1', 'published': '9120', 'protocol': 'udp'}]}}}
+        with patch.object(preflight.socket, 'socket'):
+            preflight.check_published_ports('private-hermes', config, [])
+
+    def test_preflight_rejects_an_unpinned_network(self):
+        with patch.object(preflight, 'engine', return_value='docker'), self.assertRaises(SystemExit) as raised:
+            preflight.check_pinned_networks({'networks': {'unpinned': {'driver_opts': {'x': 'y'}}}})
+        message = str(raised.exception)
+        self.assertIn('no pinned subnet', message)
+        self.assertIn('compose.funnel.yaml', message)
+        self.assertIn('default-address-pools', message)
+        preflight.check_pinned_networks({'networks': {'external': {'external': True}}})
+        preflight.check_pinned_networks({'networks': {
+            'pinned': {'ipam': {'config': [{'subnet': '10.0.0.0/24'}]}}}})
+
+    def test_preflight_ignores_unpublished_container_ports(self):
+        config = {'services': {'teep': {'ports': [
+            {'host_ip': '127.0.0.1', 'target': 8337, 'published': '', 'protocol': 'tcp'}]}}}
+        preflight.check_published_ports('private-hermes', config, [])
 
     def test_preflight_reads_docker_and_podman_network_subnets(self):
         docker = {'Name': 'other', 'Labels': {}, 'IPAM': {'Config': [{'Subnet': '10.203.83.0/24'}]}}

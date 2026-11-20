@@ -57,11 +57,18 @@ key, and the x402_treazury server with an unfunded fixture wallet. It performs n
 inference or paid research calls. Stop a normal deployment before running it:
 projects use the same fixed subnets, and preflight refuses overlaps. Every network
 subnet is pinned in the `networks:` block of `compose.yaml` (`compose.funnel.yaml`
-for the Funnel networks). If a pinned subnet overlaps another stack's network, or
-a project network already exists with a different subnet, preflight stops before
-changing anything and reports where to edit the plan. When an overlapping network
-was allocated automatically, it also points to Docker's `default-address-pools`
-(Docker Desktop > Settings > Docker Engine, `~/.docker/daemon.json`).
+for the Funnel networks), and preflight rejects a network that omits one. If a
+pinned subnet overlaps another stack's network, or a project network already exists
+with a different subnet, preflight stops before changing anything and reports where
+to edit the plan. When an overlapping network was allocated automatically, it also
+points to Docker's `default-address-pools` (Docker Desktop > Settings > Docker
+Engine, `~/.docker/daemon.json`) or Podman's `default_subnet_pools` in
+`containers.conf`. Preflight also checks the declared host
+publications (`TEEP_HOST_PORT`, `WEBAPP_BIND` and `WEBAPP_PORT`) during `make up`,
+including duplicate or overlapping publications within the stack, and reports a
+conflicting process or container before startup. Disposable test targets invoke
+preflight with `--skip-ports` so they check the fixed subnets without probing
+`.env` host ports that test overlays do not bind.
 
 Tests cover actual Hermes terminal and Python execution over SSH, absence of
 agent keys/environment in the executor, Tor versus direct inference egress,
