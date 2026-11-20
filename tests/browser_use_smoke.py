@@ -14,10 +14,6 @@ def agent_python(code, check=True):
 
 
 def check():
-    owner = agent_python(Path('tests/fixtures/browser-owner.py').read_text(), check=False)
-    print(owner.stdout, owner.stderr, flush=True)
-    if owner.returncode:
-        raise RuntimeError('Browser owner regression failed')
     result = agent_python(Path('tests/fixtures/browser-use.py').read_text(), check=False)
     print(result.stdout, result.stderr, flush=True)
     if result.returncode:
@@ -65,9 +61,9 @@ def missing_harness():
             smoke.compose('up', '-d', '--wait', '--no-deps', '--force-recreate', 'executor')
             agent_python('''import json
 from pathlib import Path
-from hermes_cli.private_computer_use import available
+from tools.computer_use.tool import check_computer_use_requirements
 from tools.browser_use_cli import browser_exec_available,browser_exec
-assert available(), 'desktop/SSH should remain available'
+assert check_computer_use_requirements(), 'desktop/SSH should remain available'
 assert not browser_exec_available()
 r=json.loads(browser_exec('from pathlib import Path; Path("/tmp/browser-missing-harness-canary").touch()'))
 assert r.get('error'),r

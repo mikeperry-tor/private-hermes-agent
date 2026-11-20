@@ -1,6 +1,3 @@
-# Public screenshot helper from the exact packaged Hermes revision, not its runtime.
-FROM nousresearch/hermes-agent@sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459 AS browser-source
-
 FROM alpine:3.24 AS executor-false
 RUN apk add --no-cache bash python3 py3-pip py3-yaml git curl openssh-server openssh-client nodejs npm tar coreutils \
     && addgroup -g 10000 runner \
@@ -29,9 +26,6 @@ COPY components/executor/start-desktop.sh /usr/local/bin/executor-start
 COPY components/executor/browser-requirements.txt /opt/private-hermes/browser-requirements.txt
 RUN python3 -m venv /opt/browser-harness \
     && /opt/browser-harness/bin/pip install --no-deps --require-hashes -r /opt/private-hermes/browser-requirements.txt
-COPY --from=browser-source /opt/hermes/tools/browser_use_shot.py /opt/private-hermes/browser_use_shot.py
-COPY --from=browser-source /opt/hermes/LICENSE /opt/private-hermes/hermes-LICENSE
-COPY components/executor/browser-session.py /opt/private-hermes/browser-session.py
 RUN chmod 0755 /usr/local/bin/executor-start \
     && printf '\nSetEnv PLAYWRIGHT_BROWSERS_PATH=/opt/playwright XDG_RUNTIME_DIR=/tmp/hermes-runtime CUA_DRIVER_RS_TELEMETRY_ENABLED=0\n' >> /etc/ssh/sshd_config
 WORKDIR /workspace

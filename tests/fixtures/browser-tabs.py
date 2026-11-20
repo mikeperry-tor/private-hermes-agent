@@ -1,7 +1,7 @@
 """Named tabs must be distinct before model code explicitly opens any tab."""
 import json
 
-from hermes_cli import private_browser_use as remote
+from tools import browser_use_executor as remote
 from tools import browser_use_cli as browser
 from tools.bot_desktop import placement, runtime
 from tools.environments import streams
@@ -14,7 +14,6 @@ def run(code, session):
 
 
 assert browser.browser_exec_available()
-assert remote._task_workspace('/profiles/a', 'bc') != remote._task_workspace('/profiles/ab', 'c')
 assert runtime.start().running
 try:
     first = run('import sys; assert __name__ == "__main__"; '

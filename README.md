@@ -25,7 +25,7 @@ still use your browser's connection.
 
 ## Components and the problems they solve
 
-- **[Hermes Agent v0.23.2](https://github.com/NousResearch/hermes-agent)**
+- **[Hermes Agent v0.23.3](https://github.com/NousResearch/hermes-agent)**
   provides chat, tool use, skills, and subagent orchestration.  Its webapp
   and terminal client let you work with the same persistent agent. This stack
   supports both Docker and Rootless podman with [hardened services](#service-hardening): strong network isolation between containers,
@@ -385,7 +385,7 @@ directories; see [backup scope](docs/configuration.md#backup-scope).
 ## Service hardening
 
 Private Hermes adds substantially stronger containment than the
-[stock Hermes v0.23.2 Compose setup](https://github.com/NousResearch/hermes-agent/blob/v0.23.2/docker-compose.yml),
+[stock Hermes v0.23.3 Compose setup](https://github.com/NousResearch/hermes-agent/blob/v0.23.3/docker-compose.yml),
 which uses host networking.
 
 The additional controls limit what malicious tool output, prompt-injected

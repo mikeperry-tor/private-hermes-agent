@@ -80,11 +80,11 @@ print(json.dumps({p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in (
         assert snapshot() == original
         result = smoke.python('hermes', """import model_tools
 from hermes_bootstrap import PRIVATE_HERMES_COMPUTER_USE
-from tools.registry import registry
+from tools.hosted_tool_policy import tool_refusal
 from tools.computer_use.tool import check_computer_use_requirements
 from tools.browser_use_cli import browser_exec_available
-assert bool(registry.get_entry('computer_use')) == PRIVATE_HERMES_COMPUTER_USE
-assert bool(registry.get_entry('browser_exec')) == PRIVATE_HERMES_COMPUTER_USE
+assert (tool_refusal('computer_use') is None) == PRIVATE_HERMES_COMPUTER_USE
+assert (tool_refusal('browser_exec') is None) == PRIVATE_HERMES_COMPUTER_USE
 assert check_computer_use_requirements() == PRIVATE_HERMES_COMPUTER_USE
 assert browser_exec_available() == PRIVATE_HERMES_COMPUTER_USE
 """)

@@ -519,10 +519,10 @@ the separate durable executor workspace.
 
 ### Qualification
 
-The passive-content implementation is qualified within the controlled browser,
-mode and ingress matrix below. Streaming and interactive opt-in remain deferred.
-Source review and fixture results do not extend these platform or live-service
-limits.
+The controlled browser, mode and ingress matrix covers the passive-content
+implementation. Current per-engine release results are in the
+[packaged qualification table](development.md#packaged-hermes-qualification).
+Streaming and interactive opt-in remain deferred.
 
 `make images-test` uses public-numbered HTTP/TLS canaries on isolated container
 networks, with no uplink or published ports. It qualifies socket destinations,

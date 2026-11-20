@@ -40,12 +40,7 @@ services:
   webapp-proxy:
     profiles: [browser-test]
   hermes:
-    user: "10000:10000"
-    init: true
-    entrypoint: [/bin/sleep]
-    command: [infinity]
-    cap_drop: [ALL]
-    cap_add: !reset []
+    command: [/bin/sleep, infinity]
     environment:
       HERMES_HOME: /opt/data
       AGENT_ONLY_SENTINEL: must-not-reach-executor

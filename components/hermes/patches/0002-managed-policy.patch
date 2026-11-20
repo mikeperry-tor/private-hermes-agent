@@ -1,0 +1,17 @@
+diff --git a/docker/entrypoint-dispatch.sh b/docker/entrypoint-dispatch.sh
+index 0ac091319..9ffdd6170 100644
+--- a/docker/entrypoint-dispatch.sh
++++ b/docker/entrypoint-dispatch.sh
+@@ -14,6 +14,12 @@
+
+ set -e
+
++# Compose supplies this selection for the serving image. Publish managed
++# settings before native profile/bootstrap loading in either dispatch path.
++if [ "${WEBAPP_TERMINAL_ENVIRONMENT+x}" = x ]; then
++    /opt/hermes/.venv/bin/python -I /opt/hermes/docker/private-managed-policy.py
++fi
++
+ if [ "$$" -eq 1 ]; then
+     # The interactive CMD owns the terminal. Supervised gateways and dashboard
+     # output must go to s6's logger instead of overwriting the TUI or shell.

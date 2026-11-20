@@ -214,7 +214,7 @@ Podman stack, including a client on a network without isolation.
   initialization with empty capability sets; there is no TCP control API, TCP
   SOCKS service, or HTTP proxy.
   A private SOCKS Unix socket is mounted only into the x402_treazury container.
-- Hermes: derived from official v0.23.2, with base digest and explicit source
+- Hermes: derived from official v0.23.3, with base digest and explicit source
   checks in `components/hermes/`. Runtime and maintenance share the derived
   image; see [patch/build procedure](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance).
 - teep: built from commit `6548996bb53ffa74e05d2b2f52e71534d1650149`

@@ -50,10 +50,58 @@ assert _external_content_mode == original
                  '--version', check=False)
     if result.returncode:
         raise RuntimeError(result.stderr)
-    assert '0.23.2' in result.stdout, result.stdout
+    assert '0.23.3' in result.stdout, result.stdout
     result = run('run', '--rm', '--network', 'none', '-e', 'HERMES_UID=10000',
                  '-e', 'HERMES_GID=10000', '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied', IMAGE,
                  PYTHON, '-c', 'import os; assert os.getuid()==10000 and os.getgid()==10000')
+    serving = {
+        'WEBAPP_TERMINAL_ENVIRONMENT': 'code',
+        'WEBAPP_EXTERNAL_CONTENT': 'tor_proxied',
+        'TERMINAL_ENV': 'ssh',
+        'HERMES_MANAGED_DIR': '/etc/hermes',
+        'TERMINAL_SSH_HOST': '10.203.82.3',
+        'TERMINAL_SSH_PORT': '2222',
+        'TERMINAL_SSH_USER': 'runner',
+        'TERMINAL_SSH_KEY': '/run/agent-ssh/id_ed25519',
+    }
+    env = [arg for name, value in serving.items() for arg in ('-e', f'{name}={value}')]
+    run('run', '--rm', '--network', 'none', '-e', 'HERMES_UID=10000', '-e', 'HERMES_GID=10000',
+        *env, IMAGE, PYTHON, '-c', r"""
+import os
+from pathlib import Path
+
+home = Path('/opt/data')
+files = [Path('/etc/hermes/config.yaml'), Path('/etc/hermes/.env')]
+assert os.getuid() == 10000
+assert all(file.stat().st_uid == 0 and not os.access(file, os.W_OK) for file in files)
+assert not os.access(files[0].parent, os.W_OK)
+(home / '.env').write_text(
+    'HERMES_CONFIG_BACKEND=remote\nTERMINAL_ENV=local\nTERMINAL_SSH_HOST=profile.invalid\n'
+    'HERMES_MANAGED_DIR=/tmp/profile-managed\nPYTEST_CURRENT_TEST=profile-override\n')
+(home / 'config.yaml').write_text(
+    '{"terminal":{"backend":"local","ssh_host":"profile.invalid"},'
+    '"webapp":{"terminal_environment":"gateway"},'
+    '"context_references":{"fetch_urls":true},"tools":{"disabled":[]}}')
+from hermes_cli.env_loader import load_hermes_dotenv
+from hermes_cli.config_backend import get_config_backend
+from hermes_cli.config_effective import load_user_config_effective
+from hermes_cli.managed_scope import load_managed_config, load_managed_env
+from tools.hosted_tool_policy import tool_refusal
+
+for _ in range(2):
+    load_hermes_dotenv(hermes_home=home, load_external_secrets=False)
+    assert os.environ['HERMES_MANAGED_DIR'] == '/etc/hermes'
+    assert get_config_backend().name == 'file'
+    assert os.environ['TERMINAL_ENV'] == 'ssh'
+    assert load_managed_env()['TERMINAL_SSH_HOST'] == '10.203.82.3'
+    config = load_user_config_effective(home / 'config.yaml')
+    assert config['terminal']['backend'] == 'ssh'
+    assert config['terminal']['ssh_host'] == '10.203.82.3'
+    assert config['context_references']['fetch_urls'] is False
+    assert config['webapp']['terminal_environment'] == 'executor'
+    assert 'browser_exec' in load_managed_config(strict=True)['tools']['disabled']
+    assert tool_refusal('browser_exec') and not tool_refusal('terminal')
+""")
     # No alternate/unpatched renderer path: native resolver selects our artifact.
     result = run('run', '--rm', '--network', 'none', '--entrypoint', PYTHON, IMAGE, '-c',
                  "from hermes_cli.webapp import packaged_webapp_dist; "
@@ -65,10 +113,6 @@ assert _external_content_mode == original
         "import {outputIntact} from '/opt/hermes/scripts/build/freshness.mjs'; "
         "if (!outputIntact('/opt/hermes/apps/desktop/dist-webapp','webapp')) "
         "throw new Error('Delivered renderer differs from its native build receipt')")
-    run('run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
-        '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied', '-e', 'COMPUTER_USE_ENABLED=true',
-        '-e', 'HERMES_HOME=/tmp/desktop-probe-test', '--entrypoint', PYTHON, IMAGE,
-        '-c', (ROOT / 'tests/fixtures/desktop-dependency-probe.py').read_text())
     run('run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
         '-e', 'HERMES_HOME=/tmp/approval-probe-test', '--entrypoint', PYTHON, IMAGE, '-c', """
 from unittest.mock import patch

@@ -1,11 +1,6 @@
 services:
   hermes:
-    user: "0:0"
-    init: false
-    entrypoint: !reset null
     command: [gateway, run]
-    # Restore the production grants cleared by the unprivileged core fixture.
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETUID, SETGID]
   setup:
     volumes:
       - type: bind

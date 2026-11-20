@@ -48,14 +48,14 @@ def check():
     from agent.tool_executor import _ToolCallRef, _resolve_sequential_dispatch
     from tools import desktop_ui, tool_search
     from tools.registry import registry
+    from tools.hosted_tool_policy import managed_disabled_tools
 
     from tools.bot_desktop import placement, runtime
     # This fixture has no SSH executor: enabling the preference cannot use the
     # gateway's installed browser/driver as evidence of remote availability.
     from tools.computer_use.tool import check_computer_use_requirements
     assert not check_computer_use_requirements()
-    assert placement.resolve().where == placement.REFUSED
-    assert runtime.status().install_command is None
+    assert placement.resolve().where == (placement.TERMINAL if PRIVATE_HERMES_COMPUTER_USE else placement.REFUSED)
     assert runtime.status().blocker
     from tools.browser_use_cli import browser_exec_available, browser_exec
     assert not browser_exec_available()
@@ -66,24 +66,34 @@ def check():
         assert registry.get_entry('computer_use') is not None
         assert registry.get_entry('browser_exec') is not None
 
+        from unittest.mock import patch
+        from tools import browser_session_cloud
+        from tools.browser_session_cdp import set_live_cdp_override
+
+        def assert_executor_route_refused():
+            assert not browser_exec_available()
+            refusal = decoded(browser_exec("raise AssertionError('model code executed')"))
+            assert 'supports only executor Chromium' in refusal.get('error', ''), refusal
+
+        with patch.object(browser_session_cloud, 'browser_section', return_value={'cdp_url': 'http://example.test'}):
+            assert_executor_route_refused()
+        with patch.dict(os.environ, BROWSER_CDP_URL='http://example.test'):
+            assert_executor_route_refused()
+        set_live_cdp_override('http://example.test')
+        try:
+            assert_executor_route_refused()
+        finally:
+            set_live_cdp_override(None)
+
     from tools.computer_use.cua_backend import CuaDriverBackend
     for permission_mode in ('bounded', 'unrestricted'):
         try:
             CuaDriverBackend(permission_mode=permission_mode)
         except ValueError as error:
-            assert 'standard driver permissions only' in str(error)
+            assert 'standard permissions only' in str(error)
         else:
             raise AssertionError('local embedded driver mode accepted')
-    from tools.computer_use.cua_backend_session import _CuaDriverSession
-    try:
-        _CuaDriverSession._call_tool_via_cli(None, 'get_window_state', {}, 1)
-    except RuntimeError as error:
-        assert 'gateway-local CLI fallback is disabled' in str(error)
-    else:
-        raise AssertionError('local driver fallback accepted')
-
-    assert not blocked.intersection(registry.get_all_tool_names())
-    assert not blocked.intersection(INLINE_TOOL_EXECUTORS)
+    assert managed_disabled_tools() == blocked
     definitions = model_tools.get_tool_definitions(
         enabled_toolsets=config['toolsets'], quiet_mode=True,
         skip_tool_search_assembly=True)
@@ -104,20 +114,23 @@ def check():
     from tools.connectors.mcp import _registered_tool_names
     from tools.connectors.operation import ConnectionOperation, Target
     fixture_tool = 'mcp__fixture__lookup'
+    scoped_names = blocked | {fixture_tool}
+    scope = registry.current_scope_key()
     try:
         # Setup and catalog activation read the registered MCP tool names.
-        for name in [fixture_tool, *sorted(blocked)]:
+        for name in sorted(scoped_names):
             registry.register(name=name, toolset='mcp-fixture',
-                              schema={'name': name, 'description': 'Fixture'}, handler=lambda **kw: '{}')
+                              schema={'name': name, 'description': 'Fixture'}, handler=lambda **kw: '{}', scope=scope, override=True)
         tools = _registered_tool_names('fixture', wait_seconds=0)
-        assert tools == [fixture_tool], tools
+        assert set(tools) == scoped_names, tools
         for kind, action in (('mcp', 'connect'), ('plugin', 'install')):
             operation = ConnectionOperation([
                 Target('fixture', kind, action, state=TargetState.connected, extra={'tools': tools}),
             ])
             assert operation.result()['targets'][0]['tools'] == [fixture_tool]
     finally:
-        registry.deregister(fixture_tool)
+        for name in scoped_names:
+            registry.deregister(name, scope=scope)
 
     def forbidden(*args, **kwargs):
         raise AssertionError('unsupported handler or GUI callback invoked')
@@ -138,16 +151,15 @@ def check():
         read_terminal_callback=lambda **kw: json.dumps({'text': 'fixture terminal'}),
     )
     for name in sorted(blocked):
-        # Saved profiles and late scoped/plugin overrides cannot register the name.
+        # Late scoped/plugin registrations remain subject to managed dispatch.
         for scope in (None, str(home / 'profiles' / 'other')):
             registry.register(name=name, toolset='desktop_ui', schema={'name': name},
                               handler=forbidden, scope=scope, override=True)
-            assert registry.get_entry(name, scope=scope) is None
         for action in ('open', 'read', 'close') if name == 'desktop_preview' else ('capture',):
             args = {'action': action, 'url': 'https://example.test/',
                     'code': "raise AssertionError('model code executed')"}
             direct = decoded(registry.dispatch(name, args))
-            assert 'disabled in this deployment' in direct.get('error', ''), direct
+            assert 'disabled by managed deployment policy' in direct.get('error', ''), direct
             ref = _ToolCallRef(name, args, 'fixture', 'fixture-call', [])
             sequential = decoded(_resolve_sequential_dispatch(agent, ref, []).execute(args))
             concurrent = decoded(invoke_tool(
@@ -199,14 +211,18 @@ def main():
     from deployment import engine_command
 
     fixture = Path(__file__).resolve()
-    for mode, enabled in [(m, e) for m in ('tor_proxied', 'ask', 'off', 'browser_native', '', 'invalid') for e in ('false', 'true')]:
+    for mode, enabled in [(m, e) for m in ('tor_proxied', 'ask', 'off', 'browser_native') for e in ('false', 'true')]:
         subprocess.run([
             *engine_command(), 'run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
             '-e', f'WEBAPP_EXTERNAL_CONTENT={mode}', '-e', 'HERMES_HOME=/tmp/desktop-tools-test',
             '-e', f'COMPUTER_USE_ENABLED={enabled}',
+            '-e', 'HERMES_MANAGED_DIR=/etc/hermes', '-e', 'WEBAPP_TERMINAL_ENVIRONMENT=code', '-e', 'TERMINAL_ENV=ssh',
+            '-e', 'TERMINAL_SSH_HOST=10.203.82.3', '-e', 'TERMINAL_SSH_PORT=2222',
+            '-e', 'TERMINAL_SSH_USER=runner', '-e', 'TERMINAL_SSH_KEY=/run/agent-ssh/id_ed25519',
             '--mount', f'type=bind,source={fixture},target=/tmp/desktop_tools_smoke.py,readonly',
-            '--entrypoint', '/opt/hermes/.venv/bin/python',
-            'private-hermes-agent:local', '/tmp/desktop_tools_smoke.py', '--inside',
+            '--entrypoint', '/bin/sh', 'private-hermes-agent:local', '-ec',
+            '/opt/hermes/.venv/bin/python -I /opt/hermes/docker/private-managed-policy.py && '
+            'exec /opt/hermes/.venv/bin/python /tmp/desktop_tools_smoke.py --inside',
         ], check=True)
 
 

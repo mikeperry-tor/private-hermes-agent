@@ -27,7 +27,7 @@ rebased onto `origin/main` and are not pushed.
   PR creation or upstream write has been performed.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).
-- Production wrapper: `v0.23.2`, source
+- Wrapper baseline at completion of this preparation: `v0.23.2`, source
   `ae2a81ccc00e9b7c06301523e5bb09608397149c`, digest
   `sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459`.
   Qualification applies to the packaged `v0.23.2` wrapper; a released upstream
@@ -41,11 +41,26 @@ PR2 114, PR3 75, PR4 965, combined 1,554 (13 skipped), plus managed-policy
 `test_doctor.py` checks. Combined Webapp build and Vitest: 221 passed (4
 skipped). Live POSIX SSH executor fixtures pass for PR1 and PR2.
 
+### Refreshed main candidates
+
+The release-based candidates above remain the source for the stack's v0.23.3
+patch. The adjacent `candidate-main/*` refs in the same clone are based on
+fetched `origin/main` `2de9f51b8008a7d49a49221c184f2f11cbfc4af1`.
+
+| Main-based branch | Head | Validation or status |
+| --- | --- | --- |
+| `candidate-main/executor-desktop-browser` | `cabb218bd1eb173883f6994f04fd0cfdc05c572a` | Reconciles upstream pinned vault channels and executor ownership. 78 focused vault/managed desktop tests passed |
+| `candidate-main/executor-terminals` | `34b50347068192f6de11bcee2dadbbf39f60b642` | 89 focused native tests passed |
+| `candidate-main/url-reference-fetching` | `6d5f66712dda23eb006f612a86506e2e23d53143` | 67 focused native tests passed |
+| `candidate-main/deployment-restrictions` | `60337a82736d0e6a3ab24b1d7fc3e65ced2b2d9e` | 83 focused native tests passed |
+| `candidate-main/webapp-content-privacy` | `2de9f51b8008a7d49a49221c184f2f11cbfc4af1` | Base only. Deferred design |
+
 ## 2. Upstream submission and merge-order checklist
 
-1. Submit PR1 first. PR1–PR4 share commit `15de33f3a`; after it is merged,
-   `git rebase origin/main` drops the shared commit on the other branches by
-   patch identity. Recheck each branch against the then-current `origin/main`.
+1. Use the refreshed main-based branches for submission and recheck them against
+   the target `origin/main`. PR1–PR4 share `3b3f0d591` on the refreshed base.
+   After PR1 merges, rebase the other branches so the shared commit can drop by
+   patch identity. The release-based replay keeps the original `15de33f3a`.
 2. Reconcile known adjacency points:
    - `website/docs/user-guide/managed-scope.md` (strict-reader paragraph and
      later additions),
@@ -118,9 +133,9 @@ commit's forward import, a stock-sandbox browser-exec fallback for upstream
 defaults, CUA lock ordering, Chromium argument/owner handling, and the rebase
 merge in `tools/mcp_tool_agent.py`.
 
-Private Hermes continues to carry production patches `0001`–`0013` until an
-upstream release adopts the candidates. The wrapper `v0.23.2` pin and image
-remain unchanged. The `v0.23.2` backports (`code_terminal.py` containment,
+The preparation baseline carried production patches `0001`–`0013`. See the
+[current patch inventory](../updates-and-plugins.md#downstream-responsibility-inventory)
+for adoption status. The `v0.23.2` backports (`code_terminal.py` containment,
 `0007` argument/recovery safety, `browser_use.py` per-key locking and probe
 budgeting, and `0001`/`computer_use.py` probe budgeting) and the distinct
 lean/desktop executor image tags (`private-hermes-executor-false:local` and

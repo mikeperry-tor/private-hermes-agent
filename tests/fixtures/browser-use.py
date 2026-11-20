@@ -17,7 +17,8 @@ from tools import browser_use_cli as browser
 from tools.bot_desktop import runtime, placement, lease
 from tools.environments import streams
 from tools.registry import registry
-from hermes_cli import private_browser_use as remote
+from tools import browser_use_executor as remote
+from tools.hosted_tool_policy import tool_refusal
 
 
 def decoded(value):
@@ -33,7 +34,7 @@ def run(code, name='fixture', **kw):
 
 assert browser.browser_exec_available()
 assert registry.get_entry('browser_exec')
-assert all(not registry.get_entry(n) for n in ('browser_cdp', 'browser_dialog', 'browser_vault'))
+assert all(tool_refusal(n) for n in ('browser_cdp', 'browser_dialog', 'browser_vault'))
 assert runtime.start().running
 registered = decoded(registry.dispatch('browser_exec', {'code':'print("registry-remote")',
                                   'session':'registry-fixture'}, task_id='browser-fixture'))
@@ -51,13 +52,16 @@ with patch.object(browser_url_policy, 'check_website_access', return_value={
     refused = decoded(browser.browser_exec("goto_url('https://fixture.invalid')", task_id='browser-fixture'))
     assert refused.get('error') == 'Blocked by website policy', refused
 
-old_key = browser._backend_cache_key('browser-fixture', 'registry-fixture', sidecar=True)
+old_key = browser._backend_cache_key('browser-fixture', 'registry-fixture')
 old_record = browser_session._active_sessions[old_key]
 original_launch = old_record['sandbox_launch']
 
 
-def attach_during_cleanup(key, _force_local):
-    candidate = browser_session_sandbox.create_sandbox_session(key)
+create_sandbox = browser_session_sandbox.create_sandbox_session
+
+
+def attach_during_cleanup(key):
+    candidate = create_sandbox(key)
     assert candidate['sandbox_launch'] == original_launch
     assert candidate['cdp_url'] == old_record['cdp_url']
     browser_session_lifecycle.cleanup_single_session(old_key)
@@ -66,9 +70,10 @@ def attach_during_cleanup(key, _force_local):
 
 
 replacement_name = 'attachment-successor'
-replacement_key = browser._backend_cache_key('browser-fixture', replacement_name, sidecar=True)
-with patch.object(browser_session, '_create_session_for_key', attach_during_cleanup):
+replacement_key = browser._backend_cache_key('browser-fixture', replacement_name)
+with patch.object(browser_session_sandbox, 'create_sandbox_session', side_effect=attach_during_cleanup) as create:
     successor = browser_session.get_session_info(replacement_key)
+    create.assert_called_once_with(replacement_key)
 assert successor['sandbox_launch'] == original_launch
 assert 'attachment-survived' in run('print("attachment-survived")', replacement_name)['output']
 print('PASS: Chromium survives last-owner cleanup during attachment and publication', flush=True)
@@ -79,7 +84,7 @@ profile = sandbox_host.browser_profile_dir(env)
 # A new named session cannot displace the recorded process while it still
 # holds the Chromium singleton, even if its endpoint file is missing.
 owner = browser_session_sandbox._launched[successor['launcher_key']]
-missing_key = browser._backend_cache_key('browser-fixture', 'missing-endpoint-contender', sidecar=True)
+missing_key = browser._backend_cache_key('browser-fixture', 'missing-endpoint-contender')
 active_port = f'{profile}/DevToolsActivePort'
 hidden_port = f'{active_port}.fixture-hidden'
 assert streams.run_in(env, ['mv', active_port, hidden_port], user=user, timeout=10).returncode == 0
@@ -237,7 +242,7 @@ borrowed_pid, _ = browser_session_sandbox._start_chromium(
     env, user, sandbox_host.chromium_executable(env), profile,
     {**runtime.published_env(), 'TMPDIR': streams.sandbox_temp_dir(env)})
 borrowed_name = 'independently-started-browser'
-borrowed_key = browser._backend_cache_key('browser-fixture', borrowed_name, sidecar=True)
+borrowed_key = browser._backend_cache_key('browser-fixture', borrowed_name)
 try:
     browser_session_sandbox._wait_for_port(env, user, profile)
     borrowed = browser_session.get_session_info(borrowed_key)
@@ -256,7 +261,7 @@ print('PASS: a same-profile independent Chromium remains attachable after releas
 # observed no endpoint, while both native launch attempts use the same profile.
 native_spawn = browser_session_sandbox._spawn_owned
 dock_pids = []
-dock_key = browser._backend_cache_key('browser-fixture', 'initial-dock-winner', sidecar=True)
+dock_key = browser._backend_cache_key('browser-fixture', 'initial-dock-winner')
 
 
 def dock_wins_first(env, user, profile, key, published):
@@ -523,7 +528,7 @@ try:
             time.sleep(.1)
         else:
             raise AssertionError('Active browser child did not start')
-        key = browser._backend_cache_key('browser-fixture', 'active-cancel', sidecar=True)
+        key = browser._backend_cache_key('browser-fixture', 'active-cancel')
         owner = remote._sessions[key].process
         set_interrupt(True, thread_id=worker['tid'])
         try:
@@ -574,7 +579,9 @@ try:
     for key, suffix in [('BH_HOME',''), ('BH_CONFIG_DIR',''), ('BH_RUNTIME_DIR','/r'), ('BH_TMP_DIR','/t')]:
         child_env[key] = '/tmp/bh/startup-cancel' + suffix
     child_env['BU_NAME'] = 'startup-cancel'
-    delayed = '''import runpy,time
+    runner = Path(remote.__file__).with_name('browser_use_executor_runner.py').read_text()
+    shot = Path(remote.__file__).with_name('browser_use_shot.py').read_text()
+    delayed = """import time
 from pathlib import Path
 from browser_harness import admin
 start=admin.ensure_daemon
@@ -583,8 +590,7 @@ def delayed():
  while not Path('/workspace/browser-startup-continue').exists(): time.sleep(.05)
  start()
 admin.ensure_daemon=delayed
-runpy.run_path('/opt/private-hermes/browser-session.py',run_name='__main__')
-'''
+""" + runner + '\nmain(' + repr(shot) + ')'
     owner = streams.open_stream(env, ['env', '-i', *(k+'='+v for k,v in child_env.items()),
                                 '/opt/browser-harness/bin/python', '-u', '-c', delayed])
     owner.stdin.write((json.dumps({'code':'from pathlib import Path; Path("/workspace/browser-startup-code-ran").touch()',
@@ -624,7 +630,7 @@ runpy.run_path('/opt/private-hermes/browser-session.py',run_name='__main__')
     else:
         raise AssertionError('Remote owner/daemon survived gateway owner death')
     # Native cleanup tears down the corresponding persistent SSH/harness owner.
-    key = browser._backend_cache_key('browser-fixture', 'fixture', sidecar=True)
+    key = browser._backend_cache_key('browser-fixture', 'fixture')
     owner = remote._sessions[key].process
     from tools.browser_session_lifecycle import cleanup_single_session
     cleanup_single_session(key)

@@ -143,8 +143,9 @@ the latter retains public Tor image/outage/recovery evidence. See the
 
 ## Qualification status
 
-The packaged stack is qualified on Docker Desktop Linux ARM64 and Debian 13
-ARM64 rootless Podman within the component scopes below. Effective Compose
+Docker Desktop Linux ARM64 and Debian 13 ARM64 rootless Podman are the
+stack's native qualification targets. See the packaged Hermes section for the
+current release's coverage on each target. Effective Compose
 models and source tests cover both engine paths; they do not qualify another
 engine/provider/kernel/architecture combination. Linux Docker hosts, AMD64,
 other distributions and arbitrary Compose providers need native evidence.
@@ -176,83 +177,34 @@ these coverage limits.
 
 ## Packaged Hermes qualification
 
-The production build derives from official Hermes v0.23.2 source
-`ae2a81ccc00e9b7c06301523e5bb09608397149c`, multiarch index
-`sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459`,
-with the patches in the [responsibility inventory](updates-and-plugins.md#downstream-responsibility-inventory).
-Its native renderer source hash is
-`cf2671eb38ea4d06789e81e06d5648d946c82229f3ee90db912cc7f287a72373`.
-Build qualification checks the packaged source and lock inputs, the delivered
-Python modules and helpers, and the final renderer's native receipt.
-Inherited stale assets must not remain in the served frontend.
+The packaged build derives from official Hermes v0.23.3 source
+`caafe5389ae585ef77387a962aee05b1bcf17029`, multiarch index
+`sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355`.
+The ARM64 image's source stamp, native renderer receipt and calculated renderer
+source hash agree. The native renderer source hash is
+`03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`.
+The build incorporates four upstream candidates and the remaining
+[deployment patches](updates-and-plugins.md#downstream-responsibility-inventory).
 
 | Check / contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
 | --- | --- | --- |
-| `make check`: 178 tests, four effective models, compilation | Passed | Passed |
-| Final build, `hermes_build.py`, native renderer receipt and module/helper delivery | Passed | Passed |
-| `hermes_ui.py`: full TypeScript and 206 tests in 13 files | Passed | Passed |
-| Twelve desktop/tool policy combinations, URL-context and image endpoint fixtures | Passed | Passed |
-| `launch_smoke.py`, lean `smoke.py`: SSH/code, Teep/MCP, forbidden paths, Tor loss/recovery | Passed | Passed |
-| `storage_smoke.py`: interruption/retry, CLI edits, identities, scoped maintenance and volume locks | Passed | Passed |
-| Populated schema-53 profile from official v0.23.1 opened twice by the derived image | Passed | Passed |
-| `plugins_smoke.py`: dependency-bearing install/update/recreation | Passed | Passed |
-| Full `webapp_smoke.py`: lean terminal, local/HTTPS auth, content modes, files, consent and MCP activation | Passed | Passed |
-| `webapp_smoke.py --image-download-only`: twelve browser/mode Save/Copy cases | Passed | Passed |
-| Controlled `onion_smoke.py` | Passed | Passed |
-| `webapp_smoke.py --live-egress`: authenticated raster Tor route/outage/recovery | Passed | Passed |
-| Desktop `computer_use_smoke.py`: network, sandbox, placement, dependencies and persistent browser switching | Passed | Passed |
-| `browser_use_smoke.py`: remote Python, sync, named tabs, exact-owner cleanup, inherited-pipe interruption and missing-harness recovery | Passed | Passed |
-| Desktop webapp `--browser-only` and six `--terminal-only` cases | Passed | Passed |
+| 196 wrapper unit checks, four effective Compose models and compilation | Passed | Passed |
+| Build, source delivery and native renderer receipt | Passed | Pending |
+| Native TypeScript and 218 targeted renderer tests | Passed | Pending |
+| Managed URL-context and tool-denial matrix with disposable profiles | Passed | Pending |
+| Populated official v0.23.2 profile opened twice by v0.23.3 | Passed | Pending |
+| Full lean WebApp, including Code/Agent terminals, authentication, cross-browser content and native MCP activation | Passed | Pending |
+| Networkless desktop startup and coordination-file recovery | Passed | Pending |
+| Repeated setup, native CLI edits, identity repair and named-volume persistence | Passed | Pending |
 
-Storage qualification preserves chosen settings, SSH/Teep routing, sessions,
-env/auth/plugin markers and wallet/agent identity through initialization retries
-and supported native schema loading. Schema-52 migration and named-volume locking
-have separate storage controls. This does not qualify arbitrary database downgrade.
-
-SSH file-inspection controls require ENOENT/404 for missing leaves/parents alongside
-regular-file, directory, symlink and sensitive-path behavior. GNU realpath alone
-cannot distinguish a missing final component. Desktop controls distinguish failed dependency inspection, missing packages,
-failed display inspection and a confirmed stopped screen. Viewer admission and
-reattachment check the ticket profile and recorded SSH target. A failed stop or
-probe keeps the owner record so the same desktop can be recovered.
-
-The browser fixture opens the actual image context menu in Chromium, Firefox
-and WebKit. It checks the original suggested filename, displayed bytes and
-absence of a second retrieval for Save/Copy. The toolbar separately tests fresh
-retrieval and one-time Ask consent. Copy uses a test clipboard sink, so coverage
-covers admission and bytes through the renderer rather than OS clipboard access.
-
-The browser fixtures cover exact-session and Chromium launch cleanup, stale
-liveness results, admission revocation while waiting, independent reap after a broken pipe, and
-interruption with inherited output pipes. Cleanup preserves Chromium while a
-successor attaches and refuses new attachments until the exact retired Chromium
-process releases the profile, even if the DevTools file names a different endpoint. The
-failed-start path uses the same recorded launch identity when forwarding fails.
-A second named session preserves an existing Chromium owner when its DevTools
-file is missing and the native profile singleton still identifies that process.
-An independently started Chromium on the same profile remains attachable after
-its task releases the session. Initial discovery checks the actual singleton
-owner and preserves a dock browser that wins the startup race. Readiness verifies
-that the recorded port advertises the same browser path. Dispatch checks the live
-endpoint after waiting for the runner, rechecks cancellation and the desktop
-lease before sending Python, and retires a definitively stale record for the next
-explicit attempt. The stop probe matches
-PID, start time and profile even when Chromium flattens its command line. The real SSH fixture covers scratch
-reuse within a task, separation across tasks sharing a named tab, distinct
-profile and task identities, and loaded Chromium sandbox layers. Both images
-build natively. Browser and
-renderer qualification covers Docker Desktop ARM64 and rootless Podman ARM64.
-Unchanged network, wallet, storage and browser-content evidence retains its scope.
-
-Native logout retains its documented established-socket and issued-ticket lifetimes;
-these checks do not establish immediate revocation.
-
-The private qualification outputs for the packaged revision are under
-`/tmp/hermes-v0232/` on the Docker host and `/tmp/hermes-v0232-*.log` on the native
-Podman host. They are evidence artifacts, not runtime readiness markers. Reuse
-results only for unchanged relevant source/build inputs and retain their platform
-and live-service limits. Do not replay financial or provider work to refresh a
-source-only result.
+The migration check preserves model and terminal settings, selected operator
+preferences, a stored transcript and saved env/auth/plugin files in a disposable
+named volume. It establishes native schema 53 to 54 loading. The release still
+requires native Podman checks and affected launch, SSH, browser, ingress,
+storage and plugin qualification where results are absent from this table.
+Earlier v0.23.2 behavior remains evidence for the unchanged network, storage
+and supporting images within their qualified scope. Absence of runtime
+coverage matters where v0.23.3 changes the Hermes path through those components.
 
 ## Onion ingress qualification
 
@@ -425,8 +377,9 @@ separate browser assertions.
 ## Code terminal qualification
 
 The ordinary WebApp terminal defaults to the SSH executor; `agent` retains the
-native local shell. Implementation is the pinned `0011-code-terminal.patch` plus
-`components/hermes/code_terminal.py`. Native shell resolution supplies the
+native local shell. The candidate implements the native executor/gateway modes.
+The stack maps its operator selections through managed WebApp settings and retains
+local startup acknowledgement, labels and executor cwd validation. Native shell resolution supplies the
 profile environment and resolves exact local paths. Saved SSH connections keep
 their launch route.
 Remote cwd preparation runs before the registry spawn lock; it does not serialize
@@ -435,9 +388,8 @@ The startup socket owns its pending Code probe. After the browser acknowledges
 the reattach token for a negotiated Code terminal, native retention owns the shell. An ordinary
 transport loss still permits retry in the same tab.
 
-`make check` includes strict mode parsing, Hermes-only effective Compose mappings
-for Docker/Podman overlays, remote cwd path data and agent preparation without SSH
-readiness. `make hermes-ui-test` includes terminal transport, saved gateways,
+`make check` covers the stack's managed terminal selections, tool matrix and
+Hermes-only effective Compose mappings for Docker/Podman overlays. `make hermes-ui-test` includes terminal transport, saved gateways,
 mode-specific local-tab restoration, exact cwd persistence and native terminal
 session tests, plus the renderer TypeScript check.
 
@@ -456,8 +408,10 @@ executor) to cover lean and desktop SSH shell behavior; this focused option
 avoids unrelated desktop/browser/content suites.
 
 
-Both qualified engines cover Code→Agent→Code over local and simulated HTTPS,
-including normal serving recreation, lean and desktop executors. Exact cwd/path
+The terminal matrix runs Code→Agent→Code over local and simulated HTTPS,
+including normal serving recreation, lean and desktop executors. See the
+[packaged qualification table](#packaged-hermes-qualification) for current
+engine results. Exact cwd/path
 handling includes Unicode, quotes, shell metacharacters and trailing spaces.
 Runner commands retain empty effective/permitted/inheritable/ambient capabilities
 under no-new-privileges. Listener CHOWN owns PTY setup; desktop AUDIT_WRITE owns
@@ -502,11 +456,11 @@ additional startup deadline. Reporting cadence is independent of failure policy.
 
 ## Local upstream candidate qualification
 
-Local candidates are separate from production and are not build inputs. Current
-branches, exact bases/heads, submission drafts, dependencies and deferred work
-are in the [candidate inventory](updates-and-plugins.md#local-preparation-package-dispositions).
-The [retained preparation plan](plans/hermes-upstream-prep.md) is a reference for
-PR creation and merge; its execution history is not repository operating guidance.
+The upstream work clone holds the v0.23.3 release-based candidates and
+separate `candidate-main/*` branches for future submission. The tracked release
+patch carries their reviewed v0.23.3 replay. Current heads and evidence are
+recorded in the [candidate inventory](updates-and-plugins.md#local-preparation-package-dispositions)
+and [retained preparation plan](plans/hermes-upstream-prep.md).
 
 Qualification uses native pytest and renderer suites in disposable Docker
 Desktop Linux ARM64 containers with isolated homes and `--init`, without an engine socket or
@@ -523,25 +477,22 @@ qualified tree for focused follow-up changes.
 | PR4: managed tool denial | 87 focused policy, MCP and discovery tests, plus combined prompt and worker persistence coverage | CLI readiness, tool catalog and generated guidance, connector results and policy relaxation, background review, coherent direct and deferred schemas, worker and prompt snapshots, and dispatch authority |
 | PR5: Webapp content privacy | Design review only | Shared renderer ownership and authenticated consent authority/storage/API remain unresolved |
 
-Baseline regressions confirm the affected failure paths and the corrected tests
-cover native entrypoints. PR1 full renderer type coverage carries the known
-pristine-base skills-hub errors from unchanged inputs. PR2 Windows command
-encoding tests do not establish Windows shell lifecycle. Current qualification
+Baseline regressions confirm the affected failure paths at native entrypoints.
+PR2 Windows command encoding tests leave native Windows shell lifecycle unqualified. Current qualification
 covers Linux ARM64; native macOS/Windows runtime, live providers, public ingress,
 OS clipboard integration and financial actions are outside this evidence.
 
-After packaged adoption, retire duplicate dependency, browser ownership and
-missing-file mechanism cases where native suites own them. PR1 also owns the
+Native suites own duplicate dependency and browser ownership mechanism tests.
+Keep the packaged missing-file ENOENT/404 controls, which also cover real-shell
+and HTTP delivery. PR1 also owns the
 queued-action, lease, permission and cancellation regressions. Keep allowed
 actions, takeover denial and recovery through real SSH, along with HTTP file
 controls, image delivery, sandbox placement and startup on both engines.
 PR2's deployment mode, stale-page, identity, authentication, pinned-key
 and cross-engine tests remain until those paths are covered at stack entrypoints.
 Keep packaged URL no-fetch checks for normal and bypass turns at the gateway
-entrypoint. During PR3 adoption, mount the managed selection and verify both
-gateway paths with a conflicting writable profile preference. Keep the deployment
-mode × desktop tool matrix in `desktop_tools_smoke.py` after switching to managed
-denial. Retain all private raster and browser containment coverage while PR5 is
+entrypoint, with a conflicting writable profile preference. The deployment
+mode × desktop tool matrix is in `desktop_tools_smoke.py`. Retain all private raster and browser containment coverage while PR5 is
 deferred. Separate candidate qualification from the stack's Tor, storage and
 engine behavior.
 
@@ -561,8 +512,10 @@ raw CDP, SSH settings, URL references, approval and dispatch cancellation,
 managed discovery across a policy change, background review and
 prompt/worker persistence. Each candidate's topical history reconstructs its
 folded tree (verified before the rebase), and PR1–PR4 plus the combined replay
-now apply to that `origin/main` snapshot. A released artifact still needs
-the [adoption checks](update-workflow.md).
+apply to that v0.23.3 snapshot. Packaged evidence is recorded above. The
+main-based refresh passed focused native tests for PR1 (78), PR2 (89), PR3
+(67) and PR4 (83). Those runs cover the rebased branch inputs on Docker Desktop
+ARM64. The packaged stack uses the release-specific replay above.
 
 The two broader real-profile copy-permission cases fail on the pristine native
 base in the test image. They cover gateway real-profile behavior, outside the

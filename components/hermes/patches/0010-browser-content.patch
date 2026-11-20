@@ -1354,22 +1354,6 @@
            alt=""
            className={
              stale
---- a/apps/desktop/src/plugins/hermes-bots/skills-hub.tsx
-+++ b/apps/desktop/src/plugins/hermes-bots/skills-hub.tsx
-@@ -1,3 +1,4 @@
-+import { PrivateFrame } from '@/components/ui/private-content'
- /**
-  * The real skills hub page embedded as a picker, plus its offline search
-  * fallback.
-@@ -226,7 +227,7 @@
-               borderRadius: 8
-             }}
-           >
--            <iframe
-+            <PrivateFrame
-               // The hub page needs three capabilities beyond the bare sandbox
-               // posture (#91612): same-origin so its own routing and storage
-               // work, popups so its external links (docs, GitHub, Discord)
 --- a/apps/desktop/src/lib/browser-files.ts
 +++ b/apps/desktop/src/lib/browser-files.ts
 @@ -1,3 +1,5 @@

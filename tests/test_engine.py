@@ -418,11 +418,8 @@ class ComposeModelTests(unittest.TestCase):
                     production = model('compose.yaml', 'compose.funnel.yaml', *overlays)['services']['hermes']
                     fixture = model('compose.yaml', 'compose.funnel.yaml', 'tests/compose.yaml',
                                     'tests/webapp-compose.yaml', *overlays)['services']['hermes']
-                    for key in ('cap_add', 'cap_drop', 'security_opt', 'command'):
+                    for key in ('cap_add', 'cap_drop', 'security_opt', 'command', 'user', 'init', 'entrypoint'):
                         self.assertEqual(fixture.get(key), production.get(key), key)
-                    self.assertEqual(fixture['user'], '0:0')
-                    self.assertFalse(fixture.get('init'))
-                    self.assertIsNone(fixture.get('entrypoint'))
 
     def test_docker_model_keeps_isolated_gateway_mode(self):
         config = model('compose.yaml', 'compose.funnel.yaml')

@@ -83,12 +83,12 @@ def close_shell(page, meta):
     }''', meta['terminalId'])
 
 
-def denied(page, cwd=None):
+def denied(page, cwd=None, reason="terminal"):
     open_shell(page, cwd=cwd)
     page.wait_for_function('() => testShell.closed !== null', timeout=30000)
     state = page.evaluate('({meta:testShell.meta, output:testShell.output, closed:testShell.closed})')
     assert state['meta'] is None, state
-    assert state['closed']['code'] == 4411 and 'Code terminal' in state['closed']['reason'], state
+    assert state['closed']['code'] == 4411 and reason in state['closed']['reason'].lower(), state
 
 
 def cancel_unacknowledged_code_shell(page):
@@ -223,7 +223,7 @@ def check_model_host_key(*, trusted):
 from tools.environments.base import EnvironmentConnectionError
 try:
     env = SSHEnvironment("10.203.82.3", "runner", port=2222,
-                         key_path="/run/agent-ssh/id_ed25519", probe_only=True)
+                         key_path="/run/agent-ssh/id_ed25519", probe_only=True, ssh_config="/etc/ssh/ssh_config.d/99-private-hermes.conf")
 except EnvironmentConnectionError:
     assert not {trusted!r}, "the configured host key was refused"
 else:
@@ -246,8 +246,8 @@ def run(password_path, mode):
                 page.locator('button[type=submit]').click()
                 page.wait_for_url(lambda u: '/login' not in u)
                 page.wait_for_function('() => window.hermesDesktop?.terminal !== undefined')
-                assert page.evaluate('window.__PRIVATE_HERMES_TERMINAL_ENVIRONMENT__') == mode
                 receiver_mode = 'executor' if mode == 'code' else 'gateway'
+                assert page.evaluate('window.__HERMES_TERMINAL_ENVIRONMENT__') == receiver_mode
                 open_shell(page, environment='gateway' if mode == 'code' else 'executor', action='start')
                 page.wait_for_function('() => testShell.closed !== null', timeout=30000)
                 assert page.evaluate('testShell.meta === null && testShell.closed.reason.includes("environment changed")')
@@ -368,8 +368,18 @@ print('POLICY-'+'OK')
                         assert path in out
                         close_shell(page, meta)
                     smoke.python('executor', "from pathlib import Path; assert not Path('/workspace/SHOULD_NOT_EXIST').exists()")
+                    unsafe_target = '/workspace/terminal\ncontrol'
+                    safe_link = '/workspace/terminal-control-link'
+                    smoke.python('executor', f'''from pathlib import Path
+target = Path({unsafe_target!r})
+target.mkdir(exist_ok=True)
+link = Path({safe_link!r})
+link.unlink(missing_ok=True)
+link.symlink_to(target)
+''')
                     for cwd in ('/workspace/does-not-exist', 'relative', '/tmp/new\nline'):
                         denied(page, cwd)
+                    denied(page, safe_link, reason='invalid cwd')
                     if origin == LOCAL:
                         try:
                             change_identity('missing')

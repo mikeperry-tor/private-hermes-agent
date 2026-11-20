@@ -36,3 +36,37 @@ Preserve SSH executor separation, Tor-only application egress, the narrow
 inference and MCP grants, operator versus model terminal authority, WebApp
 authentication and private raster/consent behavior, and existing private data.
 Live ingress, provider attestation and financial actions are outside scope.
+
+## Execution record
+
+- Design and combined integration received independent source review. Review
+  corrections pin the launch-only managed directory, prove real profile dotenv
+  reload, validate requested and canonical Code terminal paths alike, and keep
+  the native executor browser route while refusing explicit unsupported settings.
+- The official ARM64 image stamp, renderer receipt and calculated source hash
+  match the release. Packaged Python and shell changes are delivered. The Python
+  lock still supplies every pinned harness dependency and hash. The stock
+  Compose comparison, root pnpm lock, and public screenshot and session-resume
+  inputs match the selected release.
+- Docker Desktop ARM64 build and delivery, 196 wrapper tests and four effective
+  Compose models, full TypeScript and 218 focused renderer tests, URL-context
+  and managed policy checks, and the populated v0.23.2 schema-53 to v0.23.3
+  schema-54 profile fixture passed. Detailed evidence is under the local
+  `/tmp/private-hermes-v0233-*` logs.
+- Refreshed main-based refs use the work clone's fetched `origin/main`
+  `2de9f51b8008a7d49a49221c184f2f11cbfc4af1`. PR1 resolves upstream vault
+  adjacency and rechecks the managed executor before trusted typing. A fresh
+  source review accepted that correction. The focused results were PR1 78,
+  PR2 89, PR3 67 and PR4 83 tests. Release-based parents remain the inputs to
+  the stack patch. See the [candidate reference](hermes-upstream-prep.md).
+- Native desktop, browser, ingress, storage and network checks use serialized
+  fixtures on each engine. The maintained Debian 13 ARM64 VM is running
+  rootless Podman 5.4.2 and its effective model and wrapper checks passed.
+  The disposable VM source export is based on staged tree
+  `43f7017a54e527456606298b50855eb8467ee364`.
+- Docker's full lean WebApp, repeated setup and volume persistence,
+  networkless desktop startup and native s6 privilege/bootstrap fixtures
+  passed. The initial desktop browser run used the image before the CDP
+  refusal follow-up. It reached real executor ownership, refusal and recovery
+  controls. Final-image CDP refusal passed the packaged mode matrix. The full
+  browser fixture is rerun with the corrected image.

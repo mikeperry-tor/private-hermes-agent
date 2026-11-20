@@ -94,9 +94,12 @@ partial final configuration; retries preserve any existing complete file and mod
 Initial SSH keys are generated in temporary storage and their private identity is
 published atomically before deriving the public file. Retries repair empty/truncated
 public files from the private identity; matching public files and operator comments
-are preserved. Existing compatible configuration and keys are preserved. Incompatible Hermes
-configuration blocks agent startup. Setup also installs the generated SSH
-file-browser settings.
+are preserved. Existing keys and operator settings are preserved. Setup validates the configured
+Teep route and installs authentication. The serving container publishes managed
+SSH settings before Hermes loads profiles. These settings pin the runner endpoint,
+identity, host-key configuration and workspace across profile loads. Their
+root-owned files live in the serving container and regenerate from Compose
+settings at startup.
 
 `make gateway` uses the same startup workflow. After `make up`, `make chat` uses
 the existing runtime namespaces without starting setup again. The optional
@@ -534,6 +537,8 @@ After editing root `.env`, run `make up` and reload browser tabs. Compose recrea
 Hermes when the setting changes; credentials and executor projects survive.
 Local terminal tabs, saved cwd and scrollback from the other environment are
 cleared on reload. Existing processes never move between environments.
+On the v0.23.3 upgrade, the native local mode identifiers also clear tabs
+saved by the earlier wrapper. Saved gateway tabs and executor files survive.
 
 Code terminals default to `/workspace`. Requested absolute directories are
 validated in the executor; files use their parent. Missing/inaccessible paths,

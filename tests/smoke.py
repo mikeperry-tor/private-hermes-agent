@@ -117,6 +117,8 @@ def compose(*args, check=True, **kwargs):
 
 def execute(service, *args, user=None, check=True):
     options = ['exec', '-T']
+    if user is None and service == 'hermes':
+        user = '10000:10000'
     if user:
         options += ['--user', user]
     return compose(*options, service, *args, check=check)

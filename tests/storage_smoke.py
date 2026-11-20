@@ -87,7 +87,7 @@ before.setdefault('agent', {})['clarify_timeout'] = 777
 p.write_text(yaml.safe_dump(before))
 migrate_config(interactive=False, quiet=True)
 after = load_config()
-assert after['_config_version'] == 53
+assert after['_config_version'] == 54
 assert after['agent']['clarify_timeout'] == 777
 for section in ('terminal', 'model'):
     assert all(after[section][key] == value for key, value in before[section].items())
@@ -143,19 +143,14 @@ assert row['api_url'] == 'http://10.203.83.3:8337/v1'
             print('PASS: root model preference and native Teep picker accept additional model IDs without changing the inference route', flush=True)
             smoke.compose('run', '--rm', '-T', '--no-deps', 'hermes-config',
                           'set', 'terminal.backend', 'local')
-            try:
-                smoke.initialize_setup(smoke.COMPOSE)
-            except RuntimeError as error:
-                assert 'Offline setup failed' in str(error)
-            else:
-                raise AssertionError('Incompatible execution configuration permitted startup')
+            smoke.initialize_setup(smoke.COMPOSE)
+            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
+                          '/opt/hermes/.venv/bin/python', 'setup', '-c',
+                          "from pathlib import Path; import hermes_yaml as yaml; assert yaml.safe_load(Path('/opt/data/config.yaml').read_text())['terminal']['backend']=='local'")
             status = smoke.compose('run', '--rm', '-T', '--no-deps', 'x402_treazury-inspect', 'status')
             assert 'has not been initialized' in status.stdout
-            smoke.compose('run', '--rm', '-T', '--no-deps', 'hermes-config',
-                          'set', 'terminal.backend', 'ssh')
-            smoke.initialize_setup(smoke.COMPOSE)
             assert identities() == original_identities
-            print('PASS: failed setup blocks startup; independent wallet inspection and offline config repair remain available', flush=True)
+            print('PASS: setup preserves saved terminal settings and identities; wallet inspection remains available', flush=True)
             # Maintenance must reuse successful setup, without rerunning init
             # and disconnecting a live research configuration.
             smoke.compose('run', '--rm', '-T', '--no-deps', 'mcp-config', 'connect')

@@ -1,0 +1,144 @@
+diff --git a/apps/desktop/src/lib/browser-terminal.ts b/apps/desktop/src/lib/browser-terminal.ts
+index 825def968..bd4e194e8 100644
+--- a/apps/desktop/src/lib/browser-terminal.ts
++++ b/apps/desktop/src/lib/browser-terminal.ts
+@@ -220,7 +220,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+   if (!resuming && url.searchParams.has('environment')) {
+     url.searchParams.set('action', 'start')
+   }
+-  if (!resuming && (relayed || window.__HERMES_TERMINAL_ENVIRONMENT__ === 'executor')) {
++  if (!resuming && (relayed || window.__HERMES_TERMINAL_ENVIRONMENT__)) {
+     url.searchParams.set('startup', '1')
+   }
+   const socket = state.socket = new WebSocket(url)
+diff --git a/hermes_cli/web_host_terminal.py b/hermes_cli/web_host_terminal.py
+index dc75310f4..db4b7479e 100644
+--- a/hermes_cli/web_host_terminal.py
++++ b/hermes_cli/web_host_terminal.py
+@@ -242,6 +242,14 @@ def _executor_settings(home):
+             'Executor terminal configuration is unavailable; repair it and retry') from None
+
+
++def _executor_cwd(path):
++    if not isinstance(path, str) or not path.startswith('/') or any(
++        ord(char) < 32 or 127 <= ord(char) <= 159 or 0xD800 <= ord(char) <= 0xDFFF for char in path
++    ):
++        raise ExecutorTerminalError('Executor terminal cwd must be an absolute path without control characters')
++    return path
++
++
+ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+     """Prepare before the PTY spawn lock; no sandbox, sync or remote Hermes server is created."""
+     from hermes_cli.gateway_connections_ssh_transport import build_exec_args
+@@ -252,7 +260,7 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+         if mode == 'gateway':
+             argv, cwd, env, shell = await asyncio.to_thread(
+                 resolve_argv, home=home, requested_cwd=requested_cwd, use_profile_cwd=True)
+-            return argv, cwd, env, shell, cwd
++            return argv, cwd, env, 'Agent · ' + shell, cwd
+         env, (binary, endpoint, default_cwd) = await asyncio.to_thread(_executor_settings, home)
+     except ConfigBackendUnavailable:
+         # Native unavailable reads deliberately bypass Exception/default handlers.
+@@ -262,8 +270,7 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+     if ssh_config and endpoint.key_path and not await asyncio.to_thread(Path(endpoint.key_path).is_file):
+         raise ExecutorTerminalError('Executor terminal: configured SSH identity is missing')
+     requested = default_cwd if requested_cwd is None else requested_cwd
+-    if not isinstance(requested, str) or not requested or '\x00' in requested:
+-        raise ExecutorTerminalError('Executor terminal cwd must be a nonempty path without NUL')
++    requested = _executor_cwd(requested)
+     from hermes_cli.gateway_connections_ssh_transport import login_shell_quote
+     probe_command = 'python3 -c ' + login_shell_quote(_PROBE) + ' ' + login_shell_quote(requested)
+     probe = await asyncio.create_subprocess_exec(
+@@ -287,14 +294,12 @@ async def prepare(home, requested_cwd=None, *, mode=None, ssh_config=''):
+             reason = 'SSH connection or remote Python failed; check the executor, identity and host key'
+         raise ExecutorTerminalError('Executor terminal: ' + reason)
+     try:
+-        remote_cwd = json.loads(output)
+-        if not isinstance(remote_cwd, str) or not remote_cwd.startswith('/') or '\x00' in remote_cwd:
+-            raise ValueError('invalid cwd')
+-    except ValueError:
++        remote_cwd = _executor_cwd(json.loads(output))
++    except (ValueError, ExecutorTerminalError):
+         raise ExecutorTerminalError('Executor returned an invalid cwd') from None
+     command = 'cd -- ' + shlex.quote(remote_cwd) + ' && exec bash --rcfile <(printf %s ' + shlex.quote(_RC) + ') -i'
+     argv = [binary, '-tt', *build_exec_args(endpoint, 'bash -c ' + login_shell_quote(command), ssh_config=ssh_config)]
+-    return argv, str(home), env, 'Executor · ' + endpoint.target, remote_cwd
++    return argv, str(home), env, 'Code · ' + endpoint.target, remote_cwd
+
+
+ _PROBE = '''import json, os, shutil, sys
+diff --git a/hermes_cli/web_host_terminal_sessions.py b/hermes_cli/web_host_terminal_sessions.py
+index 14de1ba94..d5714f7e2 100644
+--- a/hermes_cli/web_host_terminal_sessions.py
++++ b/hermes_cli/web_host_terminal_sessions.py
+@@ -614,10 +614,7 @@ async def host_terminal(ws: WebSocket) -> None:
+     try:
+         registry = get_host_terminals(ws.app)
+         if ws.query_params.get("attach") is None:
+-            from hermes_cli.web_host_terminal import environment
+-
+-            if (ws.query_params.get("startup") == "1" and getattr(ws.state, "ssh_terminal", None) is None
+-                    and environment(ws.app) == "executor"):
++            if ws.query_params.get("startup") == "1" and getattr(ws.state, "ssh_terminal", None) is None:
+                 startup_ack = asyncio.Event()
+                 await ws.send_text(META_PREFIX + '{"preparing":true,"ackStartup":true}')
+             inbox = _InputQueue()
+diff --git a/tools/bot_desktop/placement.py b/tools/bot_desktop/placement.py
+index 3909f401a..7f2e43bc1 100644
+--- a/tools/bot_desktop/placement.py
++++ b/tools/bot_desktop/placement.py
+@@ -87,6 +87,10 @@ def _plugin_host_isolated() -> bool:
+
+
+ def resolve() -> Placement:
++    from hermes_bootstrap import PRIVATE_HERMES_COMPUTER_USE
++
++    if not PRIVATE_HERMES_COMPUTER_USE:
++        return Placement(REFUSED, "ssh", "Computer use requires COMPUTER_USE_ENABLED=true and a rebuilt executor")
+     try:
+         required = executor_only()
+     except RuntimeError as exc:
+diff --git a/tools/browser_use_cli.py b/tools/browser_use_cli.py
+index aef13e3ad..ee094509e 100644
+--- a/tools/browser_use_cli.py
++++ b/tools/browser_use_cli.py
+@@ -255,6 +255,21 @@ def _find_cli() -> Optional[list[str]]:
+     return [sys.executable, "-m", "browser_harness.run"]
+
+
++def _executor_browser_route_refusal() -> str | None:
++    from tools.browser_session_cdp import env_cdp_url, live_cdp_override
++    from tools.browser_session_cloud import browser_section
++
++    cfg = browser_section()
++    if (live_cdp_override() or env_cdp_url() or str(cfg.get('cdp_url') or '').strip() or
++            any(os.environ.get(key) for key in ('BU_CDP_URL', 'BU_CDP_WS')) or
++            cfg.get('cloud_provider') not in ('local', '', None) or
++            cfg.get('engine', 'auto') not in ('auto', 'chrome', '', None) or
++            cfg.get('use_real_profile') or cfg.get('user_data_dir') or cfg.get('executable_path')):
++        return ('This deployment supports only executor Chromium; remove cloud, external CDP, '
++                'real-profile or alternate-browser settings')
++    return None
++
++
+ def browser_exec_available() -> bool:
+     """Check the harness on an active desktop executor or in Hermes's local venv."""
+     from tools.bot_desktop import placement
+@@ -265,7 +280,7 @@ def browser_exec_available() -> bool:
+     try:
+         if placement.executor_only():
+             from tools.browser_use_executor import available
+-            return available(require_ready=True)
++            return not _executor_browser_route_refusal() and available(require_ready=True)
+     except RuntimeError:
+         return False
+
+@@ -854,6 +869,8 @@ def _needs_gateway_harness(env: dict, local: bool, local_sidecar: bool) -> bool:
+ def _execute_required_browser(code: str, session: str, timeout_s: int, task_id: Optional[str], local: bool):
+     from tools.registry import tool_error
+
++    if refusal := _executor_browser_route_refusal():
++        return tool_error(refusal)
+     if local:
+         return tool_error("The deployment requires a browser in the terminal executor")
+     if session and not _SESSION_RE.fullmatch(session):
