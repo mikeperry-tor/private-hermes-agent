@@ -103,21 +103,45 @@ index 3909f401a..7f2e43bc1 100644
          required = executor_only()
      except RuntimeError as exc:
 diff --git a/tools/bot_desktop/runtime.py b/tools/bot_desktop/runtime.py
-index 07bb4b2f5..566b1c7e9 100644
+index 07bb4b2f5..8fa38eba7 100644
 --- a/tools/bot_desktop/runtime.py
 +++ b/tools/bot_desktop/runtime.py
-@@ -706,7 +706,10 @@ def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
+@@ -700,7 +700,9 @@ def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
+     # A sandbox missing the stack is a blocker (shown in place of Start) naming the image that has it.
+     blocker = probe_error or display_error
+     image_switch = None
+-    if missing:
++    if missing and where.backend == "ssh":
++        blocker = sandbox_host.ssh_dependency_error(missing)
++    elif missing:
+         advice = sandbox_host.plugin_image_advice(where.backend) or (
+             f"use {sandbox_host.SANDBOX_IMAGE_HINT} as terminal.{where.backend}_image (the default sandbox base "
              f"plus the desktop stack)")
-         blocker = (f"The terminal backend's sandbox image lacks {', '.join(missing)}. {advice[0].upper()}{advice[1:]}, "
-                    f"or set bot_desktop.placement: gateway.")
--        if where.backend == "docker":
-+        if where.backend == "ssh":
-+            blocker = (f"The SSH executor lacks {', '.join(missing)}. "
-+                       "Set COMPUTER_USE_ENABLED=true and rebuild the desktop executor with make up.")
-+        elif where.backend == "docker":
-             # The usual reason on an upgraded install: the persisted container predates the default
-             # flip and was kept on purpose. The pane offers the switch instead of a config hint.
-             from hermes_cli.sandbox_image_switch import pending
+diff --git a/tools/bot_desktop/sandbox_host.py b/tools/bot_desktop/sandbox_host.py
+index 4e3afdb3b..caa87b0d3 100644
+--- a/tools/bot_desktop/sandbox_host.py
++++ b/tools/bot_desktop/sandbox_host.py
+@@ -378,6 +378,11 @@ def published_env(env: Any, profile: str, *, strict: bool = False) -> dict[str,
+     return _published(env, _remote_dir(env, profile), strict=strict)
+
+
++def ssh_dependency_error(missing: list[str]) -> str:
++    return (f"The SSH executor lacks {', '.join(missing)}. "
++            "Set COMPUTER_USE_ENABLED=true and run make up to rebuild the desktop executor.")
++
++
+ def start(env: Any, profile: str, *, geometry: str, wait_seconds: float = 20.0,
+           browser_exec: Optional[str] = None, browser_exec_line: Optional[str] = None) -> dict[str, str]:
+     """Bring the screen up inside ``env`` (idempotent); returns the published env. Raises RuntimeError naming
+@@ -391,6 +396,8 @@ def start(env: Any, profile: str, *, geometry: str, wait_seconds: float = 20.0,
+     stop(env, profile)  # a dead launcher may have left Xvnc holding :20; the relaunch needs it gone
+     missing = missing_binaries(env)
+     if missing:
++        if streams.shell_joined(env):
++            raise RuntimeError(ssh_dependency_error(missing))
+         advice = plugin_image_advice(getattr(env, "_hermes_backend_name", None)) or (
+             f"use {SANDBOX_IMAGE_HINT} (the default sandbox base plus the desktop stack) as "
+             f"terminal.docker_image / modal_image")
 diff --git a/tools/browser_use_cli.py b/tools/browser_use_cli.py
 index aef13e3ad..ee094509e 100644
 --- a/tools/browser_use_cli.py

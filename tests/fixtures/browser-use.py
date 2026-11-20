@@ -81,6 +81,27 @@ env = placement.terminal_environment()
 user = sandbox_host._user_for(env)
 profile = sandbox_host.browser_profile_dir(env)
 
+# Check package loss and recovery over SSH while the same environment stays
+# active. The shim changes only this disposable probe's interpreter.
+fixture = streams.run_in(env, ['mktemp', '-d', '/workspace/.harness-probe.XXXXXXXX'], user=user, timeout=10)
+assert fixture.returncode == 0, fixture.stderr
+probe_directory = fixture.stdout.decode().strip()
+probe_python = f'{probe_directory}/python'
+working = '#!/bin/sh\nexec /opt/browser-harness/bin/python "$@"\n'
+missing = '#!/bin/sh\nexec /usr/bin/python3 "$@"\n'
+try:
+    with patch.object(remote, '_executor_python', return_value=probe_python):
+        for body, available in ((working, True), (missing, False), (working, True)):
+            result = streams.run_in(env, ['python3', '-c',
+                'from pathlib import Path; import sys; p = Path(sys.argv[1]); p.write_text(sys.argv[2]); p.chmod(0o700)',
+                probe_python, body], user=user, timeout=10)
+            assert result.returncode == 0, result.stderr
+            assert remote.available(env=env) is available, f'Expected warm executor availability {available}'
+finally:
+    streams.run_in(env, ['rm', '-f', '--', probe_python], user=user, timeout=10)
+    assert streams.run_in(env, ['rmdir', '--', probe_directory], user=user, timeout=10).returncode == 0
+print('PASS: a warm gateway sees harness loss and recovery on the same SSH executor', flush=True)
+
 # A new named session cannot displace the recorded process while it still
 # holds the Chromium singleton, even if its endpoint file is missing.
 owner = browser_session_sandbox._launched[successor['launcher_key']]

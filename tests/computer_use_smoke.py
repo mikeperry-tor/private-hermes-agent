@@ -102,7 +102,7 @@ assert not status.installed and 'COMPUTER_USE_ENABLED=true' in status.blocker, s
 import json
 assert json.loads(browser_exec('raise AssertionError("must not run beside Hermes")')).get('error')
 try: runtime.start()
-except RuntimeError as e: assert 'needs' in str(e) or 'lacks' in str(e), str(e)
+except RuntimeError as e: assert 'COMPUTER_USE_ENABLED=true' in str(e), str(e)
 else: raise AssertionError('desktop started with missing executor binaries')
 """)
     # Reattach after executor recreation, then prove dependency loss gives a
