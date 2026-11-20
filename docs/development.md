@@ -483,28 +483,30 @@ qualified tree for focused follow-up changes.
 
 | Candidate | Recorded passing checks | Behavioral scope |
 | --- | --- | --- |
-| PR1: executor desktop/browser | 224 focused native Python tests, 6 desktop status renderer tests, combined browser/SSH suites, and real SSH Chromium qualification | Desktop probes and cold executor discovery, viewer owner identity, warm CUA driver ownership, named-profile RFB, raw CDP refusal, browser attachment and retirement, named vault lease, scratch, screenshots, sandboxing and no replay |
-| PR2: operator terminals and exact cwd | 80 focused native Python tests, 95 terminal renderer tests, and real SSH coverage | Gateway, profile and placement pinning, direct rollback refusal, Bash and cwd preparation, startup metadata wait, terminal ID acknowledgement and retention, relay close, pinned trust and repair |
-| PR3: selectable URL context | 74 reference, gateway-turn and configuration tests | Managed no-fetch across normal and bypass sessions, one validated snapshot, inaccessible and malformed configuration, safe defaults, filter order and recovery |
-| PR4: managed tool denial | 87 focused policy, MCP and discovery tests, plus combined prompt and worker persistence coverage | CLI readiness, tool catalog and generated guidance, connector results and policy relaxation, background review, coherent direct and deferred schemas, worker and prompt snapshots, and dispatch authority |
-| PR5: Webapp content privacy | Design review only | Shared renderer ownership and authenticated consent authority/storage/API remain unresolved |
+| PR1: managed configuration | Native configuration and profile-scope tests, managed-policy image fixtures on Docker and rootless Podman | Strict reads, dotenv bootstrap and reload, routed interpolation and secret source ownership |
+| PR2: SSH executor fixes | Native SSH environment and workspace tests, packaged real-shell and HTTP checks | Browser-profile sync exclusion, missing-file ENOENT/404, and pinned SSH client options |
+| PR3: executor desktop/browser | 224 focused native Python tests, 6 desktop status renderer tests, combined browser/SSH suites, and real SSH Chromium qualification | Desktop probes and cold executor discovery, viewer owner identity, warm CUA driver ownership, named-profile RFB, raw CDP refusal, browser attachment and retirement, named vault lease, scratch, screenshots, sandboxing and no replay |
+| PR4: operator terminals and exact cwd | 80 focused native Python tests, 95 terminal renderer tests, and real SSH coverage | Gateway, profile and placement pinning, direct rollback refusal, Bash and cwd preparation, startup metadata wait, terminal ID acknowledgement and retention, relay close, pinned trust and repair |
+| PR5: selectable URL context | 74 reference, gateway-turn and configuration tests | Managed no-fetch across normal and bypass sessions, one validated snapshot, inaccessible and malformed configuration, safe defaults, filter order and recovery |
+| PR6: managed tool denial | 87 focused policy, MCP and discovery tests, plus combined prompt and worker persistence coverage | CLI readiness, tool catalog and generated guidance, connector results and policy relaxation, background review, coherent direct and deferred schemas, worker and prompt snapshots, and dispatch authority |
+| PR7: Webapp content privacy | Design review only | Shared renderer ownership and authenticated consent authority/storage/API remain unresolved |
 
 Baseline regressions confirm the affected failure paths at native entrypoints.
-PR2 Windows command encoding tests leave native Windows shell lifecycle unqualified. Current qualification
+PR4 Windows command encoding tests leave native Windows shell lifecycle unqualified. Current qualification
 covers Linux ARM64; native macOS/Windows runtime, live providers, public ingress,
 OS clipboard integration and financial actions are outside this evidence.
 
 Native suites own duplicate dependency and browser ownership mechanism tests.
 Keep the packaged missing-file ENOENT/404 controls, which also cover real-shell
-and HTTP delivery. PR1 also owns the
+and HTTP delivery. PR3 also owns the
 queued-action, lease, permission and cancellation regressions. Keep allowed
 actions, takeover denial and recovery through real SSH, along with HTTP file
 controls, image delivery, sandbox placement and startup on both engines.
-PR2's deployment mode, stale-page, identity, authentication, pinned-key
+PR4's deployment mode, stale-page, identity, authentication, pinned-key
 and cross-engine tests remain until those paths are covered at stack entrypoints.
 Keep packaged URL no-fetch checks for normal and bypass turns at the gateway
 entrypoint, with a conflicting writable profile preference. The deployment
-mode × desktop tool matrix is in `desktop_tools_smoke.py`. Retain all private raster and browser containment coverage while PR5 is
+mode × desktop tool matrix is in `desktop_tools_smoke.py`. Retain all private raster and browser containment coverage while PR7 is
 deferred. Separate candidate qualification from the stack's Tor, storage and
 engine behavior.
 
