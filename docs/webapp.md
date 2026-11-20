@@ -77,8 +77,54 @@ otherwise recreate services without their optional networks. Use `make up` and
 
 ## Optional public Funnel
 
-Create a legitimate Tailscale enrollment key and permit Funnel for the node in
-your tailnet policy. Set these additional root `.env` settings:
+Permit Funnel for a tag in your tailnet policy, then generate a tagged auth key
+so Funnel permission is scoped to this node rather than every member device:
+
+1. In the Tailscale admin console, open **Access controls → JSON editor** and
+   register a tag owner for `tag:private-hermes` under `tagOwners` plus a
+   top-level `nodeAttrs` entry granting `"funnel"` to that tag (the "Add Funnel"
+   control is not shown in every console version):
+
+```json
+{
+  "tagOwners": {
+    "tag:private-hermes": ["autogroup:admin"]
+  },
+  "nodeAttrs": [
+    { "target": ["tag:private-hermes"], "attr": ["funnel"] }
+  ]
+}
+```
+
+   Merge these top-level keys with any existing policy; `nodeAttrs` must not be
+   nested inside `acls` or `grants`. Replace `"autogroup:admin"` with whichever
+   user or group should own the tag. Defining `tagOwners` only authorizes who
+   may assign the tag—the node receives `tag:private-hermes` from the auth key
+   in the next step.
+2. Open **Settings → Keys → Auth keys → Generate auth key**, enable **Tags**,
+   select `tag:private-hermes`, and copy the generated key into `TS_AUTHKEY`.
+
+Note that `"autogroup:member"` matches only **user-owned (untagged)** nodes—it
+does not match a node enrolled with a tagged auth key. If you use an untagged
+auth key instead, target the enrolling user (or `"autogroup:member"` for all
+user-owned nodes) in `nodeAttrs`.
+
+The stack writes the Funnel serve configuration directly, so it does not trigger
+the Tailscale CLI's interactive approval that normally adds the `funnel`
+attribute. Allow the policy and public DNS to propagate after saving.
+
+Confirm the node capability and public DNS before relying on the URL:
+
+```bash
+python3 scripts/stack.py compose exec tailscale \
+  tailscale --socket=/tmp/tailscaled.sock status --json
+# Self.CapMap must include "funnel"
+
+dig @1.1.1.1 +short A private-hermes.your-tailnet.ts.net
+# must return Tailscale Funnel relay addresses
+```
+
+Set these additional root `.env` settings:
 
 ```dotenv
 TAILSCALE_FUNNEL_ENABLED=true
@@ -90,7 +136,8 @@ TS_AUTHKEY=your-enrollment-key
 
 The hostname is an example: supply your node's exact assigned `.ts.net` name.
 Ports 443, 8443, and 10000 are supported by Tailscale Funnel. With a nondefault
-HTTPS port, include it in the browser URL. Then run `make build` and `make up`.
+HTTPS port, include it in the browser URL. Then run `make down` and `make up`
+(`make up` builds `tailscale` when `TAILSCALE_FUNNEL_ENABLED=true`).
 Only this explicit activation starts the Tailscale container and enrollment.
 Building images and running automated tests do not enroll or publish a node.
 

@@ -4,7 +4,8 @@
   <img src="docs/images/PrivateHermes.jpg" alt="Private Hermes" width="50%">
 </p>
 
-Private Hermes is a Docker Compose stack for running [Hermes Agent](https://github.com/NousResearch/hermes-agent)
+Private Hermes is a Docker/Podman Compose stack for running
+[Hermes Agent](https://github.com/NousResearch/hermes-agent)
 with private research tools, code execution in a separate container, and an
 authenticated web interface. It brings together Tor-routed Internet access,
 confidential-computing inference through Teep, and paid research APIs through
@@ -26,6 +27,8 @@ still use your browser's connection.
 
 - **Hermes Agent v0.23.2** provides chat, tool use, skills, and subagent orchestration.
   Its webapp and terminal client let you work with the same persistent agent.
+  This stack supports both Docker and Rootless podman with strong network isolation
+  between containers, no host access by default, and least-priviledge operation.
 - **SSH code executor** runs model-issued shell commands and Python code in a
   separate container and workspace. It keeps that code away from the agent's
   stored state, inference provider keys, and research wallet files. Sessions and
@@ -34,6 +37,8 @@ still use your browser's connection.
   through Tor, hiding their source network address from Internet destinations.
   Network rules block direct Internet fallback and access to host, VM, and
   private-network services except the stack's explicit internal connections.
+  Optional [onion ingress](#tor-onion-service) allows you to reach the Hermes
+  Admin Webapp via an onion URL (requires Tor Browser or Brave's Tor Window).
 - **[Teep](https://github.com/13rac1/teep)** connects Hermes to confidential-computing
   inference providers through an OpenAI-compatible API. It handles provider
   credentials and upstream attestation checks in a separate service with its own
@@ -48,11 +53,11 @@ still use your browser's connection.
   Rotating wallets and changing the Tor isolation identity reduce the linkability
   of API usage across payments. Hermes receives authenticated tool access while
   wallet files and spending keys stay in a separate container.
-- **HAProxy, optional Tailscale Funnel and onion ingress** provide access to the authenticated
-  webapp. HAProxy supplies the local entry point; Funnel optionally makes it
-  reachable over public HTTPS without requiring visitors to join a tailnet.
-  Remote access remains separate from the agent's Tor egress.
-  Optional onion ingress lets Tor Browser reach the webapp without Tailscale.
+- **[Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel)** provides
+  access to the Hermes Admin WebApp over a public HTTPS domain. It does not require
+  using a Tailnet or their VPN, and is available on the free tier. This allows
+  you to access your Hermes Admin panel from anywhere. Tailscale is not routed
+  over Tor: this remote access remains separate from the agent's Tor egress.
 
 x402_treazury exposes twelve research tool groups covering web, science,
 shopping, world, social, property, travel, health, business, finance, security,
@@ -72,8 +77,7 @@ ultimately depends upon the incoming volume of Base USDC swaps coming from Near
 Intents over the course of your usage. After an initial single bootstrap wallet
 phase, the provided configuration uses four distinct sets of rotating USDC
 wallets, with usage assigned by x402 API endpoint topic. These wallets rotate
-independently. See the [x402_treazury guide](docs/x402_treazury.md) for funding,
-wallet groups, and operation.
+independently.
 
 ## Prerequisites
 
@@ -251,31 +255,6 @@ included. Remote ingress is optional: enable Tailscale Funnel, an onion service,
 or both. Each hostname requires its own login using the same username and saved
 password. Enabling one does not require the other.
 
-### Public HTTPS with Tailscale Funnel
-
-Create a Tailscale enrollment key and allow Funnel for the node in your tailnet
-policy. Add these settings to root `.env`, using your node's exact assigned
-`.ts.net` hostname:
-
-```dotenv
-TAILSCALE_FUNNEL_ENABLED=true
-TAILSCALE_HOSTNAME=private-hermes
-TAILSCALE_FUNNEL_HOST=private-hermes.your-tailnet.ts.net
-TAILSCALE_FUNNEL_PORT=443
-TS_AUTHKEY=your-enrollment-key
-```
-
-Run `make build`, then `make down` and `make up`. Open
-`https://private-hermes.your-tailnet.ts.net` and log in with Hermes credentials.
-Funnel provides **public HTTPS**, not tailnet authorization; visitors do not need
-a Tailscale account. The login cookies are marked Secure. Ports 443, 8443 and
-10000 are supported; include a nondefault port in the URL. You can remove
-`TS_AUTHKEY` after successful enrollment because the node identity is saved.
-
-Set `TAILSCALE_FUNNEL_ENABLED=false` and run `make down` followed by `make up`
-to disable Funnel while preserving its enrollment and other ingress modes.
-See [Funnel setup and troubleshooting](docs/webapp.md#optional-public-funnel).
-
 ### Tor onion service
 
 Onion ingress is disabled by default. Its image is included in ordinary
@@ -307,6 +286,75 @@ Set `TOR_ONION_ENABLED=false` and apply `make down` followed by `make up` to
 withdraw onion ingress without deleting its key or changing localhost/Funnel
 access. See [onion operation and recovery](docs/webapp.md#optional-onion-ingress)
 and [backup scope](docs/configuration.md#backup-scope).
+
+### Public HTTPS with Tailscale Funnel
+
+Tailscale Funnel provides **public HTTPS** url you can access from anywhere;
+visitors do not need a Tailscale account. The Funnel feature is available on
+the TailScale Free plan, so it does not cost anything to sign up and use, but
+it is not enabled by default and requires some manual configuration in the
+Tailscale Admin WebUI.
+
+> **NOTE** You will need to regenerate a new auth key every 90 days.
+> Tailscale does not currently appear to allow permanent Funnel registration.
+
+To use Funnel, you must permit Funnel for a tag in your tailnet policy, then
+generate a tagged auth key for that tag:
+
+1. In the [Tailscale admin JSON editor](https://console.tailscale.com/admin/acls/file),
+   (open **Access controls → JSON editor**), register a tag owner for
+   `tag:private-hermes` under `tagOwners` plus a top-level `nodeAttrs` entry
+   allowing Funnel for it, merged with your existing policy (not nested inside
+   `acls` or `grants`):
+
+```json
+{
+  "tagOwners": {
+    "tag:private-hermes": ["autogroup:admin"]
+  },
+  "nodeAttrs": [
+    { "target": ["tag:private-hermes"], "attr": ["funnel"] }
+  ]
+}
+```
+
+   Defining `tagOwners` only authorizes who can assign `tag:private-hermes`;
+   the tag itself is applied to the container when it enrolls with the auth key
+   below. (If you enroll with an untagged user auth key instead, `"target"`
+   must match that user or `"autogroup:member"`, which permits Funnel for all
+   user-owned nodes; a tagged key is preferred because it scopes Funnel to this
+   node's tag.)
+2. In the [Tailscale admin key panel](https://console.tailscale.com/admin/settings/keys)
+   (open the **Settings → Keys → Auth keys → Generate auth key**), enable **Tags**,
+   and select `tag:private-hermes` so the generated `TS_AUTHKEY` tags the node
+   on enrollment.
+
+The stack writes the Funnel serve configuration directly, so it does not trigger
+the Tailscale CLI's interactive approval that normally adds the `funnel`
+attribute. Allow the policy and public DNS to propagate after saving.
+
+Add these settings to root `.env`, using your node's exact assigned
+`.ts.net` hostname:
+
+```dotenv
+TAILSCALE_FUNNEL_ENABLED=true
+TAILSCALE_HOSTNAME=private-hermes
+TAILSCALE_FUNNEL_HOST=private-hermes.your-tailnet.ts.net
+TAILSCALE_FUNNEL_PORT=443
+TS_AUTHKEY=your-enrollment-key
+```
+
+Run `make down` and `make up` (`make up` builds any newly enabled images,
+including `tailscale`). Open `https://private-hermes.your-tailnet.ts.net` and
+log in with Hermes credentials.
+
+The WebApp login cookies for this domain are marked Secure. Ports 443, 8443 and
+10000 are supported; include a nondefault port in the URL. You can remove
+`TS_AUTHKEY` after successful enrollment because the node identity is saved.
+
+If the URL does not resolve, confirm the node's `funnel` capability and public
+DNS record as described in
+[Funnel setup and troubleshooting](docs/webapp.md#optional-public-funnel).
 
 ## Updates and Backups
 
