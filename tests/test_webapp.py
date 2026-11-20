@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'components/webapp'))
 from settings import Settings, proxy_config
 from auth import hash_password, validate
+from configure import configure
 
 spec = importlib.util.spec_from_file_location('funnel', ROOT / 'components/tailscale/funnel.py')
 funnel = importlib.util.module_from_spec(spec)
@@ -26,6 +27,19 @@ def values(**changes):
 
 
 class WebappTests(unittest.TestCase):
+    def test_setup_accepts_blank_webapp_config_and_preserves_existing_settings(self):
+        credentials = {'password_hash': hash_password('disposable test password'), 'secret': 's' * 64}
+        for saved in (None, {'terminal_environment': 'gateway'}):
+            with self.subTest(saved=saved):
+                config = {'webapp': saved}
+                configure(config, credentials, 'admin')
+                configure(config, credentials, 'admin')
+                self.assertTrue(config['webapp']['enabled'])
+                self.assertEqual(config['webapp']['port'], 9120)
+                if saved is not None:
+                    self.assertEqual(config['webapp']['terminal_environment'], 'gateway')
+                self.assertEqual(config['dashboard']['basic_auth'], {'username': 'admin', **credentials})
+
     def test_invalid_or_inconsistent_settings_refuse_activation(self):
         for change in ({'terminal_environment': ''}, {'terminal_environment': 'invalid'}, {'external_content': ''}, {'external_content': 'invalid'}, {'funnel_enabled': '1'},
                        {'webapp_bind': '0.0.0.0'}, {'webapp_port': '9120;evil'},
