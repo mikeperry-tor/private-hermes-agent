@@ -1,6 +1,6 @@
 Runtime and renderer changes from the upstream PR1–PR4 combined replay.
 Base: caafe5389ae585ef77387a962aee05b1bcf17029
-Head: bb9b6165d06301c2fe5a462be2c6f3ca12feea1f
+Head: e1311d5cea7b2be762877a74f4755bff4608e92c
 
 diff --git a/agent/agent_init.py b/agent/agent_init.py
 index fa4c1e24a000e9273b889982236fe675059d3ac1..d48bdd3083dfb4f3b38c35e981e352d335d2442e 100644
@@ -933,7 +933,7 @@ index 3a5a8c08ac2da43805e59cff0e248046f0eee6a2..264175bf734c6f137853197fb87433e0
      def patch_session_model_config(self, session_id, patch):
          self._session(session_id)
 diff --git a/agent/secret_scope.py b/agent/secret_scope.py
-index 7a83145c28a50f78f13a774bf80191dd25ac0ab9..0b39fad74f75013a3f3b7880f2591034a9b7baf0 100644
+index 7a83145c28a50f78f13a774bf80191dd25ac0ab9..e9d8eabba178f6c400beadb2030b6c2e2b57aa0d 100644
 --- a/agent/secret_scope.py
 +++ b/agent/secret_scope.py
 @@ -388,11 +388,12 @@ def _parse_env_text(text: str) -> dict[str, str]:
@@ -963,6 +963,18 @@ index 7a83145c28a50f78f13a774bf80191dd25ac0ab9..0b39fad74f75013a3f3b7880f2591034
          return {}
 
      with _ENV_FILE_CACHE_LOCK:
+@@ -476,8 +479,9 @@ def _expand_dotenv_templates(secrets: dict[str, str], hermes_home: Path, raw: di
+     templated = {k: v for k, v in raw.items() if "${" in v and secrets.get(k) == v}
+     if not templated:
+         return
+-    from hermes_cli.env_loader import resolve_home_dotenv
+-    lookup = None if _is_process_home(hermes_home) else {k: v for k, v in os.environ.items() if _is_global_env(k)}
++    from hermes_cli.env_loader import resolve_home_dotenv, routed_dotenv_lookup_env
++
++    lookup = None if _is_process_home(hermes_home) else routed_dotenv_lookup_env()
+     resolved = resolve_home_dotenv(Path(hermes_home), lookup_env=lookup)
+     secrets.update((k, resolved[k]) for k in templated if k in resolved)
+
 diff --git a/agent/side_question_lease.py b/agent/side_question_lease.py
 index 7b1bed4a0b9c3bee104ed2a41edf2056ce6bd809..7480071b9e92912f31929260653dab5f13d4a16f 100644
 --- a/agent/side_question_lease.py
@@ -3003,7 +3015,7 @@ index b463586d196309ea23076dcf70dce446eefca2a6..08862f041ca6d5cf8fabe01b2a2b53fc
      # selected but unconfigured backend cannot look healthy.
      web_rows = []
 diff --git a/hermes_cli/env_loader.py b/hermes_cli/env_loader.py
-index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e207293194457346ca8d 100644
+index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..421aaae03228178960b888e800e38298905f4286 100644
 --- a/hermes_cli/env_loader.py
 +++ b/hermes_cli/env_loader.py
 @@ -110,7 +110,7 @@ def _env_keys_defined_in_dotenv(path: Path) -> set[str]:
@@ -3024,11 +3036,31 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
      for key in _PROFILE_MANAGED_ENV_KEYS:
          if key not in defined and key in os.environ:
              del os.environ[key]
-@@ -443,16 +443,19 @@ def _resolve_dotenv_assignments(
+@@ -189,8 +189,7 @@ def has_nonblank_dotenv_value(name: str) -> bool:
+
+
+ def managed_dotenv_keys() -> frozenset[str]:
+-    """KEY names the administrator-managed ``.env`` loaded (see ``_MANAGED_DOTENV_KEYS``). Policy for
+-    every profile: never stripped from a routed child, and re-applied over the routed scope."""
++    """Names ever published from managed dotenv, including retired launch-process values."""
+     return frozenset(_MANAGED_DOTENV_KEYS)
+
+
+@@ -443,16 +442,29 @@ def _resolve_dotenv_assignments(
      return resolved
 
 
 -def resolve_home_dotenv(home: Path, *, lookup_env: dict[str, str] | None = None) -> dict[str, str]:
++def routed_dotenv_lookup_env() -> dict[str, str]:
++    """Allow instance environment defaults in routed interpolation while excluding launch output."""
++    from agent.secret_scope import _is_global_env
++
++    owned = launch_dotenv_keys() | managed_dotenv_keys() | set(source_supplied_names())
++    owned = {key.upper() for key in owned}
++    return {key: value for key, value in os.environ.items()
++            if _is_global_env(key) and key.upper() not in owned and not key.upper().startswith("TERMINAL_")}
++
++
 +def resolve_home_dotenv(
 +    home: Path, *, lookup_env: dict[str, str] | None = None, managed_only: bool = False,
 +) -> dict[str, str]:
@@ -3040,7 +3072,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 -    from hermes_cli import managed_scope
 +    *lookup_env* replaces that environment for routed profiles. With *managed_only*, only the
 +    managed layer is returned, still interpolated against the target's own dotenv."""
-+    from hermes_cli.managed_scope import applied_managed_assignments, retain_managed_env_claims
++    from hermes_cli.managed_scope import applied_managed_env, retain_managed_env_claims
 
 -    managed_dir = managed_scope.get_managed_dir()
 -    layers = [home / ".env", *([managed_dir / ".env"] if managed_dir is not None else [])]
@@ -3049,8 +3081,11 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
      if lookup_env is not None:
          lookup_env = dict(lookup_env)
      else:
-@@ -462,11 +465,22 @@ def resolve_home_dotenv(home: Path, *, lookup_env: dict[str, str] | None = None)
+@@ -460,13 +472,25 @@ def resolve_home_dotenv(home: Path, *, lookup_env: dict[str, str] | None = None)
+             lookup_env = _dotenv_lookup_env(None)
+     out: dict[str, str] = {}
      for path in layers:
++        applied = None
          try:
              assignments = _parse_dotenv_file(path)
 -        except OSError:
@@ -3061,20 +3096,21 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 +        except OSError:
 +            if path != managed_path:
 +                continue
-+            assignments = applied_managed_assignments(path)
++            assignments, applied = applied_managed_env(path)
 +        else:
 +            if path == managed_path:
 +                retain_managed_env_claims(path, _claimed_env_names(dict(assignments).items()))
          for name, value in _resolve_dotenv_assignments(assignments, lookup_env, override=True).items():
-             if value is not None:
+-            if value is not None:
 -                lookup_env[name] = out[name] = value
++            if value is not None and (applied is None or name in applied):
 +                lookup_env[name] = value
 +                if not managed_only or path == managed_path:
 +                    out[name] = value
      return out
 
 
-@@ -480,6 +494,7 @@ def _release_bridge_claim(name: str) -> None:
+@@ -480,6 +504,7 @@ def _release_bridge_claim(name: str) -> None:
 
  def _load_dotenv_with_fallback(
      path: Path, *, override: bool, load_pass: int | None = None, managed: bool = False,
@@ -3082,7 +3118,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
  ) -> None:
      """Load one dotenv file into ``os.environ`` like ``dotenv.load_dotenv`` — same parser, same
      ``${VAR}`` / ``${VAR:-default}`` / precedence rules — except that ``${VAR}`` resolves against the value
-@@ -488,13 +503,21 @@ def _load_dotenv_with_fallback(
+@@ -488,13 +513,21 @@ def _load_dotenv_with_fallback(
      ``load_pass`` groups the layered files of one ``load_hermes_dotenv`` call: within a pass a later layer
      (project, managed) still sees the earlier layer's output, as it always did; only OTHER passes' output
      is peeled. A bare call (``hermes send``'s direct reload) is its own pass."""
@@ -3106,7 +3142,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
                  continue
              if is_launch_only_env_key(name):
                  _warn_launch_only_key(f"dotenv {path}", name)
-@@ -504,6 +527,9 @@ def _load_dotenv_with_fallback(
+@@ -504,6 +537,9 @@ def _load_dotenv_with_fallback(
              ours = record is not None and current == record[1]
              if name in _SPAWN_CREDENTIAL_KEYS and current and not ours:
                  continue  # parent-minted per-process credential: .env must not split it from the parent
@@ -3116,7 +3152,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
              # Ours and untouched since → keep the original baseline; anything else is a newer outside value.
              baseline = record[0] if ours else current
              os.environ[name] = value
-@@ -515,9 +541,18 @@ def _load_dotenv_with_fallback(
+@@ -515,9 +551,17 @@ def _load_dotenv_with_fallback(
      # Managed keys are recorded separately: they are administrator policy, not launch-profile residue.
      # Launch-only keys are recorded nowhere: they were never published, so a leftover file entry must
      # not strip the launch value from a routed child either (#135200).
@@ -3129,15 +3165,14 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 +        names = _claimed_env_names(resolved.items())
 +        with _DOTENV_LOCK:
 +            current = dict(os.environ)
-+            raw = [(name, value) for name, value in assignments if name in names]
-+            remember_applied_managed_env(path, raw, {name: current[name] for name in names & current.keys()})
++            remember_applied_managed_env(path, assignments, {name: current[name] for name in names & current.keys()})
 +            _MANAGED_DOTENV_KEYS.update(names)
 +    else:
 +        _LOADED_DOTENV_KEYS.update(name for name, _value in assignments if not is_launch_only_env_key(name))
 
 
  _LAUNCH_ONLY_WARNED: set[tuple[str, str, str]] = set()
-@@ -577,7 +612,43 @@ def _dotenv_assignments(path: Path) -> list:
+@@ -577,7 +621,44 @@ def _dotenv_assignments(path: Path) -> list:
      return list(DotEnv(dotenv_path=None, stream=io.StringIO(text), interpolate=False).parse())
 
 
@@ -3161,7 +3196,8 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 +    except FileNotFoundError:
 +        assignments = []
 +    except OSError:
-+        return [], applied_managed_env(path)
++        _, applied = applied_managed_env(path)
++        return [], applied
 +    retain_managed_env_claims(path, _claimed_env_names(dict(assignments).items()))
 +    return assignments, {}
 +
@@ -3182,7 +3218,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
      """The process env as ``load_hermes_dotenv`` leaves it for the names its dotenv layers define:
      the home's ``.env`` (override), ``.op.env`` (fills gaps, only without a process
      ``OP_SERVICE_ACCOUNT_TOKEN``), the caller's *project_env* (fills gaps when the home has a
-@@ -585,21 +656,22 @@ def _bootstrap_env(home: Path | None = None, project_env: Path | None = None) ->
+@@ -585,21 +666,22 @@ def _bootstrap_env(home: Path | None = None, project_env: Path | None = None) ->
      loader's parser. Read-only: nothing is published and no file is rewritten (sanitizing imports
      hermes_cli.config, whose import-time config read must not run before the backend is decided)."""
      home = Path(home) if home is not None else _process_hermes_home()
@@ -3214,7 +3250,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
      for path, override in layers:
          try:
              assignments = _dotenv_assignments(path)
-@@ -609,7 +681,10 @@ def _bootstrap_env(home: Path | None = None, project_env: Path | None = None) ->
+@@ -609,7 +691,10 @@ def _bootstrap_env(home: Path | None = None, project_env: Path | None = None) ->
          for name, value in resolved.items():
              if value is not None and (override or name not in env):
                  env[name] = value
@@ -3226,7 +3262,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 
 
  def selected_config_backend_name(home: Path | None = None) -> str:
-@@ -618,7 +693,8 @@ def selected_config_backend_name(home: Path | None = None) -> str:
+@@ -618,7 +703,8 @@ def selected_config_backend_name(home: Path | None = None) -> str:
      config-file migration in remote mode, D12)."""
      from hermes_cli.config_backend import BACKEND_ENV
 
@@ -3236,7 +3272,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 
 
  def apply_config_bootstrap_env(backend_names, home: Path | None = None, project_env: Path | None = None) -> None:
-@@ -636,13 +712,20 @@ def apply_config_bootstrap_env(backend_names, home: Path | None = None, project_
+@@ -636,13 +722,25 @@ def apply_config_bootstrap_env(backend_names, home: Path | None = None, project_
      # its bootstrap supplied the process env explicitly, so nothing is published from the files.
      if worker_config_snapshot() is not None:
          return
@@ -3249,20 +3285,25 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 -        value = env.get(name)
 -        if value is not None and os.environ.get(name) != value:
 -            os.environ[name] = value
++    managed_names = _claimed_env_names(dict(managed).items()) & names
 +    with _DOTENV_LOCK:
++        load_pass = next(_DOTENV_PASSES)
++        baseline = _dotenv_lookup_env(None)
 +        for name in names & env.keys():
 +            os.environ[name] = env[name]
-+        managed_names = _claimed_env_names(dict(managed).items()) & names
++            if name in managed_names:
++                _DOTENV_PUBLISHED[name] = (baseline.get(name), env[name], load_pass)
 +        if managed_path is not None and managed_names:
 +            from hermes_cli.managed_scope import applied_managed_env, remember_applied_managed_env
 +
-+            values = applied_managed_env(managed_path) | {name: env[name] for name in managed_names}
-+            remember_applied_managed_env(managed_path, [(k, v) for k, v in managed if k in values], values)
++            _, values = applied_managed_env(managed_path)
++            values.update((name, env[name]) for name in managed_names)
++            remember_applied_managed_env(managed_path, managed, values)
 +            _MANAGED_DOTENV_KEYS.update(managed_names)
 
 
  def _sanitize_env_file_if_needed(path: Path) -> None:
-@@ -726,13 +809,18 @@ def dotenv_unreadable(path: Path) -> bool:
+@@ -726,13 +824,18 @@ def dotenv_unreadable(path: Path) -> bool:
          return False
 
 
@@ -3287,7 +3328,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
      except PermissionError:
          from hermes_cli import managed_scope
 
-@@ -796,6 +884,10 @@ def load_hermes_dotenv(
+@@ -796,6 +899,10 @@ def load_hermes_dotenv(
      user_env = home_path / ".env"
      project_env_path = Path(project_env) if project_env else None
      load_pass = next(_DOTENV_PASSES)  # one pass: later layers below see the earlier layers' output
@@ -3298,7 +3339,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 
      # Before anything below imports hermes_cli.config (the .env sanitizer does), whose import-time
      # config read selects and boots the backend: publish the deployment and plane credential from
-@@ -809,19 +901,20 @@ def load_hermes_dotenv(
+@@ -809,19 +916,20 @@ def load_hermes_dotenv(
      if project_env_path and project_env_path.exists():
          _sanitize_env_file_if_needed(project_env_path)
 
@@ -3323,7 +3364,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
          loaded.append(project_env_path)
 
      # The override=True loads above wrote the raw .env line (``__BITWARDEN_MANAGED__`` placeholder, stale
-@@ -830,7 +923,7 @@ def load_hermes_dotenv(
+@@ -830,7 +938,7 @@ def load_hermes_dotenv(
      # source is authoritative for; managed scope, applied last with override=True, still wins on purpose.
      if _SECRET_SOURCE_RESTORE_BY_HOME:
          for name, value in _SECRET_SOURCE_RESTORE_BY_HOME.get(hermes_home_key(home_path), {}).items():
@@ -3332,7 +3373,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
                  os.environ[name] = value
 
      # The config backend is selected here — after the .env files, before the first config.yaml read
-@@ -861,8 +954,8 @@ def load_hermes_dotenv(
+@@ -861,8 +969,8 @@ def load_hermes_dotenv(
      # updater process or the self-lock preflight will recreate the marker and exit 2 again. Dotenv and
      # managed env still load in both cases; only external source resolution is unnecessary for the updater.
      if load_external_secrets and not _early_recovery._should_skip_external_secret_sources():
@@ -3343,7 +3384,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 
      # config.yaml owns terminal.*, but the override=True loads above let a stale TERMINAL_ENV=docker in
      # ~/.hermes/.env win on every reload and flip the backend mid-session in long-lived processes.
-@@ -892,22 +985,19 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
+@@ -892,22 +1000,19 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
          pass
 
 
@@ -3356,11 +3397,11 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 -
 -        managed_dir = managed_scope.get_managed_dir()
 -    except Exception:
+-        return
+-    if managed_dir is None:
 +    managed_env = _managed_env_path()
 +    if managed_env is None:
          return
--    if managed_dir is None:
--        return
 -    managed_env = managed_dir / ".env"
 -    if not managed_env.exists():
 +    try:
@@ -3375,11 +3416,35 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
 
 
  def _revoke_secret_source_writes(home_path: Path, *, keep) -> None:
-@@ -1031,17 +1121,23 @@ def _refuse_protected_env_from_sources(report, backend=None, environ_before=None
+@@ -1014,12 +1119,7 @@ def _refuse_protected_env_from_sources(report, backend=None, environ_before=None
+     if not backend.protected_env_names():
+         # The file backend has no plane credential: only the selector clashed. Reverted, and dropped
+         # from the report so no provenance/snapshot re-applies it later; keep going.
+-        for name in clash:
+-            report.provenance.pop(name, None)
+-            for src in report.sources:
+-                for bucket in (getattr(src, "applied", None), getattr(src, "skipped_existing", None)):
+-                    if isinstance(bucket, list) and name in bucket:
+-                        bucket.remove(name)
++        _discard_source_claims(report, clash)
+         print(f"  Secret sources: ignored {BACKEND_ENV} from a secrets: source (the config backend is "
+               "chosen by .env or the process environment only).", file=sys.stderr)
+         return
+@@ -1031,17 +1131,33 @@ def _refuse_protected_env_from_sources(report, backend=None, environ_before=None
          f"from a secret source; remove the mapping. {outcome}")
 
 
 -def _publish_staged_env(staged: dict, environ_before: dict) -> None:
++def _discard_source_claims(report, names) -> None:
++    """Drop blocked source names from the metadata used for later restores."""
++    for name in names:
++        report.provenance.pop(name, None)
++        for src in report.sources:
++            for bucket in (getattr(src, "applied", None), getattr(src, "skipped_existing", None)):
++                if isinstance(bucket, list) and name in bucket:
++                    bucket.remove(name)
++
++
 +def _publish_staged_env(staged: dict, environ_before: dict, managed_claims: frozenset[str]) -> None:
      """Copy into ``os.environ`` exactly the names the sources set in *staged* (value differs from
      *environ_before*). Sources only ever set names, so nothing is removed; a name nobody's source
@@ -3402,11 +3467,12 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..17902ab40bd38a1cbee1e20729319445
      """Pull secrets from every enabled external source into env — AFTER dotenv (sources need .env bootstrap
      tokens), BEFORE Hermes reads credentials; failures never block startup. Precedence/conflicts/provenance
      live in ``registry.apply_all``; this wrapper owns the once-per-home guard, the post-apply ASCII sweep,
-@@ -1110,7 +1206,7 @@ def _apply_external_secret_sources(home_path: Path) -> None:
+@@ -1110,7 +1226,8 @@ def _apply_external_secret_sources(home_path: Path) -> None:
          _publish_live_source_values(home_key, home_path, {})
          return
      _refuse_protected_env_from_sources(report, backend_before, environ_before, env=staged)
 -    _publish_staged_env(staged, environ_before)
++    _discard_source_claims(report, managed_claims)
 +    _publish_staged_env(staged, environ_before, managed_claims)
 
      # A real fetch attempt happened (success OR error): mark the home so the 3-5 import-time calls per
@@ -3456,7 +3522,7 @@ index c446e30c2f72a9a88963adfcf8bb0aaf3f7520bf..9a9d426eeb2c803ba4b844f80dd2913f
 
 
 diff --git a/hermes_cli/managed_scope.py b/hermes_cli/managed_scope.py
-index 19cda7208107c9eee4379786da9427cf1568aff5..ea059705951c65fd1688683f21c2073c5747af3a 100644
+index 19cda7208107c9eee4379786da9427cf1568aff5..0c6b3b6ee0ef2bf6897d7ac9050f148e67639156 100644
 --- a/hermes_cli/managed_scope.py
 +++ b/hermes_cli/managed_scope.py
 @@ -34,6 +34,9 @@ _CACHE_LOCK = threading.Lock()
@@ -3521,7 +3587,7 @@ index 19cda7208107c9eee4379786da9427cf1568aff5..ea059705951c65fd1688683f21c2073c
  def load_managed_config(*, strict: bool = False) -> dict:
      """Parsed managed config.yaml, or {} when absent/malformed (fail-open). Always {} under a config
      backend that takes config and locks from elsewhere (remote mode, D18; boot warns about the file).
-@@ -119,33 +135,80 @@ def load_managed_config(*, strict: bool = False) -> dict:
+@@ -119,33 +135,74 @@ def load_managed_config(*, strict: bool = False) -> dict:
 
      if not get_config_backend().honors_managed_config():
          return {}
@@ -3536,18 +3602,13 @@ index 19cda7208107c9eee4379786da9427cf1568aff5..ea059705951c65fd1688683f21c2073c
 +        _APPLIED_ENV = (path, raw, values)
 +
 +
-+def applied_managed_env(path: Path | None) -> dict[str, str]:
-+    """Return remembered values for the owning process."""
++def applied_managed_env(path: Path | None) -> tuple[list[tuple[str, str | None]], dict[str, str]]:
++    """Return the ordered source and the subset that was published at that path."""
 +    with _CACHE_LOCK:
 +        saved = _APPLIED_ENV
-+        return saved[2].copy() if saved is not None and saved[0] == path else {}
-+
-+
-+def applied_managed_assignments(path: Path | None) -> list[tuple[str, str | None]]:
-+    """Return source templates in order for profile-scoped interpolation."""
-+    with _CACHE_LOCK:
-+        saved = _APPLIED_ENV
-+        return saved[1].copy() if saved is not None and saved[0] == path else []
++        if saved is not None and saved[0] == path:
++            return saved[1].copy(), saved[2].copy()
++        return [], {}
 +
 +
 +def retain_managed_env_claims(path: Path | None, names: frozenset[str]) -> None:
@@ -3557,16 +3618,14 @@ index 19cda7208107c9eee4379786da9427cf1568aff5..ea059705951c65fd1688683f21c2073c
 +        saved = _APPLIED_ENV
 +        if saved is not None and saved[0] == path:
 +            path, raw, values = saved
-+            _APPLIED_ENV = (
-+                path, [(name, value) for name, value in raw if name in names],
-+                {name: values[name] for name in names & values.keys()},
-+            )
++            active = {name: values[name] for name in names & values.keys()}
++            _APPLIED_ENV = (path, raw, active) if active else None
 +
 +
  def load_managed_env() -> dict[str, str]:
 -    """Parsed managed .env (KEY=VALUE), or {} when absent (fail-open)."""
 -    return _load_managed_file(".env", _ENV_CACHE, _parse_managed_env)
-+    """Parsed managed .env, with installed values retained on a read error."""
++    """Parsed managed .env, retaining templates for applied names on a read error."""
 +    directory = get_managed_dir(strict=True)
 +    if directory is None:
 +        return {}
@@ -3576,7 +3635,8 @@ index 19cda7208107c9eee4379786da9427cf1568aff5..ea059705951c65fd1688683f21c2073c
 +    except FileNotFoundError:
 +        parsed = {}
 +    except OSError:
-+        return {name: value for name, value in dict(applied_managed_assignments(path)).items() if value is not None}
++        raw, applied = applied_managed_env(path)
++        return {name: value for name, value in dict(raw).items() if value is not None and name in applied}
 +    except UnicodeError as exc:
 +        logger.warning("Could not parse managed dotenv %s: %s", path, exc)
 +        return {}
@@ -3611,7 +3671,7 @@ index 19cda7208107c9eee4379786da9427cf1568aff5..ea059705951c65fd1688683f21c2073c
          if not managed:
              return config
          # Imported lazily to avoid an import cycle (config imports managed_scope).
-@@ -159,6 +222,8 @@ def apply_managed_overlay(config: dict) -> dict:
+@@ -159,6 +216,8 @@ def apply_managed_overlay(config: dict) -> dict:
              managed_expanded["model"] = {"default": managed_expanded["model"]}
          return _deep_merge(config, managed_expanded)
      except Exception:
@@ -8406,7 +8466,7 @@ index 7844a85314c3737d27dedda5d7cfdd31fe934fba..9f364eff0b8fb0f8aaca8fe8fd5b6ef1
      try:
          if connector_describe is None:
 diff --git a/tools/environments/local.py b/tools/environments/local.py
-index a53a5f021196c65e2937542a30f9e4bc579b9e65..b28ae5fb635a1420128f34f3f8de36f715703f3f 100644
+index a53a5f021196c65e2937542a30f9e4bc579b9e65..2c88511456b4d65d711fb423e48cde39f68c16af 100644
 --- a/tools/environments/local.py
 +++ b/tools/environments/local.py
 @@ -416,15 +416,10 @@ def build_subprocess_env(
@@ -8439,7 +8499,7 @@ index a53a5f021196c65e2937542a30f9e4bc579b9e65..b28ae5fb635a1420128f34f3f8de36f7
      """Drop the LAUNCH profile's residue from a child env built for another served profile.
      ``os.environ`` holds the default profile's ``.env`` and its bridged ``TERMINAL_*`` settings;
      the secret scrub removes credentials but not settings (``HERMES_MODEL``, ``TERMINAL_ENV``,
-@@ -545,55 +542,47 @@ def strip_launch_profile_env(env: dict, target_home: str | Path | None = None) -
+@@ -545,55 +542,48 @@ def strip_launch_profile_env(env: dict, target_home: str | Path | None = None) -
      defaults to the active home override; no-op when there is no target or the target IS the
      launch profile. The authority test is "does this task serve a routed home", not "is the
      gateway-wide multiplex flag on": the Desktop/dashboard backend serves ``?profile=B`` by
@@ -8448,7 +8508,8 @@ index a53a5f021196c65e2937542a30f9e4bc579b9e65..b28ae5fb635a1420128f34f3f8de36f7
 +    before restoring administrator-managed values for the target."""
      from agent.secret_scope import _is_global_env, load_env_file
 +    from hermes_cli.env_loader import (
-+        launch_dotenv_keys, managed_dotenv_keys, managed_env_claims, resolve_home_dotenv, source_supplied_names,
++        launch_dotenv_keys, managed_dotenv_keys, managed_env_claims, resolve_home_dotenv,
++        routed_dotenv_lookup_env, source_supplied_names,
 +    )
      from hermes_constants import get_hermes_home_override, get_routing_process_hermes_home
      target = target_home or get_hermes_home_override()
@@ -8486,7 +8547,7 @@ index a53a5f021196c65e2937542a30f9e4bc579b9e65..b28ae5fb635a1420128f34f3f8de36f7
 +    managed = {key.upper() for key in managed_env_claims()} - deployment
 +    residue = {key.upper() for key in (
          set(load_env_file(launch_home / ".env")) | set(launch_dotenv_keys())
--        | set(TERMINAL_CONFIG_ENV_MAP.values()) | set(source_supplied_names())
+         | set(TERMINAL_CONFIG_ENV_MAP.values()) | set(source_supplied_names())
 -        if not _is_global_env(key.upper()) or key.upper().startswith("TERMINAL_")} - managed_names
 -    drop_bridge_markers(env)  # the LAUNCH profile's YAML values and their markers, never the target's
 -    for key in [k for k in env if k.upper() in residue_names]:
@@ -8507,10 +8568,10 @@ index a53a5f021196c65e2937542a30f9e4bc579b9e65..b28ae5fb635a1420128f34f3f8de36f7
 -        if key in os.environ:
 -            env[key] = os.environ[key]
 -    return env
-+        | set(TERMINAL_CONFIG_ENV_MAP.values()) | set(source_supplied_names()) | set(managed_dotenv_keys())
 +    ) if not _is_global_env(key.upper()) or key.upper().startswith("TERMINAL_")}
 +    drop_bridge_markers(env)
-+    strip_names = (residue | managed) - deployment
++    historical = {key.upper() for key in managed_dotenv_keys()}
++    strip_names = (residue | historical | managed) - deployment
 +    for key in list(env):
 +        if key.upper() in strip_names:
 +            del env[key]
@@ -8520,14 +8581,13 @@ index a53a5f021196c65e2937542a30f9e4bc579b9e65..b28ae5fb635a1420128f34f3f8de36f7
 +        protected = managed | deployment
 +        env.update((key, value) for key, value in scope.items() if key.upper() not in protected)
 +    if managed:
-+        lookup = {key: value for key, value in os.environ.items() if _is_global_env(key)}
-+        scoped = resolve_home_dotenv(Path(target), lookup_env=lookup, managed_only=True)
++        scoped = resolve_home_dotenv(Path(target), lookup_env=routed_dotenv_lookup_env(), managed_only=True)
 +        env.update((key, value) for key, value in scoped.items() if key.upper() in managed)
 +    return strip_profile_gate_env(env) if scope is None else env
 
 
  # --- Shell discovery ---
-@@ -830,17 +819,13 @@ def routed_terminal_base() -> dict:
+@@ -830,17 +820,13 @@ def routed_terminal_base() -> dict:
      so a served profile's commands run with its own ``.env``/source names (launch-residue values
      lose, managed policy keys keep precedence) instead of only the names the launch process also
      happened to define (#142798). The caller's scrub still filters every value."""
