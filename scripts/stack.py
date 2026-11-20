@@ -20,6 +20,15 @@ def capture(command):
     return run(command, text=True, capture_output=True).stdout.strip()
 
 
+def run_preflight(command):
+    # Preflight prints its own diagnostic and exits non-zero. Propagate the
+    # status without a wrapper traceback.
+    try:
+        run(command)
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(error.returncode) from None
+
+
 def require_inference_key(command):
     # Teep exits at once without a provider key. Rootless Podman restarts it
     # without backoff and `up --wait` would wait without end, so stop here.
@@ -99,7 +108,7 @@ def main_unlocked():
     else:
         # Refuse a wrong engine or an endpoint override before setup writes anything.
         check_engine()
-        run([sys.executable, 'scripts/preflight.py', *(['--funnel'] if config.funnel else [])])
+        run_preflight([sys.executable, 'scripts/preflight.py', *(['--funnel'] if config.funnel else [])])
         path = ROOT / 'config/webapp/auth.json'
         if not path.is_file():
             raise RuntimeError('Run make init before starting the stack.')

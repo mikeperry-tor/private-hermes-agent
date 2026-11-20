@@ -632,6 +632,18 @@ class EngineDependentCheckTests(unittest.TestCase):
         with patch.object(stack, 'capture', return_value=config(NEARAI_API_KEY='set')):
             stack.require_inference_key(['docker', 'compose'])
 
+    def test_preflight_failure_exits_without_a_wrapper_traceback(self):
+        with patch.object(stack, 'run',
+                          side_effect=subprocess.CalledProcessError(1, ['preflight'])):
+            with self.assertRaises(SystemExit) as raised:
+                stack.run_preflight(['python3', 'scripts/preflight.py'])
+        self.assertEqual(raised.exception.code, 1)
+
+    def test_successful_preflight_returns_normally(self):
+        with patch.object(stack, 'run') as run:
+            stack.run_preflight(['python3', 'scripts/preflight.py'])
+        run.assert_called_once_with(['python3', 'scripts/preflight.py'])
+
     def test_preflight_stops_on_a_foreign_network_with_an_overlapping_subnet(self):
         model = json.dumps({'services': {}, 'networks': {'inference': {'ipam': {'config': [{'subnet': '10.203.83.0/24'}]}}}})
         own = {'name': 'private-hermes_inference', 'labels': {'com.docker.compose.project': 'private-hermes'},
