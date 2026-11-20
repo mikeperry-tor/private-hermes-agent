@@ -27,6 +27,7 @@ class OperatorConfigurationTests(unittest.TestCase):
             executor = services['executor']
             self.assertFalse({'executor-false', 'executor-true'} & services.keys())
             self.assertEqual(executor['build']['target'], 'executor-' + enabled)
+            self.assertEqual(executor['image'], 'private-hermes-executor-' + enabled + ':local')
             self.assertEqual(services['hermes']['environment']['COMPUTER_USE_ENABLED'], enabled)
             self.assertTrue(executor['read_only'])
             self.assertEqual(set(executor['cap_add']), {'CHOWN', 'SETUID', 'SETGID', 'SYS_CHROOT'} |
@@ -34,7 +35,7 @@ class OperatorConfigurationTests(unittest.TestCase):
             self.assertIn('no-new-privileges:true', executor['security_opt'])
             self.assertEqual(any(x.startswith('seccomp=') for x in executor['security_opt']), enabled == 'true')
             models[enabled] = executor
-        for key in ('volumes', 'network_mode', 'cap_drop', 'tmpfs', 'image'):
+        for key in ('volumes', 'network_mode', 'cap_drop', 'tmpfs'):
             self.assertEqual(models['false'][key], models['true'][key], key)
         result = subprocess.run([*compose_base(), '-f', 'compose.yaml', 'config', '--quiet'],
                                 cwd=ROOT, env=dict(os.environ, COMPUTER_USE_ENABLED='invalid'),

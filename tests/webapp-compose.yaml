@@ -29,7 +29,7 @@ services:
   tailscale:
     profiles: [real-funnel]
   tls-fixture:
-    image: private-hermes-executor:local
+    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
     init: true
     user: "10000:10000"
     cap_drop: [ALL]
@@ -48,7 +48,7 @@ services:
   teep:
     # Browser/chat qualification uses deterministic local inference. Routing and
     # actual Teep behavior remain covered separately by make test.
-    image: private-hermes-executor:local
+    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
     build: !reset null
     entrypoint: [python3, /opt/webapp-inference.py]
     command: []

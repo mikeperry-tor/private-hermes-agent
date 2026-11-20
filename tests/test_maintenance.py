@@ -42,7 +42,9 @@ class MaintenanceScopeTests(unittest.TestCase):
             command = deployment.maintenance_compose(all_ingress=True, executor_build=True)
             result = subprocess.run([*command, '--env-file', '/dev/null', 'config', '--format', 'json'],
                                     cwd=ROOT, check=True, capture_output=True, text=True)
-        self.assertEqual(json.loads(result.stdout)['services']['executor']['build']['target'], 'executor-true')
+        executor = json.loads(result.stdout)['services']['executor']
+        self.assertEqual(executor['build']['target'], 'executor-true')
+        self.assertEqual(executor['image'], 'private-hermes-executor-true:local')
 
     def test_maintenance_model_parses_bad_unrelated_settings_and_includes_funnel(self):
         with patch.dict(os.environ, BAD):

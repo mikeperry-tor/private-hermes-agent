@@ -77,7 +77,7 @@ services:
         bind:
           create_host_path: false
   fixture:
-    image: private-hermes-executor:local
+    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
     user: "10000:10000"
     # The fixture binds port 111 without capabilities; Docker allows this by
     # default, Podman sets the floor to 1024.

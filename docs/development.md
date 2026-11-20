@@ -280,7 +280,14 @@ OpenSSH, account, PTY or Chromium requirements on each engine rather than inferr
 runtime behavior from effective models. Runner effective, permitted, inheritable
 and ambient capability sets remain empty under no-new-privileges.
 
-The optional desktop build uses Debian rather than Alpine. Run the packaged
+The optional desktop build uses Debian rather than Alpine. Compose tags the
+lean and desktop executor variants separately
+(`private-hermes-executor-false:local` and `private-hermes-executor-true:local`),
+so both images can coexist without a `--no-build` smoke run booting one variant
+under the other's capability/seccomp profile. Direct `tests/*_smoke.py` runs
+skip building and expect the executor image for the active
+`COMPUTER_USE_ENABLED` value to be built already (or use the `make *-test`
+targets, which build first). Run the packaged
 policy checks with `python3 tests/desktop_tools_smoke.py`. Run
 `make computer-use-test` to build the selected images and test real desktop
 actions over SSH together with the existing Tor/forbidden-path checks.
@@ -293,9 +300,10 @@ After building the desktop image, `python3 tests/desktop_startup_smoke.py` runs
 its actual startup script in a networkless read-only fixture with the existing
 SSH bounding set. It verifies stale Chromium coordination unlinking, cookie-like
 and identity data preservation, retained symlink targets and visible refusal of
-an unexpected coordination directory. The same command uses the normal executor
-tag on Podman. The fixture supplies no host keys, so native sshd must refuse
-after preparation; normal real SSH and browser lifecycle checks remain separate.
+an unexpected coordination directory. The same command uses the desktop executor
+tag (`private-hermes-executor-true:local`) on both engines. The fixture supplies
+no host keys, so native sshd must refuse after preparation; normal real SSH and
+browser lifecycle checks remain separate.
 
 The Docker desktop executor uses a checked-in Moby seccomp baseline from commit
 `7b5ccfab2d6b4e0aa64c6cce401a2705788eafeb`, with one added allow rule for
@@ -429,9 +437,10 @@ connected-probe case holds the real remote cwd check and verifies local SSH
 client reaping after closing the tab before metadata publication. Mode
 changes use ordinary Compose reconciliation to demonstrate serving recreation.
 For focused reruns, use the same browser environment with
-`python3 tests/webapp_smoke.py --terminal-only`. Repeat with
-`COMPUTER_USE_ENABLED=true` after building that executor to cover desktop SSH shell
-behavior; this focused option avoids unrelated desktop/browser/content suites.
+`python3 tests/webapp_smoke.py --terminal-only` (after building the lean
+executor) or with `COMPUTER_USE_ENABLED=true` (after building the desktop
+executor) to cover lean and desktop SSH shell behavior; this focused option
+avoids unrelated desktop/browser/content suites.
 
 
 Both qualified engines cover Code→Agent→Code over local and simulated HTTPS,

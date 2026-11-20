@@ -206,7 +206,7 @@ services:
     extends:
       file: compose.executor.yaml
       service: executor-${COMPUTER_USE_ENABLED-false}
-    image: private-hermes-executor:local
+    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
     build:
       context: .
       dockerfile: components/executor/Dockerfile

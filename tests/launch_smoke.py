@@ -92,7 +92,7 @@ def main():
       retries: 30
   probe-profiled:
     profiles: [cleanup]
-    image: private-hermes-executor:local
+    image: private-hermes-agent:local
     init: true
     entrypoint: [sleep]
     command: [infinity]

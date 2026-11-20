@@ -48,7 +48,7 @@ def container_stage(stage):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--image', default='private-hermes-executor:local')
+    parser.add_argument('--image', default='private-hermes-executor-true:local')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / 'scripts'))
