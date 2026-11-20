@@ -46,9 +46,13 @@ Use these steps when the next release still needs candidate changes.
    Private Hermes carries. Compare the corresponding `upstream-pr/*` topic
    commits for fixes that belong on the new base.
 2. Replay the selected topic changes that the new release still needs. Include
-   the shared managed reader once and reconcile overlaps. Check the new release's
-   behavior before dropping a change it already supplies. A merge into upstream
-   main is only relevant to removal once the selected release provides the behavior.
+   the shared managed configuration prerequisite once and reconcile overlaps.
+   Verify any adopted behavior in the official release through upstream's tests
+   and the affected packaged checks. Drop the corresponding candidate patch
+   and duplicate feature tests once that release passes. Keep deployment
+   checks for the wrapper's configuration, isolation, ingress and storage.
+   If the release includes all candidate behavior, remove the candidate patch
+   and its build input together.
 3. Export the diff from the new release base to the new combined replay as
    `0001-upstream-candidates.patch`. Exclude upstream Python tests, website files,
    contributor metadata and Electron-only files. Record the exact base and replay
@@ -67,9 +71,9 @@ Use these steps when the next release still needs candidate changes.
 - Serialize fixtures sharing fixed subnets or ports. Use disposable state and
   dummy credentials. Test allowed paths alongside forbidden paths, dependency
   loss and recovery; source inspection alone cannot qualify isolation.
-- Exercise populated configuration, native migration, deliberate CLI edits and
-  repeated setup. Verify effective settings and identity preservation, rather
-  than only checking that files exist.
+- Exercise populated configuration, native migration, deliberate CLI edits,
+  native profile reload and repeated setup. Check effective settings and
+  identity preservation.
 - Diagnose failures before changing policy. Tor connection/DNS failures, stale
   images and browser-observation failures need different remedies. Preserve
   failed fixture state when useful; never recover by allowing direct egress.

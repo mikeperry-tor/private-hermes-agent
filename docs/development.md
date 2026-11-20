@@ -180,18 +180,21 @@ these coverage limits.
 The packaged build derives from official Hermes v0.23.3 source
 `caafe5389ae585ef77387a962aee05b1bcf17029`, multiarch index
 `sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355`.
-The ARM64 image's source stamp, native renderer receipt and calculated renderer
-source hash agree. The native renderer source hash is
+The build checks the official ARM64 source stamp and renderer receipt against
+the official source hash
 `03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`.
-The build incorporates four upstream candidates and the remaining
+The patched renderer's receipt records source hash
+`de3582b39cdfa7b69fb5dbf4958d3ee718ae0ed29198c7108af27df6e7e5834f`.
+The build incorporates four upstream candidates, their managed and SSH
+prerequisites, and the remaining
 [deployment patches](updates-and-plugins.md#downstream-responsibility-inventory).
 
 | Check / contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
 | --- | --- | --- |
-| 196 wrapper unit checks, four effective Compose models and compilation | Passed | Passed |
+| 197 wrapper unit checks, four effective Compose models and compilation | Passed | Passed |
 | Build, source delivery and native renderer receipt | Passed | Passed |
 | Native TypeScript and 218 targeted renderer tests | Passed | Passed |
-| Managed URL-context and tool-denial matrix with disposable profiles | Passed | Passed |
+| Managed URL-context and tool-denial matrix with disposable profiles, including native dotenv reload | Passed | Passed |
 | Populated official v0.23.2 profile opened twice by v0.23.3 | Passed | Passed |
 | Full lean WebApp, including Code/Agent terminals, authentication, cross-browser content and native MCP activation | Passed | Passed |
 | Desktop Code and Agent terminals over local and simulated HTTPS | Passed | Passed |
@@ -481,7 +484,7 @@ qualified tree for focused follow-up changes.
 | Candidate | Recorded passing checks | Behavioral scope |
 | --- | --- | --- |
 | PR1: executor desktop/browser | 224 focused native Python tests, 6 desktop status renderer tests, combined browser/SSH suites, and real SSH Chromium qualification | Desktop probes and cold executor discovery, viewer owner identity, warm CUA driver ownership, named-profile RFB, raw CDP refusal, browser attachment and retirement, named vault lease, scratch, screenshots, sandboxing and no replay |
-| PR2: operator terminals and exact cwd | 80 focused native Python tests, 95 terminal renderer tests, and real SSH coverage | Gateway, profile and placement pinning, direct rollback refusal, Bash and cwd preparation, startup metadata wait, token acknowledgement and retention, relay close, pinned trust and repair |
+| PR2: operator terminals and exact cwd | 80 focused native Python tests, 95 terminal renderer tests, and real SSH coverage | Gateway, profile and placement pinning, direct rollback refusal, Bash and cwd preparation, startup metadata wait, terminal ID acknowledgement and retention, relay close, pinned trust and repair |
 | PR3: selectable URL context | 74 reference, gateway-turn and configuration tests | Managed no-fetch across normal and bypass sessions, one validated snapshot, inaccessible and malformed configuration, safe defaults, filter order and recovery |
 | PR4: managed tool denial | 87 focused policy, MCP and discovery tests, plus combined prompt and worker persistence coverage | CLI readiness, tool catalog and generated guidance, connector results and policy relaxation, background review, coherent direct and deferred schemas, worker and prompt snapshots, and dispatch authority |
 | PR5: Webapp content privacy | Design review only | Shared renderer ownership and authenticated consent authority/storage/API remain unresolved |
@@ -511,20 +514,21 @@ to avoid an overlay-filesystem EXDEV rename. These are build/test inputs, not
 production repair steps. The Linux sandbox stop tests cover both original and
 rewritten command lines and an unrelated process on a reused PID.
 
-The combined replay `087222ccf6cbd04ac89096bab4182e05e2af6b0f`
-passed 1,554 focused native Python tests (13 platform skips), the managed-policy
-`test_doctor.py` checks and all 22 `scripts/check` checks on `origin/main`
-`caafe5389ae585ef77387a962aee05b1bcf17029`. It includes one strict managed
-reader and the shared PR2/PR3 validated reader snapshot. Checks exercise
-terminal admission and retention, desktop observations and exact ownership,
-raw CDP, SSH settings, URL references, approval and dispatch cancellation,
-managed discovery across a policy change, background review and
-prompt/worker persistence. Each candidate's topical history reconstructs its
-folded tree (verified before the rebase), and PR1–PR4 plus the combined replay
-apply to that v0.23.3 snapshot. Packaged evidence is recorded above. The
-main-based refresh passed focused native tests for PR1 (78), PR2 (89), PR3
-(67) and PR4 (83). Those runs cover the rebased branch inputs on Docker Desktop
-ARM64. The packaged stack uses the release-specific replay above.
+The [pinned release replay](plans/hermes-upstream-prep.md#v0233-build-provenance)
+uses Hermes v0.23.3 source `caafe5389ae585ef77387a962aee05b1bcf17029`. The
+[submission branches](plans/hermes-upstream-prep.md#1-branches-to-submit)
+use the separate main revision `2de9f51b8008a7d49a49221c184f2f11cbfc4af1`.
+Deployments and upstream submissions share strict managed configuration,
+including reload precedence, ordered recovery from managed dotenv read errors
+and routed subprocess interpolation.
+Focused native checks exercise prompt and worker persistence, deferred review
+tools, SSH trust and terminal ID acknowledgement, executor probes and warm
+recovery, and URL settings in gateway and configuration-bypass turns.
+The packaged runtime checks use the release replay.
+
+The disposable native image has baseline failures in three Doctor checks
+for Vercel, Chromium repair advice and the GitHub CLI. They reproduce on the
+corresponding pristine bases. Managed tool availability in Doctor is covered.
 
 The two broader real-profile copy-permission cases fail on the pristine native
 base in the test image. They cover gateway real-profile behavior, outside the

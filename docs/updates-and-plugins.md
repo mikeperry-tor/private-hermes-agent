@@ -154,10 +154,9 @@ The runtime omits pnpm. Its passive absence warning does not block Python plugin
 setup. See the [Hermes update workflow](update-workflow.md).
 
 The candidate patch is the packaged Python and renderer diff of release-based
-replay [`087222ccf6cbd04ac89096bab4182e05e2af6b0f`](https://github.com/mikeperry-tor/hermes-agent/commit/087222ccf6cbd04ac89096bab4182e05e2af6b0f).
-Exclude upstream Python test,
-website, contributor and Electron-only files from that export. The local clone
-and reference checkouts are source references. The Docker build uses the
+replay recorded in the [release provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
+The export excludes upstream Python tests, website, contributor and Electron-only
+files. The local clone and reference checkouts are source references. The Docker build uses the
 tracked patch and pinned official image. For the next Hermes release, see
 [how to rebuild the candidate patch](update-workflow.md#rebuild-the-candidate-patch-for-a-new-release).
 
@@ -165,9 +164,9 @@ tracked patch and pinned official image. For the next Hermes release, see
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| 0001 upstream candidates | Shared strict managed reader, native SSH trust and file classification, executor desktop/browser, native terminal, configurable URL context and managed tool ceiling from PR1–PR4 | Remove adopted portions when the official pin provides them and the affected packaged checks pass |
+| 0001 upstream candidates | Strict managed reader and reload authority, native SSH trust and file classification, executor desktop/browser, native terminal, configurable URL context and managed tool ceiling from PR1–PR4 | Remove adopted portions when the official pin provides them and the affected packaged checks pass |
 | 0002 managed policy | Publish the serving container's root-owned managed YAML and dotenv before native bootstrap | Verify effective settings under conflicting profile input, repeat loading and offline operation |
-| 0003 desktop and terminal policy | Keep explicit desktop enablement, local Code/Agent labels and startup acknowledgement, and absolute safe executor cwd | Retain until equivalent native deployment controls meet the terminal and desktop checks |
+| 0003 desktop and terminal policy | Keep explicit desktop enablement and recovery guidance, local Code/Agent labels and startup acknowledgement, and safe absolute Code cwd | Retain until equivalent native deployment controls meet the terminal and desktop checks |
 | 0004 deployment policy | Capture content and desktop choices before profile dotenv loading, and validate WebApp content policy | Retain until native deployment policy preserves the same authority |
 | 0008 private image routes | Authenticated content and consent APIs with bounded public IPv4 raster retrieval | Image endpoint, CDN consumer and outage checks |
 | 0009 browser response policy | CSP, trusted bootstrap headers and inert private previews | Browser response, exact-origin socket and active-file checks |
@@ -177,8 +176,8 @@ The serving entrypoint generates `/etc/hermes/config.yaml` and `/etc/hermes/.env
 The files pin the native file backend, SSH endpoint and client configuration,
 executor-only desktop, Chromium sandbox, operator terminal mode, no-fetch URL
 references and the tool denial list. The managed dotenv also pins terminal
-selectors for the native launch bridge. Offline jobs operate on the saved profile.
-The browser startup and profile-loading checks use the built image.
+selectors for the native launch bridge. Hermes retains those assignments during
+profile reload. Offline jobs operate on the saved profile. Browser startup and reload checks use the built image.
 
 The desktop executor uses the separately pinned Hermes sandbox image, OpenSSH
 and a hash-locked harness under `/opt/browser-harness`. The candidate sends its
@@ -204,18 +203,20 @@ The `stack-patches/v0.23.3/*` refs preserve the
 [v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
 
 Human submissions target `NousResearch/hermes-agent`, which is the clone's
-`origin` remote. The four PRs share the strict managed reader.
-PR2 and PR3 also share the effective reader's validated-snapshot option.
+`origin` remote. The managed configuration prerequisite supplies strict reads,
+validated snapshots and dotenv precedence through reload. The SSH fixes form their own topic
+before the desktop/browser branch. PR2–PR4 share only the managed prerequisite.
 Follow the [merge-order checklist](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist)
 for overlap and validation.
 
 Candidate identities use `Mike Perry <mikeperry-git@untrusted.systems>`.
-Exact identity/history translations and qualification logs remain in ignored
-local evidence. History-only consolidation does not change the qualified trees.
+Exact local heads and qualification scope are recorded in the preparation plan.
 
 | Package | Packaged use |
 | --- | --- |
-| PR1 | Native executor placement, desktop/browser transport, sandboxing, missing-file and pinned SSH behavior |
+| Managed configuration | Strict managed reads, dotenv bootstrap and reload, and profile-specific interpolation |
+| SSH | Browser-profile sync exclusion, missing-path classification and pinned SSH client options |
+| PR1 | Native executor placement, desktop/browser transport and Chromium sandboxing |
 | PR2 | Native executor/gateway terminal selection with the stack's Code/Agent modes |
 | PR3 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns |
 | PR4 | Managed `tools.disabled` derived from the deployment's desktop and external-content selections |
@@ -238,9 +239,11 @@ the current policy. Model-facing connector and catalog results omit denied tools
 A registered MCP server stays selected when all its tools are temporarily denied.
 Explicit Doctor inspection can still report deployment
 dependencies. PR5 owns the content ceiling and content capture independently.
-Each draft identifies focused commits, validation, platform/type limits, overlap
-and removal conditions. [Candidate qualification](development.md#local-upstream-candidate-qualification)
-records the candidate-only evidence.
+The local drafts list the topic commits and their validation.
+The [preparation plan](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist)
+records overlaps and patch removal conditions. The
+[candidate qualification](development.md#local-upstream-candidate-qualification)
+records platform limits and candidate-only evidence.
 
 PR5 is a reviewed deferred design, not runnable or submission-ready. Its next
 steps are to resolve shared Ask/Always renderer ownership and native authenticated

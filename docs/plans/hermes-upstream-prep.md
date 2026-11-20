@@ -1,6 +1,6 @@
 # Hermes patch reorganization and upstream preparation
 
-## Review corrections in progress
+## Local review and qualification
 
 The wrapper correction branch is `hermes-v0.23.3-review`, starting at
 `500515c`. The release and submission baselines are listed below. The
@@ -34,49 +34,47 @@ PR5 and interactive content remain deferred.
 
 ## 1. Branches to submit
 
-Use **only the `upstream-pr/*` branches listed below** for PR1–PR4. Each
-row is one PR. The `stack-patches/v0.23.3/*` refs preserve the source history
-of the stack's pinned replay. See [v0.23.3 build provenance](#v0233-build-provenance).
-
-Publish both ref namespaces to the `fork` remote before using the GitHub
-branch and commit links below. The local working clone is
-`upstream_work/hermes-agent/`, and submission drafts live under
-`upstream_work/submissions/`. [Fork repository](https://github.com/mikeperry-tor/hermes-agent)
-
-The submission branches are based on upstream `origin/main` at
-`2de9f51b8008a7d49a49221c184f2f11cbfc4af1`. Their commits use
+The working clone is `upstream_work/hermes-agent/`. The submission drafts in
+`upstream_work/submissions/` point to the local heads below. The target is
+`NousResearch/hermes-agent`. The submission stack starts at upstream main
+`2de9f51b8008a7d49a49221c184f2f11cbfc4af1`. The author identity is
 `Mike Perry <mikeperry-git@untrusted.systems>`.
 
-| PR | Submission branch | Head | Validation |
+| Topic | Submission branch | Head | Review base |
 | --- | --- | --- | --- |
-| PR1 | [`upstream-pr/executor-desktop-browser`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/executor-desktop-browser) | `3b02fb7268f45ea5027102829e1f0b95718a15b7` | Reconciles upstream pinned vault channels and executor ownership. 78 focused vault/managed desktop tests passed |
-| PR2 | [`upstream-pr/executor-terminals`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/executor-terminals) | `f616392b522872342b03ed5be3a28f46f2a54df7` | 89 focused native tests passed |
-| PR3 | [`upstream-pr/url-reference-fetching`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/url-reference-fetching) | `22eb62cb37a0d612cb679f9733c1e868b7dad982` | 67 focused native tests passed |
-| PR4 | [`upstream-pr/deployment-restrictions`](https://github.com/mikeperry-tor/hermes-agent/tree/upstream-pr/deployment-restrictions) | `8f37dcb7916fbbf7936f590aea16405e27b47674` | 83 focused native tests passed |
+| Managed configuration prerequisite | `upstream-pr/managed-config` | `204a29637c0379bba089342ec28e7ea61297a0aa` | Upstream main |
+| Standalone SSH fixes | `upstream-pr/ssh-executor-fixes` | `a05f89f89e9bb1e8643af8462582fb0873c5a2b9` | Managed prerequisite |
+| PR1 | `upstream-pr/executor-desktop-browser` | `38bcd749b7c22d373330b825d2c94c9ac9405282` | Standalone SSH fixes |
+| PR2 | `upstream-pr/executor-terminals` | `6d57e1830c236526cb707201e61b10f61fd5f868` | Managed prerequisite |
+| PR3 | `upstream-pr/url-reference-fetching` | `1dfbb588177f9e0b520dd3871a1ab2e587e3ab83` | Managed prerequisite |
+| PR4 | `upstream-pr/deployment-restrictions` | `97b41fb9a554a0777456de80d0bb78379cc37eb7` | Managed prerequisite |
 
+The local combined submission check uses `636551c657ae555dce78f0711da9c2ffe2f42c1b`.
+The check is available at `review/combined-submission`.
 PR5 remains deferred. Its reserved ref, `upstream-pr/webapp-content-privacy`,
-contains only the base commit.
+contains only the base commit. See the [fork repository](https://github.com/mikeperry-tor/hermes-agent)
+and the [v0.23.3 release replay](#v0233-build-provenance).
 
 ## 2. Upstream submission and merge-order checklist
 
-1. Recheck the submission branches against the target `origin/main`. Open
-   PR1 first. PR1–PR4 share `66652468b`. After PR1 merges, rebase the other
-   branches so the shared commit can drop by patch identity.
-2. Reconcile known adjacency points:
-   - `website/docs/user-guide/managed-scope.md` (strict-reader paragraph and
-     later additions),
-   - `website/docs/user-guide/configuration.md` (independent key blocks),
-   - `tools/browser_use_cli.py` (PR1 executor helpers plus PR4's shared
-     `tool_refusal` gate),
-   - `tools/mcp_tool_agent.py` (`restore_agent_tool_prefix`: keep upstream
-     `_refresh_name_dependent_defs` and the managed `permitted` filter).
-3. Apply the [five-package boundaries](#3-original-design-and-pr-scope) exactly;
-   do not merge PR1's mechanism/policy residue wholesale or copy a production
-   patch into a candidate.
-4. Re-run the affected checks from the maintained workflow after any rebase.
-5. After an upstream release ships PR1–PR4, remove the retired production
-   patches and helpers together with the tests upstream now owns. PR5 and the
-   deferred interactive-content work remain downstream until separately agreed.
+1. Recheck the local heads against the target main before submission. Submit
+   the managed configuration prerequisite first. PR2–PR4 can follow
+   independently. Submit the SSH fixes before the desktop/browser topic.
+   For a squash merge, rebase each dependent branch from its listed review
+   base onto the updated main so the prerequisite commits stay out of its diff.
+2. Preserve both sides at shared paths. The combined submission replay resolves
+   the strict-reader descriptions in `website/docs/user-guide/managed-scope.md`
+   and joins PR1 executor routing with PR4's `tool_refusal` in
+   `tools/browser_use_cli.py`. Preserve native
+   `_refresh_name_dependent_defs` and the managed `permitted` filter in
+   `tools/mcp_tool_agent.py` during future rebases.
+3. Re-run the affected checks after each rebase, including a combined replay.
+   Keep wrapper-only deployment settings in the wrapper.
+4. When an official release includes a topic, run its native regressions at the
+   shipped source and rerun the affected packaged checks. Then drop the
+   corresponding patch portion and any wrapper test that only repeats the
+   native behavior. Keep verification of the wrapper's Tor, SSH, ingress,
+   storage and privacy contracts.
 
 ## 3. Original design and PR scope
 
@@ -112,7 +110,9 @@ Upstream package boundaries:
 
 | Package | Purpose | Responsibilities |
 | --- | --- | --- |
-| PR1 | Keep desktop/browser automation on the selected executor | Remote dependency diagnostics, CUA transport/permission binding, harness execution and recovery, work-sync correctness, configurable Chromium sandbox policy, `terminal.ssh_config`, managed `bot_desktop.executor_only` and probe budgets |
+| Managed configuration | Preserve instance configuration policy while reading or reloading profile settings | Strict managed reads, validated snapshots, dotenv precedence and routed interpolation |
+| SSH | Keep native SSH transfers, workspace inspection and trust consistent | Browser-profile sync exclusion, missing-path handling and `terminal.ssh_config` |
+| PR1 | Keep desktop/browser automation on the selected executor | Remote dependency diagnostics, CUA transport/permission binding, harness recovery, configurable Chromium sandbox policy, managed `bot_desktop.executor_only` and probe budgets |
 | PR2 | Executor-backed WebApp terminals | Native PTY reuse, exact cwd, cancellable/acknowledged startup, optional `webapp.executor_ssh_config` |
 | PR3 | Selectable URL-reference fetching | `context_references.fetch_urls`; preserve other reference expansion and renderer policy |
 | PR4 | Deployment-owned tool restrictions | Managed `tools.disabled` across discovery/dispatch, producing-policy persistence, prompt/worker refresh |
@@ -128,24 +128,25 @@ tenant-isolation claim; no funded-wallet or Funnel enrollment action; keep
 ### v0.23.3 build provenance
 
 The `stack-patches/v0.23.3/*` refs preserve the release-based source history.
+The counts are relative to the release base and include the shared managed
+prerequisite.
 The stack's tracked v0.23.3 patch was exported from the combined replay below.
 For a later release, use the
 [candidate patch update workflow](../update-workflow.md#rebuild-the-candidate-patch-for-a-new-release).
 
-| Branch | Head | Commits | Scope | Status |
-| --- | --- | --- | --- | --- |
-| `stack-patches/v0.23.3/executor-desktop-browser` (PR1) | `53043aeb9d0dc1f90528504e4b88c66bb8bb6398` | 10 | Desktop/browser execution placement, SSH config, sandbox launch policy | Rebased, qualified, `G-UPSTREAM` PASS |
-| `stack-patches/v0.23.3/executor-terminals` (PR2) | `f7f0b244545b2943a58b8f915c14066463262cec` | 4 | Executor-backed WebApp terminals, cancellable startup | Rebased, qualified, `G-UPSTREAM` PASS |
-| `stack-patches/v0.23.3/url-reference-fetching` (PR3) | `50ab0a4cfe9dc08f85b62ed5991d10f3bc39cec1` | 2 | Selectable inline URL context fetching | Rebased, qualified, `G-UPSTREAM` PASS |
-| `stack-patches/v0.23.3/deployment-restrictions` (PR4) | `7495b47bc25f8b8ac8cfb8c939ffd6c5eec3fa35` | 4 | Managed `tools.disabled` ceiling and prompt/worker policy | Rebased, qualified, `G-UPSTREAM` PASS |
-| `stack-patches/v0.23.3/webapp-content-privacy` (PR5) | `caafe5389ae585ef77387a962aee05b1bcf17029` (base only) | 0 | Webapp external-content ceiling and gateway raster retrieval | Deferred design; not implemented |
+| Branch under `stack-patches/v0.23.3/` | Head | Commits | Scope |
+| --- | --- | --- | --- |
+| `managed-config` | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
+| `executor-desktop-browser` (PR1) | `9d31642cb662c9d42eb655c699b48a0d85ecfb15` | 13 | SSH fixes, desktop/browser placement and harness recovery |
+| `executor-terminals` (PR2) | `4915d01748818b1d098caa0dbe586bf1ad4451f9` | 6 | Executor-backed WebApp terminals and pinned forwarding |
+| `url-reference-fetching` (PR3) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
+| `deployment-restrictions` (PR4) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
+| `webapp-content-privacy` (PR5) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 
-- Base for the release references: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
-- Shared first commit (PR1–PR4): `15de33f3af9d2fc2e63f05abdade39b1750bb038`
-  (`fix(config): fail closed on invalid managed configuration when strict`),
-  including the contributor-email mapping.
-- Combined four-branch replay: `stack-patches/v0.23.3/combined`
-  [`087222ccf6cbd04ac89096bab4182e05e2af6b0f`](https://github.com/mikeperry-tor/hermes-agent/commit/087222ccf6cbd04ac89096bab4182e05e2af6b0f) (17 commits).
+- Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
+- Combined replay: `stack-patches/v0.23.3/combined`
+  `e1311d5cea7b2be762877a74f4755bff4608e92c` (26 commits).
+- The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).
 - Wrapper baseline at completion of this preparation: `v0.23.2`, source
@@ -153,13 +154,38 @@ For a later release, use the
   `sha256:d6746a084e9341baada483e3d6210444d3c1aeb7c130f0915150065fb2851459`.
   Current packaged evidence is in the [qualification guide](../development.md#packaged-hermes-qualification).
 
-Release-reference qualification (Linux ARM64 Docker): each implemented branch
+Pre-correction release qualification (Linux ARM64 Docker): each implemented branch
 and the combined replay pass docs-drift, contributor-email, 47 guard tests and
 all 22 `scripts/check` checks; every intermediate commit is `git show --check`
 clean and passes its changed tests. Branch suites: PR1 424 passed (13 skipped),
 PR2 114, PR3 75, PR4 965, combined 1,554 (13 skipped), plus managed-policy
 `test_doctor.py` checks. Combined Webapp build and Vitest: 221 passed (4
 skipped). Live POSIX SSH executor fixtures pass for PR1 and PR2.
+
+### Local correction evidence
+
+The combined submission and release replays merge their local topic refs.
+Both resolve the shared managed-scope guide and browser dispatch hook.
+The package matches the filtered release replay. The focused final native suites
+each pass 252 tests with nine platform skips. Both replays pass all 22
+`scripts/check` checks. The broader native suites before the last managed
+interpolation and provenance fixes pass 1,795 tests on main and 1,763 on the
+release, with 30 skipped and three Doctor failures that also reproduce on the
+pristine bases. Focused final coverage includes managed bootstrap and read
+recovery, routed template inputs and source ownership, and terminal admission
+and receiver acknowledgement.
+
+Docker Desktop ARM64 and Debian 13 rootless Podman ARM64 pass the affected
+packaged tests. The managed-policy image build and URL/context/tool matrix use
+the current release replay. Browser, desktop, and lean and desktop terminal
+fixtures cover the unchanged executor and renderer code. Fresh independent
+reviews cover the combined topics, managed scope, release parity and the
+local branch handoff. Current operating limits are recorded in the
+[qualification guide](../development.md#packaged-hermes-qualification).
+
+The local submission branches and drafts are prepared. Submission and
+qualification against the first official release carrying the accepted changes
+remain open, along with PR5.
 
 ### Preparation baseline
 

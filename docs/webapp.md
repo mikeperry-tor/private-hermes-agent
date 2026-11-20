@@ -591,8 +591,9 @@ placement. When placement is known, a fresh terminal requires a receiver that
 can honor it. A stale page may need to reload after an update or rollback.
 The browser uses the usual startup metadata timeout until the
 receiving gateway announces cancellable executor preparation. SSH preparation
-can then continue until it finishes or the tab closes. The receiver discards
-an unacknowledged shell if its startup socket closes. Older gateways retain
+can then continue until it finishes or the tab closes. The browser acknowledges
+the shell's terminal ID. The receiver discards a new shell if its startup
+socket closes before that acknowledgement. Older gateways retain
 token-based close. The gateway that owns an ordinary shell chooses its implicit
 directory, including for HTTP-relayed tabs. Older gateways may use the login home.
 Explicit project directories and saved terminal directories are passed with
