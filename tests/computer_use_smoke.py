@@ -119,7 +119,8 @@ from tui_gateway.methods_display import _display_snapshot
 snapshot = _display_snapshot()
 assert not snapshot['installed'] and snapshot['blocker'], snapshot
 try: runtime.start()
-except (OSError,RuntimeError) as e: assert 'SSH' in str(e) or 'sandbox' in str(e) or 'executor' in str(e), str(e)
+except (OSError, RuntimeError) as e:
+    assert any(detail in str(e) for detail in ('SSH', 'sandbox', 'executor', "recorded desktop's terminal settings")), str(e)
 else: raise AssertionError('desktop started with executor stopped')
 """)
     smoke.compose('up', '-d', '--wait', '--no-deps', 'executor')
@@ -142,7 +143,9 @@ if __name__ == '__main__':
                 check()
                 switching_checks()
                 failed = False
-            except Exception:
+            except Exception as error:
+                if isinstance(error, subprocess.CalledProcessError):
+                    print(error.stdout or '', error.stderr or '', flush=True)
                 print(smoke.compose('logs', '--tail', '10', 'executor', check=False).stdout)
                 raise
             finally:
