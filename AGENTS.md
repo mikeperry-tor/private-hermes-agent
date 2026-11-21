@@ -94,6 +94,11 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
 
 ## Compatibility for deployed stacks
 
+- The documented `make` entrypoints are the only supported ways for users to
+  operate the stack. Direct Compose, container-engine and helper invocations
+  are development or diagnostic interfaces. Malfunctions, security issues and
+  other problems caused by bypassing the `make` entrypoints are outside the
+  supported contract and are not bugs in the stack.
 - The supported end-user upgrade is the in-place workflow in
   [Updates and Backups](README.md#updates-and-backups). Users will run `make down`,
   take the [pre-upgrade backup](docs/configuration.md#backup-scope), then run
@@ -101,12 +106,14 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   engine, Compose project, bind mounts and named volumes. `make up` builds
   the selected images and runs offline setup against the existing state.
   Upgrades outside this workflow are currently unsupported.
-- Private Hermes owns its deployment contract: root `.env` settings and their
-  defaults and precedence, wrapper-owned files under `config/`, documented
-  operator commands, and the storage and identity layout. The layout includes
-  Compose project and volume names, bind paths, permissions, and the inputs
-  needed to back up and restore a deployment. Preserve the meaning of existing
-  settings, especially those governing exposure, authentication and spending.
+- Private Hermes owns its deployment contract, including supported root `.env`
+  settings and their defaults and precedence, wrapper-owned files under
+  `config/`, documented `make` entrypoints, and the storage and identity layout.
+  The layout includes Compose project and volume names, bind paths, permissions,
+  and the inputs needed to back up and restore a deployment. Preserve the
+  meaning of retained settings, especially those governing exposure,
+  authentication and spending. Options may be retired if the recommended upgrade
+  workflow still leaves existing deployments operational and preserves saved state.
 - Hermes and the other components own their native formats, schema migrations
   and downgrade limits. Keep their saved state attached to the upgraded
   services with the required ownership and mounts. Let the components read and

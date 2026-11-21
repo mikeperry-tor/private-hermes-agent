@@ -126,10 +126,9 @@ To build and start the stack:
 make up
 ```
 
-> **NOTE**: Always use `make up` and `make down` to manage the stack.
-> They prepare local state, validate the engine setup, and select the
-> services to start. Using `docker compose up` will bypass critical
-> initialization steps.
+> **NOTE**: Use the documented `make` commands to operate the stack.
+> `make up` prepares local state, validates the engine setup, and selects the
+> services to start. `make down` shuts the stack down.
 
 Builds need Internet access, and use your host's default networking for this purpose, not Tor.
 
