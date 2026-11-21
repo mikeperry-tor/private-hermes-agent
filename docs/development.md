@@ -155,6 +155,17 @@ other distributions and arbitrary Compose providers need native evidence.
 | macOS 26.7.1 ARM64, Linux `7.0.14-linuxkit` containers | Docker Desktop 29.9.3 / Compose 5.7.0 | Native named volumes for Hermes/wallet databases; Playwright 1.64.1, Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2 |
 | Debian 13 ARM64, kernel `6.12.116+deb13-arm64` | Rootless Podman 5.4.2, netavark/overlay / official Docker Compose 5.7.1 | ext4 binds and native named volumes; the same controlled browser matrix |
 
+On Debian 13 ARM64, Docker Engine 26.1.5 with Compose 5.7.1 passes the unit and
+Compose model checks. Native preflight refuses it below the Engine 28 minimum.
+A disposable internal bridge retains an IPv4 address on the VM even when
+configured with `gateway_mode_ipv4=isolated`. Engine 29.10.0 passes `make check`
+and preflight on the same platform and leaves the isolated bridge without a
+host-side IPv4 address. The live VM-listener fixture verifies default denial,
+executor denial with grants configured, and literal LAN denial even when
+requested on 29.10.0. Its host-grant check fails with the default AppArmor
+profile, which denies enabling the gateway's IPv4 forwarding switch and leaves
+it closed.
+
 Live Funnel enrollment, provider attestation, paid research/inference, funded
 settlement, Electron-wide browser privacy and untested platforms are outside
 this qualification. Tor/Teep image build success does not establish live provider
@@ -178,34 +189,42 @@ these coverage limits.
 ### Local inference and HTTP MCP
 
 `tests/local_integration_smoke.py HOST_BIND LAN_ADDRESS` creates a disposable
-project and temporary inference and MCP listeners. Choose addresses reachable
-through the engine and use `--lan-ports ALLOWED DENIED` for an independently
-routed LAN fixture. Run it when the pinned stack subnets are free. The fixture
+project and temporary inference and MCP listeners. On a rootless Podman VM,
+bind the host listeners to the VM's reachable interface. Use
+`--lan-ports ALLOWED DENIED` with a separate LAN peer when the engine cannot
+route to a listener on the VM's own literal LAN address. The fixture proves the
+listeners are reachable from independent controls, then checks both isolated
+namespaces before and after granting the selected host and LAN sockets. It
+probes the engine's numeric host mapping, the synthetic host alias, and the
+literal LAN address. Run it when the pinned stack subnets are free. The fixture
 builds the network and Hermes images under test tags. Use `--no-build` when
 the images under those tags already contain the code under qualification.
+Use `--expect-lan-closed` on native Linux Docker to check default denial, the
+exact TLS host grant, and literal LAN denial using only the network image. The
+test reports a gateway setup warning when the host grant cannot open.
 
-The packaged Hermes 0.23.3 fixture on Docker Desktop checks that managed policy
-clears inherited and profile HTTP proxy variables across profile reload. It
-exercises native model discovery, endpoint metadata, streamed inference, and
-MCP initialize/list/call. Redirected HEAD, GET and POST diagnostics leave the
-MCP handshake to the SDK. The current client-path fixture still needs a native
-rootless Podman run.
+The packaged Hermes 0.23.3 fixture on Docker Desktop and rootless Podman checks
+that managed policy clears inherited and profile HTTP proxy variables across
+profile reload. It exercises native model discovery, endpoint metadata,
+streamed inference, and MCP initialize/list/call. Redirected HEAD, GET and POST
+diagnostics leave the MCP handshake to the SDK.
 
 Native host and routed LAN coverage includes Docker Desktop 4.99.0 on arm64
 with Engine 29.9.3 and Compose 5.7.0, and rootless Podman 5.4.2 with Compose
 5.7.1 on Debian 13 ARM64 with Linux 6.12. Checks on both engines cover
 original TLS and HTTP names, an independent reachable control for each socket,
-exact port, UID and executor denial, and gateway restart and grant removal.
+exact port and UID checks, and executor denial. The Podman run uses listeners
+bound to the Debian VM itself for the host-port checks and a separate LAN peer
+for the literal address checks.
 The gateway stays healthy when a fixture denies forwarding enablement and
 both local paths stay closed. Controlled routed fixtures on both engines
 check IPv4 path MTU feedback for 64 KiB transfers in both directions through
 a 630-byte bottleneck.
 
 Native Podman also covers bridge-scoped host discovery and gateway startup with
-default system-path protections after grant removal. The current Docker Desktop
-fixture also covers LAN-only startup and continued access to the literal LAN
-socket when the host mapping is missing. These two cases still need a native
-rootless Podman run.
+default system-path protections after grant removal. The Docker Desktop and
+Podman fixtures cover LAN-only startup, continued access to the literal LAN
+socket when the host mapping is missing, and denial after grant removal.
 
 Docker Desktop controls also cover local forwarding with Tor suspended and
 denial of a retained connection after grant removal. Authenticated browser

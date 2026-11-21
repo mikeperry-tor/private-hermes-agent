@@ -194,21 +194,19 @@ def run_fixture(args):
         else:
             lan_port, ungranted_lan = [serve(scope, mcp.Handler, str(lan_address)) for _ in range(2)]
 
-        tor_data = directory / 'tor'
-        tor_data.mkdir()
         overlay = directory / 'compose.json'
         definition = {'services': {
-            'tor': {'image': IMAGE, 'volumes': [f'{tor_data}:/var/lib/tor'],
+            'tor': {'image': IMAGE, 'volumes': ['tor-fixture-data:/var/lib/tor'],
                     'environment': {'PRIVATE_HERMES_X402_TREAZURY_SOCKS': '0'}},
             'agent-net': {'image': IMAGE, 'volumes': [
                 f'{ROOT}/tests/fixtures/mcp-allowlist.json:/etc/private-hermes/mcp-allowlist.json:ro']},
             'executor-net': {'image': IMAGE},
             'hermes': {'image': 'private-hermes-agent:local-integration-test'},
-        }}
+        }, 'volumes': {'tor-fixture-data': {}}}
         overlay.write_text(json.dumps(definition))
         os.environ.update(COMPOSE_ENV_FILES='.env.example', TOR_ONION_ENABLED='false',
-                          HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS=str(host_port),
-                          HERMES_INTEGRATIONS_LAN_ENDPOINTS=f'{lan_address}:{lan_port}')
+                          HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS='none',
+                          HERMES_INTEGRATIONS_LAN_ENDPOINTS='none')
         project = 'private-hermes-local-proof-' + secrets.token_hex(4)
         command = [*compose_base(), '-p', project, *compose_files(False, (str(overlay),))]
 
@@ -218,8 +216,6 @@ def run_fixture(args):
         def cleanup():
             compose('down', '--volumes')
             remove_networks(command)
-            if engine() == 'podman':
-                subprocess.run([*engine_command(), 'unshare', 'chown', '-R', '0:0', str(tor_data)], check=True)
 
         def client(owner, uid, image, executable, script, arguments, options=(), **kwargs):
             owner_id = None if owner is None else compose('ps', '-q', owner, capture_output=True).stdout.strip()
@@ -230,41 +226,71 @@ def run_fixture(args):
                                    '--user', f'{uid}:{uid}', *network, *options, '--entrypoint', executable,
                                    image, '-c', script, *arguments], text=True, **kwargs)
 
-        def fetch(owner, uid, url, *, tls=False):
-            options = ['--mount', f'type=bind,source={cert},target=/tmp/fixture.pem,readonly'] if tls else []
+        def fetch(owner, uid, url, *, tls=False, options=()):
+            if tls:
+                options = (*options, '--mount', f'type=bind,source={cert},target=/tmp/fixture.pem,readonly')
             client(owner, uid, IMAGE, 'python3', FETCH, [url, *(['/tmp/fixture.pem'] if tls else [])],
                    options, check=True)
 
-        def probe(owner, uid, address, port, allowed):
+        def probe(owner, uid, address, port, allowed, options=()):
             result = client(owner, uid, IMAGE, 'python3', TCP_PROBE, [str(address), str(port)],
-                            capture_output=True, check=True)
+                            options, capture_output=True, check=True)
             expected = 'connected' if allowed else 'closed'
             assert result.stdout.strip() == expected, (owner, uid, address, port, result.stdout, result.stderr)
 
         subprocess.run([sys.executable, 'scripts/preflight.py', project, '--skip-ports'], check=True)
         scope.callback(cleanup)
         if not args.no_build:
-            compose('build', 'tor', 'hermes')
+            compose('build', *(['tor'] if args.expect_lan_closed else ['tor', 'hermes']))
         prepare_launch(command, check_bind_sources(command, ['up', '--no-deps', 'tor', 'agent-net', 'executor-net']))
         # Wait for the real gateway before attaching application test users.
         compose('up', '-d', '--no-deps', '--wait', 'tor')
         compose('up', '-d', '--no-deps', '--wait', 'agent-net', 'executor-net')
         local_host = f'https://{HOST}:{host_port}'
         local_lan = f'http://{lan_address}:{lan_port}'
-        native = 'host.containers.internal' if engine() == 'podman' else HOST
-        # Controls establish that both the granted and ungranted listeners are live.
+
+        # Prepare the next launch without changing the running default policy.
+        os.environ.update(HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS=str(host_port),
+                          HERMES_INTEGRATIONS_LAN_ENDPOINTS=f'{lan_address}:{lan_port}')
+        grant_model = check_bind_sources(command, ['up', '--no-deps', 'tor', 'agent-net'])
+        prepare_launch(command, grant_model)
+        native_host = os.environ['PRIVATE_HERMES_ENGINE_HOST_ADDRESS']
+        assert native_host, 'The engine did not provide a host IPv4 mapping for the fixture'
+        control_network = ('--network', grant_model['networks']['tor-uplink']['name'])
+        # Independent controls on the same uplink prove the actual sockets are reachable.
         for port in (host_port, ungranted_host):
-            probe(None, 10000, native, port, True)
+            probe(None, 10000, native_host, port, True, control_network)
         for port in (lan_port, ungranted_lan):
-            fetch(None, 10000, f'http://{lan_address}:{port}/health')
-        for address, port in ((HOST_IP, host_port), (lan_address, lan_port)):
+            fetch(None, 10000, f'http://{lan_address}:{port}/health', options=control_network)
+        host_socket = (HOST_IP, host_port)
+        lan_socket = (str(lan_address), lan_port)
+        allowed = {host_socket} if args.expect_lan_closed else {host_socket, lan_socket}
+        tested = {host_socket, lan_socket, (HOST_IP, ungranted_host), (str(lan_address), ungranted_lan),
+                  (native_host, host_port), (native_host, ungranted_host)}
+        for owner in ('agent-net', 'executor-net'):
+            for address, port in sorted(tested):
+                probe(owner, 10000, address, port, False)
+        print('PASS: reachable host/LAN listeners are denied from both namespaces with default grants', flush=True)
+
+        compose('up', '-d', '--no-deps', '--wait', 'tor')
+        compose('up', '-d', '--no-deps', '--wait', 'agent-net')
+        for address, port in sorted(tested):
+            probe('executor-net', 10000, address, port, False)
+        for address, port in sorted((tested | {(HOST_IP, lan_port), (str(lan_address), host_port)}) - allowed):
+            probe('agent-net', 10000, address, port, False)
+        if args.expect_lan_closed:
+            print('PASS: explicit grants leave native Linux Docker LAN sockets and executor access closed', flush=True)
+        warnings_command = ('exec', '-T', '--user', '65534:65534', 'tor', 'cat', '/tmp/local-grant-warnings')
+        warnings = compose(*warnings_command, capture_output=True).stdout.strip()
+        expected_warning = 'Docker LAN grants require Docker Desktop. LAN grants closed.' if args.expect_lan_closed else ''
+        assert warnings == expected_warning, warnings
+        for address, port in sorted(allowed):
             probe('agent-net', 10000, address, port, True)
             probe('agent-net', 10003, address, port, False)
-            probe('executor-net', 10000, address, port, False)
-        for address, port in ((HOST_IP, ungranted_host), (lan_address, ungranted_lan),
-                              (HOST_IP, lan_port), (lan_address, host_port)):
-            probe('agent-net', 10000, address, port, False)
         fetch('agent-net', 10000, local_host + '/health', tls=True)
+        if args.expect_lan_closed:
+            print('PASS: exact TLS host grant works and native Linux Docker keeps literal LAN grants closed', flush=True)
+            return
         fetch('agent-net', 10000, local_lan + '/health')
         print('PASS: independent reachable controls, exact TLS host and LAN paths, UID and executor denial', flush=True)
 
@@ -289,7 +315,6 @@ def run_fixture(args):
         compose('up', '-d', '--no-deps', '--wait', 'tor')
         fetch('agent-net', 10000, local_host + '/health', tls=True)
         fetch('agent-net', 10000, local_lan + '/health')
-        warnings_command = ('exec', '-T', '--user', '65534:65534', 'tor', 'cat', '/tmp/local-grant-warnings')
         assert not compose(*warnings_command, capture_output=True).stdout.strip()
         definition['services']['tor']['entrypoint'] = ['python3', '-c', TOR_WITH_DENIED_FORWARDING]
         overlay.write_text(json.dumps(definition))
@@ -337,8 +362,12 @@ def main():
     parser.add_argument('lan_address', help='Routed IPv4 fixture bind address')
     parser.add_argument('--lan-ports', nargs=2, type=int, metavar=('ALLOWED', 'DENIED'),
                         help='Ports on an existing routed MCP/HTTP fixture')
+    parser.add_argument('--expect-lan-closed', action='store_true',
+                        help='Check host grants and verify native Linux Docker denies literal LAN grants')
     parser.add_argument('--no-build', action='store_true', help='Use images already built under the fixture tags')
     args = parser.parse_args()
+    if args.lan_ports and args.lan_ports[0] == args.lan_ports[1]:
+        parser.error('--lan-ports requires distinct allowed and denied ports')
     os.chdir(ROOT)
     run_fixture(args)
 

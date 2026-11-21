@@ -356,6 +356,10 @@ mapping. Docker LAN grants are available on Docker Desktop. `make up` reports
 closed grants and the gateway logs the reason. Apply changes to the daemon's
 host mapping with `make down` and `make up`.
 
+On Debian 13 ARM64 with Docker Engine 29.10.0, Docker's default AppArmor
+profile blocks the IPv4 forwarding switch. The gateway stays up with host
+grants closed.
+
 The gateway forwards IPv4 fragmentation-needed feedback for granted TCP flows.
 VPNs or firewalls that suppress this feedback can still stall large transfers
 even when a small health response succeeds.
