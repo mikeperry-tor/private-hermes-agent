@@ -555,9 +555,10 @@ additional startup deadline. Reporting cadence is independent of failure policy.
 
 ## Local upstream candidate qualification
 
-The `fork` remote holds the `stack-patches/v0.23.3/*` release refs and
-`upstream-pr/*` submission branches once they are pushed. The tracked release
-patch carries the reviewed v0.23.3 replay. See the [fork repository](https://github.com/mikeperry-tor/hermes-agent),
+The `fork` remote is the destination for the `stack-patches/v0.23.3/*` release
+refs and the submission branches listed in the preparation plan. The local
+`upstream-pr/*` refs identify the original qualification snapshots. The tracked
+release patch carries the reviewed v0.23.3 replay. See the [fork repository](https://github.com/mikeperry-tor/hermes-agent),
 [candidate inventory](updates-and-plugins.md#local-preparation-package-dispositions)
 and [retained preparation plan](plans/hermes-upstream-prep.md).
 
@@ -571,7 +572,8 @@ qualified tree for focused follow-up changes.
 | Candidate | Recorded passing checks | Behavioral scope |
 | --- | --- | --- |
 | PR1: managed configuration | Native configuration and profile-scope tests, managed-policy image fixtures on Docker and rootless Podman | Strict reads, dotenv bootstrap and reload, routed interpolation and secret source ownership |
-| PR2: SSH executor fixes | Native SSH environment and workspace tests, packaged real-shell and HTTP checks | Browser-profile sync exclusion, missing-file ENOENT/404, and pinned SSH client options |
+| PR2a: SSH workspace fixes | Native sync and workspace tests, packaged real-shell and HTTP checks | Browser-profile sync exclusion and missing-file ENOENT/404 |
+| PR2b: explicit SSH client configuration | Native SSH environment and managed configuration tests, packaged real-shell checks | Pinned SSH client options across terminal, workspace, streams and Doctor |
 | PR3: executor desktop/browser | 224 focused native Python tests, 6 desktop status renderer tests, combined browser/SSH suites, and real SSH Chromium qualification | Desktop probes and cold executor discovery, viewer owner identity, warm CUA driver ownership, named-profile RFB, raw CDP refusal, browser attachment and retirement, named vault lease, scratch, screenshots, sandboxing and no replay |
 | PR4: operator terminals and exact cwd | 80 focused native Python tests, 95 terminal renderer tests, and real SSH coverage | Gateway, profile and placement pinning, direct rollback refusal, Bash and cwd preparation, startup metadata wait, terminal ID acknowledgement and retention, relay close, pinned trust and repair |
 | PR5: selectable URL context | 74 reference, gateway-turn and configuration tests | Managed no-fetch across normal and bypass sessions, one validated snapshot, inaccessible and malformed configuration, safe defaults, filter order and recovery |
@@ -606,7 +608,7 @@ rewritten command lines and an unrelated process on a reused PID.
 The [pinned release replay](plans/hermes-upstream-prep.md#v0233-build-provenance)
 uses Hermes v0.23.3 source `caafe5389ae585ef77387a962aee05b1bcf17029`. The
 [submission branches](plans/hermes-upstream-prep.md#1-branches-to-submit)
-use the separate main revision `2de9f51b8008a7d49a49221c184f2f11cbfc4af1`.
+use the separate main revision `25a1302eacb563c59eb3b7454c1a53f8c89f274c`.
 Deployments and upstream submissions share strict managed configuration,
 including reload precedence, ordered recovery from managed dotenv read errors
 and routed subprocess interpolation.
@@ -615,9 +617,12 @@ tools, SSH trust and terminal ID acknowledgement, executor probes and warm
 recovery, and URL settings in gateway and configuration-bypass turns.
 The packaged runtime checks use the release replay.
 
-The disposable native image has baseline failures in three Doctor checks
-for Vercel, Chromium repair advice and the GitHub CLI. They reproduce on the
-corresponding pristine bases. Managed tool availability in Doctor is covered.
+The default Linux ARM64 Docker suite has failures on the pristine submission
+base, including container-specific file modes, service management and Doctor
+checks. Focused checks cover managed dotenv callers, desktop and browser
+transport, tool-policy prompt persistence and spool recovery. The browser
+runner regression exercises the v0.23.3 source and verifies per-task
+workspaces and environment ownership.
 
 The two broader real-profile copy-permission cases fail on the pristine native
 base in the test image. They cover gateway real-profile behavior, outside the
