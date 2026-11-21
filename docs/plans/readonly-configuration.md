@@ -21,7 +21,8 @@ to the SSH execution boundary are outside scope.
   Teep enabled, a nonblank `TEEP_INSTALL_MODEL` seeds the initial selection and
   starter catalog. A blank value leaves the selection to Hermes with Teep model
   discovery enabled. Hermes owns saved provider and model choices.
-  Teep startup mode is a root deployment setting.
+  [Local socket grants](../configuration.md#local-inference-and-http-mcp) and
+  Teep startup mode are root deployment settings.
 - Hermes owns its writable state under `/opt/data`, including configuration,
   sessions, skills, and memories.
 - The networkless `hermes-config` command currently edits that same data volume
@@ -37,7 +38,8 @@ to the SSH execution boundary are outside scope.
 
 ## Invariants
 
-- Keep the SSH backend, teep endpoint, and selected MCP boundaries intact.
+- Keep the SSH backend, optional Teep route, selected MCP boundaries and
+  exact Hermes host/LAN grants intact.
 - Keep sessions, memories, and other required runtime state writable.
 - Preserve existing configuration and user settings during migration.
 - Give the runtime no writable mount or alternate write path to the protected

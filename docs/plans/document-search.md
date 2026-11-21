@@ -74,8 +74,10 @@ both together should be an explicit comparison mode, not a startup dependency.
 - Grant the candidate only the internal connections needed for Hermes access
   and teep or the selected local embedding server. Maintain host/VM isolation
   and executor denial of search, administrative, and embedding endpoints.
-  A local embedding server should run in a selected container rather than
-  require general host-network access.
+  Run the embedding server in a selected container where practical. The
+  [operator's Hermes grants](../configuration.md#local-inference-and-http-mcp)
+  can reach a selected host/LAN embedding endpoint from Hermes. A separate
+  search component does not inherit that path and needs its own reviewed grant.
 - Leave public endpoints unpublished. Route any separately required public
   fetches through Tor; do not give a search service a direct Internet uplink.
   Teep retains its existing direct provider connection.

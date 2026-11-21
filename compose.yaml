@@ -44,6 +44,10 @@ x-network: &network
     retries: 3
     start_period: 20s
 
+x-local-integrations: &local-integrations
+  HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS: ${HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS-none}
+  HERMES_INTEGRATIONS_LAN_ENDPOINTS: ${HERMES_INTEGRATIONS_LAN_ENDPOINTS-none}
+
 services:
   setup: &setup-job
     image: *hermes-image
@@ -140,8 +144,21 @@ services:
     depends_on:
       setup: {condition: service_completed_successfully}
     environment:
+      <<: *local-integrations
       TOR_ONION_ENABLED: ${TOR_ONION_ENABLED:-false}
       PRIVATE_HERMES_X402_TREAZURY_SOCKS: "1"
+      PRIVATE_HERMES_NETWORK_PLATFORM: ${PRIVATE_HERMES_NETWORK_PLATFORM-docker}
+      PRIVATE_HERMES_ENGINE_HOST_ADDRESS: ${PRIVATE_HERMES_ENGINE_HOST_ADDRESS-}
+    # Start closed even before the namespace initializer runs. Only this
+    # trusted owner may write the per-namespace forwarding switch.
+    sysctls:
+      net.ipv4.ip_forward: "0"
+      net.ipv6.conf.all.forwarding: "0"
+    # The launch wrapper adds the engine's procfs exception only for local grants.
+    # The default repeats no-new-privileges using the engine's equivalent spelling.
+    security_opt:
+      - no-new-privileges:true
+      - ${PRIVATE_HERMES_TOR_PROCFS_OPTION:-no-new-privileges=true}
     cap_add: [NET_ADMIN, SETUID, SETGID, SETPCAP, CHOWN, FOWNER, DAC_OVERRIDE]
     volumes:
       - type: bind
@@ -154,7 +171,8 @@ services:
       - /tmp:mode=1777
       - /run/tor-control:mode=0700
     networks:
-      tor-uplink: {}
+      tor-uplink:
+        ipv4_address: 10.203.88.2
       onion-ingress:
         ipv4_address: 10.203.86.2
       agent-route:
@@ -174,6 +192,9 @@ services:
     command: [agent]
     depends_on:
       tor: {condition: service_healthy}
+    environment: *local-integrations
+    extra_hosts:
+      host.docker.internal: 198.18.255.254
     volumes:
       - type: bind
         source: ./config/network/mcp-allowlist.json

@@ -8,6 +8,8 @@
 
 services:
   tor:
+    environment:
+      PRIVATE_HERMES_NETWORK_PLATFORM: podman
     healthcheck:
       start_interval: !reset null
   agent-net:

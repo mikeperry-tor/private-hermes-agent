@@ -165,8 +165,11 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   provider credentials or wallet mounts. This is not per-task or tenant isolation.
 - Public TCP from both namespaces goes through the transparent Tor gateway;
   DNS follows the Tor policy. Preserve denial of direct Internet, unsupported
-  UDP, non-loopback IPv6, host/VM/private destinations and unintended peers.
-  Configuration flags alone do not establish these boundaries.
+  UDP, non-loopback IPv6, unintended peers and private destinations by default.
+  Operators may grant the Hermes identity exact engine-host TCP ports and
+  RFC1918 address/port pairs through the existing gateway. Preserve executor
+  denial, Tor-only public egress, and separation from the existing inter-service
+  grants. Configuration flags alone do not establish these boundaries.
 - Preserve exact internal grants for SSH, Teep and selected MCP services. The
   executor cannot directly access agent APIs, inference or MCP endpoints.
   Authorized Hermes tool RPC is a separate capability, not permission to widen

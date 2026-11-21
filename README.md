@@ -41,8 +41,7 @@ still use your browser's connection.
 - **[Tor](https://hub.docker.com/r/dockurr/tor)** is used to route TCP
   traffic and DNS from Hermes and its executor through Tor, hiding their source
   network address from Internet destinations. Network rules block direct Internet
-  fallback and access to host, VM, and private-network services except the stack's
-  explicit internal connections. Optional [Tor onion service ingress](#tor-onion-service)
+  fallback. Local network destinations require a configured [host or LAN grant](#local-inference-and-http-mcp). Optional [Tor onion service ingress](#tor-onion-service)
   allows you to reach the Hermes Admin Webapp via an onion URL (requires
   [Tor Browser](https://www.torproject.org/download/) or [Brave's Tor Window](https://support.brave.app/hc/en-us/articles/360018121491-What-is-a-Private-Window-with-Tor-Connectivity)).
 - **[x402_treazury](https://github.com/mikeperry-tor/x402_treazury)** gives Hermes
@@ -119,7 +118,7 @@ Set a provider API key in the generated root `.env` to use Teep. The example
 selects `neardirect:z-ai/glm-5.3-flash` for NearAI with `NEARAI_API_KEY`. Set
 `TEEP_INSTALL_MODEL` to a model your provider serves, or leave it blank to choose
 in Hermes after startup. See [inference configuration](docs/configuration.md#host-inference-access)
-for Teep settings.
+for Teep settings, or configure [local inference](#local-inference-and-http-mcp).
 
 To build and start the stack:
 
@@ -151,6 +150,38 @@ If you prefer terminal use, you can use the terminal client with:
 ```sh
 make chat
 ```
+
+## Local inference and HTTP MCP
+
+If you want to use either local inference or local MCP servers, then
+you need to allow these ports from `.env`.
+
+```dotenv
+# Set false if you only need local inference. Keep true to switch at runtime.
+TEEP_ENABLED=false
+
+# Allow port 11434 and 8080 to be accessed on the host by the hermes framework:
+HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS=11434,8080
+
+# Allow these three LAN endpoints to be accessed by the hermes framework:
+HERMES_INTEGRATIONS_LAN_ENDPOINTS=192.168.1.50:8765,192.168.1.50:8766,192.168.1.51:9000
+```
+
+A fresh install with Teep disabled starts without a selected provider or model.
+Use Hermes provider setup to add a named OpenAI-compatible provider for the local
+endpoint and select its model. Configure any HTTP MCP services and credentials
+in Hermes as well.
+See the [configuration guide](docs/configuration.md#local-inference-and-http-mcp)
+for provider setup.
+
+Run `make down` followed by `make up` after changing either grant list or Teep
+mode. Hermes tools and in-process plugins can use granted sockets.
+
+> **NOTE**: Agent-created code can still invoke allowlisted Hermes tools by RPC from
+> the code sandbox container, including tools that access a configured local backend.
+> By default, none of these tools can access host or LAN addresses, but if you
+> add plugin tools, they may or may not properly block access to your allowed host
+> or LAN endpoints.
 
 ## Paid Research APIs and Cryptocurrency Wallet
 
@@ -405,10 +436,11 @@ The additional controls limit what malicious tool output, prompt-injected
 commands, or a compromised service can reach:
 
 - **Network containment:** Hermes and its executor have isolated networks and
-  default-deny firewalls. These block access to host/VM services, private networks,
-  and cloud metadata addresses, and prevent direct Internet fallback if Tor fails.
-  Only explicitly required internal connections are allowed. Tor egress does not
-  cover Teep's direct provider connection or your browser's connection to the webapp.
+  default-deny firewalls. Host/VM services, private networks, and cloud metadata
+  addresses are blocked by default. You can grant Hermes exact host or LAN TCP
+  sockets. The firewalls prevent direct Internet fallback if Tor fails. Tor egress
+  does not cover Teep's direct provider connection or your browser's connection
+  to the webapp.
 - **Code and secret separation:** Agent code and desktop usage runs as an
   unprivileged user in the SSH executor, without mounts for agent config, provider
   keys or wallets. This limits theft or modification of those files by generated code.

@@ -248,7 +248,9 @@ class Controller:
         subprocess.run([sys.executable, str(self.root / 'scripts/init-config.py'), '--wallet'],
                        cwd=self.root, check=True)
         initialize_research_config(self.command, self.root)
-        self.call('up', '-d', '--wait', '--no-deps', 'tor', 'agent-net')
+        # Hermes may already share agent-net. Keep the existing namespace and
+        # its applied grants until a coordinated stack restart.
+        self.call('up', '-d', '--wait', '--no-deps', '--no-recreate', 'tor', 'agent-net')
         self.wallet_command('init')
 
     def prepare(self):

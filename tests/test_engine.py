@@ -475,6 +475,127 @@ class ComposeModelTests(unittest.TestCase):
 
 
 class NetworkCreationTests(unittest.TestCase):
+    def test_build_preparation_uses_compose_flags_and_ignores_container_arguments(self):
+        for arguments, expected in (
+            (['up', '--build', 'tor'], True),
+            (['create', '--build=false', 'tor'], False),
+            (['run', '--build', 'tor'], True),
+            (['run', '--build=false', 'tor', '--build'], False),
+            (['run', '-e', '--build', 'tor'], False),
+            (['run', 'tor', '--build'], False),
+            (['restart', 'tor'], False),
+        ):
+            with self.subTest(arguments=arguments):
+                self.assertIs(deployment.parse_launch(arguments).build, expected)
+
+    def test_cold_requested_build_produces_the_probe_image_before_startup(self):
+        tor = {'image': 'network-fixture', 'environment': {'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS': '11434'}}
+        command = ['docker', 'compose', '-p', 'fixture']
+        events = []
+
+        def invoke(arguments, **_kwargs):
+            events.append(arguments)
+            return subprocess.CompletedProcess(arguments, 1 if 'inspect' in arguments else 0)
+
+        def probe(image, network):
+            events.append(['probe', image, network])
+            return ipaddress.IPv4Address('192.168.65.254')
+
+        with patch.dict(os.environ), patch.object(deployment, 'engine', return_value='docker'), \
+                patch.object(deployment, 'check_engine'), \
+                patch.object(deployment, 'engine_host_address', side_effect=probe), \
+                patch.object(subprocess, 'run', side_effect=invoke):
+            deployment.prepare_launch(command, {'services': {'tor': tor}}, build_missing=True)
+        self.assertEqual(events, [
+            ['docker', 'image', 'inspect', 'network-fixture'], [*command, 'build', 'tor'],
+            ['probe', 'network-fixture', 'none'],
+        ])
+
+    def test_podman_host_mapping_uses_the_project_bridge_and_empty_hosts_base(self):
+        key = 'PRIVATE_HERMES_ENGINE_HOST_ADDRESS'
+        procfs = 'PRIVATE_HERMES_TOR_PROCFS_OPTION'
+        tor = {'image': 'network-fixture', 'environment': {'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS': '11434'}}
+        model = {'services': {'tor': tor}, 'networks': {'tor-uplink': {'name': 'fixture_tor-uplink'}}}
+        command = ['podman', 'compose']
+        with patch.dict(os.environ, {key: '192.168.50.4'}), \
+                patch.object(deployment, 'engine', return_value='podman'), \
+                patch.object(deployment, 'check_engine'), \
+                patch.object(deployment, 'ensure_networks'), \
+                patch.object(deployment, 'engine_host_address', return_value=None) as probe:
+            deployment.prepare_launch(command, model)
+            probe.assert_called_once_with('network-fixture', 'fixture_tor-uplink', '--hosts-file=none')
+            self.assertEqual(os.environ[key], '')
+            self.assertEqual(os.environ[procfs], '')
+            probe.return_value = ipaddress.IPv4Address('169.254.1.2')
+            deployment.prepare_launch(command, model)
+            self.assertEqual(os.environ[key], '169.254.1.2')
+            self.assertEqual(os.environ[procfs], 'unmask=/proc/sys')
+
+    def test_docker_host_mapping_checks_only_when_tor_can_be_created(self):
+        tor = {'image': 'network-fixture', 'environment': {'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS': '11434'}}
+        model = json.dumps({'services': {'tor': tor, 'hermes': {}, 'x402_treazury': {}}})
+        command = ['docker', 'compose']
+        with patch.dict(os.environ), patch.object(deployment, 'engine', return_value='docker'), \
+                patch.object(deployment, 'check_engine'), patch.object(deployment, '_output', return_value=model), \
+                patch.object(deployment, 'engine_host_address', return_value=None) as probe:
+            for arguments in (['run', '--no-deps', 'hermes', 'chat'], ['up', '--no-deps', 'x402_treazury'],
+                              ['restart', 'tor'], ['up', '--scale', 'tor=0']):
+                deployment.prepare_launch(command, deployment.check_bind_sources(command, arguments))
+            probe.assert_not_called()
+            for arguments in (['up', '--no-deps', 'tor'], ['create', 'hermes'], ['run', '--no-deps', 'tor']):
+                deployment.prepare_launch(command, deployment.check_bind_sources(command, arguments))
+            self.assertEqual(probe.call_count, 3)
+
+    def test_docker_host_mapping_is_optional_for_tor(self):
+        key = 'PRIVATE_HERMES_ENGINE_HOST_ADDRESS'
+        platform = 'PRIVATE_HERMES_NETWORK_PLATFORM'
+        procfs = 'PRIVATE_HERMES_TOR_PROCFS_OPTION'
+        tor = {'image': 'network-fixture', 'environment': {}}
+        model = {'services': {'tor': tor}}
+        with patch.dict(os.environ, {key: '192.168.65.254', platform: 'docker-desktop', procfs: 'systempaths=unconfined'}), \
+                patch.object(deployment, 'engine', return_value='docker'), \
+                patch.object(deployment, 'check_engine'), \
+                patch.object(deployment, 'docker_desktop') as desktop, \
+                patch.object(deployment, 'engine_host_address', return_value=None) as probe:
+            deployment.prepare_launch(['docker', 'compose'], model)
+            probe.assert_not_called()
+            self.assertEqual(os.environ[key], '')
+            self.assertEqual(os.environ[platform], 'docker')
+            self.assertEqual(os.environ[procfs], '')
+
+            tor['environment']['HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS'] = '11434'
+            deployment.prepare_launch(['docker', 'compose'], model)
+            probe.assert_called_once_with('network-fixture', 'none')
+            self.assertEqual(os.environ[key], '')
+            self.assertEqual(os.environ[procfs], '')
+
+            probe.return_value = ipaddress.IPv4Address('192.168.65.254')
+            deployment.prepare_launch(['docker', 'compose'], model)
+            self.assertEqual(os.environ[key], '192.168.65.254')
+            self.assertEqual(os.environ[procfs], 'systempaths=unconfined')
+            desktop.assert_not_called()
+
+    def test_lan_only_never_probes_a_host_mapping(self):
+        tor = {'environment': {'HERMES_INTEGRATIONS_LAN_ENDPOINTS': '192.168.50.4:8080'}}
+        for selected, desktop, platform, procfs in (
+            ('docker', False, 'docker', ''),
+            ('docker', True, 'docker-desktop', 'systempaths=unconfined'),
+            ('podman', False, 'podman', 'unmask=/proc/sys'),
+        ):
+            with self.subTest(platform=platform), \
+                    patch.dict(os.environ, PRIVATE_HERMES_ENGINE_HOST_ADDRESS='192.168.65.254'), \
+                    patch.object(deployment, 'engine', return_value=selected), \
+                    patch.object(deployment, 'check_engine'), patch.object(deployment, 'ensure_networks'), \
+                    patch.object(deployment, 'docker_desktop', return_value=desktop), \
+                    patch.object(deployment, 'engine_image_available') as inspect, \
+                    patch.object(deployment, 'engine_host_address') as probe:
+                deployment.prepare_launch([], {'services': {'tor': tor}}, build_missing=True)
+                self.assertEqual(os.environ['PRIVATE_HERMES_ENGINE_HOST_ADDRESS'], '')
+                self.assertEqual(os.environ['PRIVATE_HERMES_NETWORK_PLATFORM'], platform)
+                self.assertEqual(os.environ['PRIVATE_HERMES_TOR_PROCFS_OPTION'], procfs)
+                probe.assert_not_called()
+                inspect.assert_not_called()
+
     CONFIG = {'name': 'private-hermes', 'networks': {
         'inference': {'name': 'private-hermes_inference', 'internal': True,
                       'driver_opts': {'isolate': 'strict'}, 'ipam': {'config': [{'subnet': '10.203.83.0/24'}]}},

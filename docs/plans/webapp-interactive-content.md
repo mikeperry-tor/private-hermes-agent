@@ -58,7 +58,9 @@ Update [webapp operations](../webapp.md) with supported formats/providers,
 consent and revocation, [configuration](../configuration.md) for any changed
 permission persistence, and [updates/plugins](../updates-and-plugins.md) for
 patch/build changes. Do not create a second set of policy docs or a new generic
-permission framework. This plan does not change inference or agent-tool egress.
+permission framework. Hermes's exact host/LAN socket grants are agent-tool
+authority. Preserve the WebApp's private-destination checks for browser and
+gateway content loading independently of those grants.
 
 ## Streaming external media through Tor
 

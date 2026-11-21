@@ -391,7 +391,7 @@ class ActivationTests(unittest.TestCase):
         controller.inspect = lambda: {'wallet_absent': True, 'wallet_valid': False}
         with patch('x402_treazury.subprocess.run'), patch('x402_treazury.initialize_research_config'):
             controller.initialize()
-        self.assertEqual(controller.events, [('up', '-d', '--wait', '--no-deps', 'tor', 'agent-net'),
+        self.assertEqual(controller.events, [('up', '-d', '--wait', '--no-deps', '--no-recreate', 'tor', 'agent-net'),
                                              ('wallet', 'init')])
         controller.events.clear()
         controller.inspect = lambda: {'wallet_absent': False, 'wallet_valid': False, 'reason': 'unreadable wallet'}

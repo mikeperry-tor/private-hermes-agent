@@ -10,7 +10,8 @@ import sys
 import textwrap
 import deployment
 from deployment import compose_base, compose_files, engine, engine_command
-
+sys.path.insert(0, str(deployment.ROOT / 'components/network'))
+from integrations import grants
 
 ADDRESS_PLAN_HELP = ('Pinned subnets live in the networks: block of compose.yaml.',
                      'Funnel networks (funnel-link and tailscale-uplink) live in compose.funnel.yaml.')
@@ -337,6 +338,11 @@ def main():
     identifiers = output(*engine_command(), 'network', 'ls', '-q').split()
     existing = inspect_resources(('network',), identifiers)
     check_address_conflicts(project, config, existing)
+    try:
+        grants(config.get('services', {}).get('tor', {}).get('environment') or {},
+               (str(network) for entry in existing for network in subnets(entry) if network.version == 4))
+    except ValueError as error:
+        fail((str(error),), ('No container was started.',))
     if not arguments.skip_ports:
         identifiers = output(*engine_command(), 'ps', '-q').split()
         containers = inspect_resources((), identifiers)

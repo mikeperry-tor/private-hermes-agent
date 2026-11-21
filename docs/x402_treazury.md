@@ -178,13 +178,13 @@ For later edits, gracefully stop first, then edit and start again:
 ```sh
 make down
 # Edit config/x402_treazury/research_desk.toml.
-python3 scripts/stack.py compose run --rm --no-deps x402_treazury config show
+python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/x402_treazury x402_treazury-admin config show
 make up
 ```
 
 There is no hot reload. Native configuration inspection above uses the mounted
-file and does not fund wallets or download catalogs. Managed startup checks the
-fixed deployment fields: Tor mode, private SOCKS socket with extended Tor
+file in an offline job, without funding wallets or downloading catalogs.
+Managed startup checks the fixed deployment fields: Tor mode, private SOCKS socket with extended Tor
 authentication, treasury state/key paths, and the twelve authenticated loopback
 listeners with their Host checks and token variable. Keep those fields intact;
 wallet policy, payment caps, source/tool selections and instructions are editable.
@@ -233,8 +233,10 @@ This uses Tor for new-wallet birthday discovery, prints the shielded ZEC receive
 address, and exits. If the wallet already exists, it displays its saved status
 and address instead. Unreadable, incomplete, or incompatible state is an error;
 it is never treated as permission to create a replacement wallet. It does not
-start funding, serving, or Hermes MCP connections. If needed, the command starts
-only Tor and the agent network namespace for new wallet creation. Repeated init
+start funding, serving, or Hermes MCP connections. For new wallet creation the
+command reuses existing Tor and agent network containers and starts them if needed.
+Apply pending network grants or recover a failed namespace with `make down`
+followed by `make up`. Repeated init
 uses offline inspection, even while the stack is down or another process owns
 the wallet; it does not start services or require preparation. Saved-wallet status and repeated init do not initialize host configuration or
 storage. Only new-wallet creation prepares the Tor/network host paths and research

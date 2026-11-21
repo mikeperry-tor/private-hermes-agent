@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from functools import cache
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -150,11 +151,66 @@ def check_engine():
         raise EngineError('Docker Compose 2.36 or later is required.')
 
 
-def prepare_launch(command, model):
-    """Check the engine and prepare the selected networks before a launch."""
+def prepare_launch(command, model, *, build_missing=False):
+    """Prepare engine-specific network prerequisites for a launch."""
     check_engine()
-    if model is not None:
-        ensure_networks(model)
+    if model is None:
+        return
+    ensure_networks(model)
+    tor = model['services'].get('tor')
+    if tor is None:
+        return
+    environment = tor.get('environment') or {}
+    host_requested = environment.get('HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS', 'none').strip() != 'none'
+    lan_requested = environment.get('HERMES_INTEGRATIONS_LAN_ENDPOINTS', 'none').strip() != 'none'
+    platform = engine()
+    if platform == 'docker' and lan_requested and docker_desktop():
+        platform = 'docker-desktop'
+    address = None
+    if host_requested:
+        if build_missing and not engine_image_available(tor['image']):
+            subprocess.run([*command, 'build', 'tor'], cwd=ROOT, check=True)
+        if platform == 'podman':
+            uplink = model['networks']['tor-uplink']['name']
+            address = engine_host_address(tor['image'], uplink, '--hosts-file=none')
+        else:
+            address = engine_host_address(tor['image'], 'none')
+    procfs = ''
+    if address is not None or (lan_requested and platform != 'docker'):
+        procfs = 'unmask=/proc/sys' if platform == 'podman' else 'systempaths=unconfined'
+    os.environ.update(PRIVATE_HERMES_NETWORK_PLATFORM=platform,
+                      PRIVATE_HERMES_ENGINE_HOST_ADDRESS=str(address) if address is not None else '',
+                      PRIVATE_HERMES_TOR_PROCFS_OPTION=procfs)
+
+
+def docker_desktop():
+    result = subprocess.run([*engine_command(), 'info', '--format', '{{.OperatingSystem}}'],
+                            cwd=ROOT, text=True, capture_output=True)
+    return result.returncode == 0 and result.stdout.strip() == 'Docker Desktop'
+
+
+def engine_image_available(image):
+    result = subprocess.run([*engine_command(), 'image', 'inspect', image],
+                            cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result.returncode == 0
+
+
+def engine_host_address(image, network, *options):
+    # Podman's host mapping depends on the bridge and rootless uplink. Its
+    # probe supplies an empty base hosts file so inherited entries cannot win.
+    result = subprocess.run([*engine_command(), 'run', '--rm', '--pull', 'never',
+                             '--network', network, *options, '--read-only', '--cap-drop', 'ALL',
+                             '--security-opt', 'no-new-privileges', '--add-host',
+                             'private-hermes-engine-host:host-gateway', '--entrypoint', 'awk',
+                             image, '$2 == "private-hermes-engine-host" && $1 !~ /:/ {print $1}',
+                             '/etc/hosts'], cwd=ROOT, text=True, capture_output=True)
+    if result.returncode:
+        return None
+    try:
+        address = ipaddress.IPv4Address(result.stdout.strip())
+    except ValueError:
+        return None
+    return None if address.is_loopback else address
 
 
 def remove_networks(command):

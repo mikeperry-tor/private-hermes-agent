@@ -13,6 +13,7 @@ import subprocess
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from onion import require_secret, read_address
+from integrations import HOST_ALIAS, RESERVED, RFC1918, grants
 
 # Block non-public IPv4 destinations even when applications use literal IPs or
 # public DNS returns a private answer. Explicit service grants precede this list.
@@ -33,7 +34,7 @@ def connected():
     return [r['dst'] for r in routes if r.get('dst') and r['dst'] != 'default']
 
 
-def apply(raw, nat, incoming, outgoing):
+def apply(raw, nat, incoming, outgoing, early_output=(), forwarding=()):
     # The namespace is exclusively managed here. Restores are atomic per table.
     # Drop policies close any gaps across tables and on reinitialization.
     for binary in ('iptables', 'ip6tables'):
@@ -45,6 +46,7 @@ def apply(raw, nat, incoming, outgoing):
         ':OUTPUT ACCEPT [0:0]', ':POSTROUTING ACCEPT [0:0]', *nat, 'COMMIT',
         '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
         '-A INPUT -i lo -j ACCEPT', '-A OUTPUT -o lo -j ACCEPT',
+        *early_output, *forwarding,
         '-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT',
         '-A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT',
         *incoming, *outgoing, 'COMMIT', '',
@@ -109,8 +111,17 @@ def endpoint(role):
     tunnel('tor-route', outer, gateway, inner + '/30')
     outgoing = [f'-A OUTPUT -d {gateway}/32 -p udp --dport 53 -j ACCEPT',
                 f'-A OUTPUT -d {gateway}/32 -p gre -j ACCEPT']
-    incoming = []
+    incoming, early_output = [], []
     if agent:
+        host, lan = grants(os.environ, connected())
+        destinations = [(HOST_ALIAS, port) for port in host] + lan
+        early_output += [
+            f'-A OUTPUT -o tor-route -d {address}/32 -p tcp --dport {port} '
+            '-m owner --uid-owner 10000 -j ACCEPT'
+            for address, port in destinations
+        ]
+        # A preexisting connection cannot bypass the current owner/tuple policy.
+        early_output += [f'-A OUTPUT -o tor-route -d {network} -j DROP' for network in DENIED]
         incoming += ['-A INPUT -s 10.203.85.3/32 -d 10.203.85.2/32 -p tcp --dport 9120 -j ACCEPT']
         outgoing += [
             '-A OUTPUT -d 10.203.83.3/32 -p tcp --dport 8337 -j ACCEPT',
@@ -123,14 +134,99 @@ def endpoint(role):
     outgoing += ['-A OUTPUT -p tcp -j ACCEPT']
     # Drop embedded Docker DNS before its DNAT changes port 53. Also prevents
     # a loopback exception from admitting queries to Docker's resolver.
-    apply(['-A OUTPUT -d 127.0.0.11/32 -j DROP'], [], incoming, outgoing)
+    apply(['-A OUTPUT -d 127.0.0.11/32 -j DROP'], [], incoming, outgoing, early_output)
     run('ip', 'route', 'replace', 'default', 'via', peer, 'dev', 'tor-route')
     Path('/tmp/network-ready').touch()
     print(f'{role}: firewall and default route installed; dropping privilege', flush=True)
     drop(65534, 65534, sys.executable, os.path.abspath(__file__), 'wait')
 
 
+UPLINK_ADDRESS = '10.203.88.2'
+IP_FORWARD = Path('/proc/sys/net/ipv4/ip_forward')
+LOCAL_GRANT_WARNINGS = Path('/tmp/local-grant-warnings')
+
+
+def uplink_route(address, uplink):
+    result = subprocess.run(['ip', '-j', '-4', 'route', 'get', address], text=True, capture_output=True)
+    if result.returncode == 0:
+        route, = json.loads(result.stdout)
+        return (route.get('dev') == uplink and route.get('gateway')
+                and route.get('prefsrc') == UPLINK_ADDRESS)
+    return False
+
+
+def host_backend(podman, uplink):
+    try:
+        address = ipaddress.IPv4Address(os.environ.get('PRIVATE_HERMES_ENGINE_HOST_ADDRESS', ''))
+    except ipaddress.AddressValueError:
+        return None
+    if any(address in network for network in RESERVED):
+        return None
+    # A link-local address is eligible only from Podman's native static
+    # alias. Ordinary LAN rules never admit any link-local address.
+    if (any(address in network for network in RFC1918)
+            or (podman and address.is_link_local)):
+        if uplink_route(str(address), uplink):
+            return str(address)
+    return None
+
+
+def local_forwarding(client, uplink, destinations):
+    raw, nat, forwarding = [], [], []
+    for original, backend, port in destinations:
+        ingress = f'-i client-0 -s {client}/32 -p tcp'
+        target = f'-d {original}/32 --dport {port}'
+        connection = f'--ctorigsrc {client} --ctorigdst {original} --ctorigdstport {port}'
+        actual = f'-d {backend}/32 --dport {port}'
+        raw += [f'-A PREROUTING {ingress} {target} -j ACCEPT']
+        if original == backend:
+            nat += [f'-A PREROUTING {ingress} {target} -j ACCEPT']
+        else:
+            nat += [f'-A PREROUTING {ingress} {target} -j DNAT --to-destination {backend}']
+        nat += [
+            f'-A POSTROUTING -o {uplink} -s {client}/32 -p tcp {actual} '
+            f'-m conntrack --ctdir ORIGINAL {connection} -j SNAT --to-source {UPLINK_ADDRESS}'
+        ]
+        # Filter after DNAT and before SNAT, including established packets.
+        # Check the original tuple so alias and literal rules cannot substitute.
+        forwarding += [
+            f'-A FORWARD {ingress} -o {uplink} {actual} '
+            f'-m conntrack --ctdir ORIGINAL --ctstate NEW,ESTABLISHED {connection} -j ACCEPT',
+            f'-A FORWARD -i {uplink} -o client-0 -s {backend}/32 -d {client}/32 -p tcp --sport {port} '
+            f'-m conntrack --ctdir REPLY --ctstate ESTABLISHED {connection} -j ACCEPT',
+            # Path MTU feedback can originate at an intermediate router.
+            f'-A FORWARD -i {uplink} -o client-0 -d {client}/32 -p icmp --icmp-type fragmentation-needed '
+            f'-m conntrack --ctdir REPLY --ctstate RELATED --ctproto tcp {connection} -j ACCEPT',
+        ]
+    return raw, nat, forwarding
+
+
+def repair_gre_reply_checksums(client, destinations):
+    # Docker Desktop can deliver replies whose TCP checksum is incomplete.
+    # Recompute after reverse NAT and before the agent GRE encapsulation.
+    # The firewall still controls which tuples can reach this interface.
+    run('tc', 'qdisc', 'replace', 'dev', 'client-0', 'clsact')
+    for address in sorted({original for original, _, _ in destinations}):
+        run('tc', 'filter', 'replace', 'dev', 'client-0', 'egress', 'protocol', 'ip',
+            'u32', 'match', 'ip', 'protocol', '6', '0xff',
+            'match', 'ip', 'src', address + '/32', 'match', 'ip', 'dst', client + '/32',
+            'action', 'csum', 'tcp')
+
+
+def enable_local_forwarding():
+    try:
+        IP_FORWARD.write_text('1\n')
+    except OSError as error:
+        if IP_FORWARD.read_text().strip() != '0':
+            raise
+        return f'Could not enable IPv4 forwarding ({error.strerror or type(error).__name__}). Local grants closed.'
+    return None
+
+
 def router():
+    # Also close a retained namespace before changing any existing rules.
+    if IP_FORWARD.read_text().strip() != '0':
+        IP_FORWARD.write_text('0\n')
     onion = os.environ.get('TOR_ONION_ENABLED', 'false')
     if onion not in ('true', 'false'):
         raise ValueError('TOR_ONION_ENABLED must be exactly true or false')
@@ -141,8 +237,35 @@ def router():
                ('10.203.81.2', '10.203.81.3', '10.204.81.2', '10.204.81.1')]
     for index, (client, gateway, inner, peer) in enumerate(clients):
         tunnel(f'client-{index}', gateway, client, peer + '/30')
-    raw, nat, incoming = [], [], []
-    networks = (*DENIED, *connected())
+    routes = connected()
+    host, lan = grants(os.environ, routes)
+    networks = (*DENIED, *routes)
+    raw, nat, incoming, forwarding = [], [], [], []
+    warnings = []
+    if host or lan:
+        interfaces = json.loads(run('ip', '-j', '-4', 'addr', 'show', capture_output=True).stdout)
+        uplink, = [entry['ifname'] for entry in interfaces
+                   if any(addr['local'] == UPLINK_ADDRESS for addr in entry['addr_info'])]
+        platform = os.environ.get('PRIVATE_HERMES_NETWORK_PLATFORM', 'docker')
+        if lan and platform == 'docker':
+            warnings.append('Docker LAN grants require Docker Desktop. LAN grants closed.')
+            lan = []
+        destinations = [(address, address, port) for address, port in lan if uplink_route(address, uplink)]
+        if len(destinations) != len(lan):
+            warnings.append('LAN grants lacking a tor-uplink route were closed.')
+        if host:
+            backend = host_backend(platform == 'podman', uplink)
+            if backend:
+                destinations += [(HOST_ALIAS, backend, port) for port in host]
+            else:
+                warnings.append('Native host IPv4 mapping unavailable or unreachable through tor-uplink. Host grants closed.')
+        if destinations and platform != 'podman':
+            try:
+                repair_gre_reply_checksums(clients[0][2], destinations)
+            except subprocess.CalledProcessError:
+                warnings.append('GRE TCP checksum repair unavailable. Local forwarding closed.')
+                destinations = []
+        raw, nat, forwarding = local_forwarding(clients[0][2], uplink, destinations)
     for client, gateway, inner, peer in clients:
         # GRE carries the original public-destination packet inside an internal
         # IP packet. Docker's internal bridge drops public-destination Ethernet
@@ -168,7 +291,18 @@ def router():
         outgoing += ['-A OUTPUT -s 10.203.86.2/32 -d 10.203.86.3/32 -p tcp --dport 8080 -m owner --uid-owner 101 -j ACCEPT']
     outgoing += deny('OUTPUT', networks)
     outgoing += ['-A OUTPUT -m owner --uid-owner 101 -p tcp -j ACCEPT']
-    apply(raw, nat, incoming, outgoing)
+    apply(raw, nat, incoming, outgoing, forwarding=forwarding)
+    if forwarding:
+        warning = enable_local_forwarding()
+        if warning:
+            warnings.append(warning)
+    for warning in warnings:
+        print(f'router: {warning}', file=sys.stderr, flush=True)
+    # This advisory view is for make up. The gateway can serve if publication fails.
+    try:
+        LOCAL_GRANT_WARNINGS.write_text(''.join(f'{warning}\n' for warning in warnings))
+    except OSError as error:
+        print(f'router: Could not publish local grant warnings. {error.strerror}', file=sys.stderr, flush=True)
     state = Path('/var/lib/tor')
     state.mkdir(exist_ok=True)
     for base, dirs, files in os.walk(state):

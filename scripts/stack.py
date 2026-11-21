@@ -97,7 +97,7 @@ def main_unlocked():
         command = prefix + compose(config, extra=files) + options
         model, networked = inspect_launch(command, launch, dry_run=dry_run)
         if not dry_run and networked:
-            prepare_launch(command, model)
+            prepare_launch(command, model, build_missing=launch.build)
         run(command + rest)
         return
     config, prefix = settings(allow_unused_teep=args.action == 'up')
@@ -136,6 +136,10 @@ def main_unlocked():
         model = check_bind_sources(command, ['up', '--no-deps', *selected])
         prepare_launch(command, model)
         run(command + ['up', '-d', '--wait', '--no-deps', *infrastructure])
+        try:
+            run(command + ['exec', '-T', '--user', '65534:65534', 'tor', 'cat', '/tmp/local-grant-warnings'])
+        except subprocess.CalledProcessError:
+            print('Could not read local grant warnings. Check the tor service logs.', file=sys.stderr)
         controller = Controller(command, ROOT)
         # Setup already removed research registrations. The recreated gateway
         # reads that configuration without needing an old gateway's control RPC.

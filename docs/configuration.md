@@ -23,6 +23,7 @@ Compose explicitly selects each service's environment variables:
 | --- | --- |
 | Inference provider API keys | teep |
 | `TEEP_ENABLED` | Managed startup selects Teep. Defaults to `true`. |
+| `HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS`, `HERMES_INTEGRATIONS_LAN_ENDPOINTS` | Direct IPv4 TCP socket grants for the Hermes runtime. Both default to `none`. |
 | `TEEP_INSTALL_MODEL` | Offline setup when creating a new Hermes profile with Teep enabled |
 | `TEEP_HOST_PORT` | Compose loopback port publication for teep |
 | `TEEP_SERVE_ARGS` | Compose command arguments for `teep serve` |
@@ -230,11 +231,6 @@ Qualification evidence and platform/surface limitations are recorded in the
 
 ## Host inference access
 
-Set `TEEP_ENABLED=false` to omit the Teep build, container, uplink, published
-port, and provider-key check. Fresh profiles leave the provider and model unselected.
-Existing profiles keep their saved provider and model.
-Apply changes in Teep mode with `make down` followed by `make up`.
-
 The recommended provider is NearAI via teep's `neardirect` backend. Set
 `NEARAI_API_KEY` in `.env`. Managed startup requires a provider key when
 Teep is enabled. If you set an initial model, the **Teep** picker starts with
@@ -318,6 +314,74 @@ The stack already requires Docker Engine 28+, avoiding the older localhost
 publication behavior described there. Tests publish a disposable loopback port,
 verify host access to `/health`, and check agent/executor host-address blocks
 alongside the existing executor-to-inference denial and Tor routing checks.
+
+## Local inference and HTTP MCP
+
+Set `HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS` to a comma-separated list of
+TCP ports on `host.docker.internal`. Set `HERMES_INTEGRATIONS_LAN_ENDPOINTS`
+to a comma-separated list of literal RFC1918 IPv4 `address:port` pairs.
+The default for each list is `none`. A grant authorizes one TCP socket for
+Hermes. Literal LAN grants exclude reserved stack subnets and container
+networks checked at startup. An explicit grant can reach a host or VM socket
+if the engine can route to it. Check which machine owns each address before
+granting it, including routes through a VPN.
+
+Configure a named OpenAI-compatible provider in Hermes, for example with
+`http://host.docker.internal:11434/v1` as its base URL. Select the provider
+and model through Hermes's native configuration or model picker. Set the
+server's credentials in Hermes. For a LAN MCP service, add its URL under
+`mcp_servers` in the persisted configuration.
+
+```yaml
+mcp_servers:
+  lan_tools:
+    url: http://192.168.1.50:8765/mcp
+```
+
+When using HTTPS, keep certificate verification enabled. The native clients
+use the hostname or literal IP in the URL for certificate verification and
+use the URL for the HTTP Host header. A server using the host alias needs a
+certificate for `host.docker.internal`. A literal LAN URL needs a certificate
+with that IP address in its subject alternative names.
+
+The gateway uses the engine's native IPv4 host mapping. On Docker Desktop,
+that mapping can reach a listener bound to host loopback. On native rootless
+Podman with pasta, bind the server to the host's reachable interface address.
+A loopback-only listener is inaccessible through that mapping. Backend
+reachability depends on the engine host's route, listener bind, and firewall.
+For host port grants, managed startup passes the engine's numeric IPv4 mapping
+to the gateway. On Podman it obtains that address on the project's Tor uplink
+network. If the mapping is unavailable or unreachable, host grants stay closed.
+Literal LAN grants use their configured addresses independently of the host
+mapping. Docker LAN grants are available on Docker Desktop. `make up` reports
+closed grants and the gateway logs the reason. Apply changes to the daemon's
+host mapping with `make down` and `make up`.
+
+The gateway forwards IPv4 fragmentation-needed feedback for granted TCP flows.
+VPNs or firewalls that suppress this feedback can still stall large transfers
+even when a small health response succeeds.
+
+Leave `TEEP_ENABLED=true` to switch between Teep and a named local provider in
+Hermes while the stack runs. Setup adds the Teep provider when creating a
+profile with Teep enabled and selects it only if you supply an initial model.
+With `TEEP_ENABLED=false`, a fresh profile starts without a provider or model
+selected. Use Hermes provider setup to choose your local endpoint and model.
+
+Disabling Teep skips its image build, container, uplink network, published port,
+and provider-key check. Existing profiles keep their saved provider and model.
+To add Teep to a profile created with Teep disabled, enable the service and add
+an OpenAI-compatible provider in Hermes with the base URL
+`http://10.203.83.3:8337/v1`, then select a model.
+Run `make down` and `make up` after changing Teep mode or either grant list.
+Ordinary shutdown removes the old Teep publication and keeps persistent state.
+
+Initial startup waits for Tor bootstrap. Once the stack is running, the local
+path can operate during Tor circuit loss while the gateway namespace is still
+running. Gateway stop or restart can interrupt local connections. Hermes tools
+and plugins share the runtime's socket authority. Executor code has no direct
+local path, but its allowlisted Hermes tool RPC may invoke a configured local
+backend. Browser content and image-fetch restrictions apply independently.
+See [network and execution boundaries](architecture.md#network-and-execution-boundaries).
 
 ## Persistent data layout
 
@@ -491,6 +555,10 @@ credential. Policy and retrieval responses are no-store, with no server image
 cache that could bypass a changed policy or revoked grant.
 
 ## Adding other selected HTTP MCP servers
+
+Use [local integration grants](#local-inference-and-http-mcp) for an HTTP MCP
+server on the engine host or LAN. For a server deployed on the stack's
+internal MCP network, use the separate allowlist below.
 
 The base allowlist is deliberately empty. A server should join only the
 `mcp-access` internal network and receive a fixed unused address such as

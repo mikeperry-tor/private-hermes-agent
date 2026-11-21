@@ -32,22 +32,47 @@ cannot grant a direct uplink.
   bridges have no host-side address. Neither application has an uplink.
 - Each namespace also has a default-deny firewall. Agent grants are limited to
   executor SSH at `10.203.82.3:2222`, teep at `10.203.83.3:8337`, configured MCP
-  IP/port pairs, and DNS at its Tor router. The executor gets only Tor DNS,
+  IP/port pairs, and DNS at its Tor router. Operators can also grant the
+  Hermes UID exact host TCP ports and RFC1918 address/port pairs through
+  the gateway. The executor gets only Tor DNS,
   public TCP through Tor, and replies to agent-initiated SSH connections.
 - Other private, shared-address, loopback (outside its own local process
   namespace), link-local, multicast, reserved, and connected-network targets
-  are denied. This covers ordinary Docker VM/host gateways, RPC port 111,
-  metadata addresses, and DNS answers that point into prohibited space.
+  are denied by default. This covers ordinary Docker VM/host gateways, RPC
+  port 111, metadata addresses, and DNS answers that point into prohibited space.
   Docker embedded DNS at `127.0.0.11` is blocked before DNAT.
 - Private GRE links carry original-destination packets across internal bridges;
   plain next-hop routing is blocked by Docker's internal bridge rules. The same
   GRE topology is used on Podman. The links stay within the container host or
   Docker Desktop VM; they are not Internet tunnels or encryption.
   Only the trusted namespace services create them. Linux GRE support is required;
-  setup fails closed if it is unavailable.
-- The router independently blocks prohibited destinations before NAT and
-  blocks all IP forwarding. It terminates permitted traffic at Tor's TransPort
-  and DNSPort. Tor's own outbound connections cannot reach private destinations.
+  setup fails closed if it is unavailable. The GRE MTU is 1,400 bytes for both
+  the internal leg to Tor and the internal leg of exact host and LAN forwarding.
+  Tor opens separate outbound sockets on the uplink, where the outbound route
+  governs their MTU.
+- The router starts with IPv4 forwarding disabled and installs a default-drop
+  forwarding policy before enabling exact local exceptions. It matches the
+  agent tunnel and source, the original grant, the current backend, and the
+  uplink in both directions. It allows IPv4 fragmentation-needed feedback
+  only when connection tracking ties the reply to the granted flow. The
+  engine's native host mapping stays in the
+  gateway. Hermes uses a reserved IPv4 alias through the tunnel to distinguish
+  host grants from LAN grants. IPv6 forwarding stays closed. Public traffic
+  terminates at Tor's TransPort and DNSPort. Tor's own outbound connections
+  cannot use the local exceptions.
+- Host port grants use the engine's numeric host mapping. Literal LAN grants
+  use the configured socket address, which may reach a host or VM service if
+  the engine routes to it.
+- With a native host mapping for requested host ports or a supported LAN grant,
+  managed startup lets the trusted router enable forwarding after filtering.
+  Podman exposes `/proc/sys` and Docker uses `systempaths=unconfined`, which
+  removes the default masked and read-only system paths. Native Linux Docker
+  retains its default system-path protections for LAN-only configurations
+  because Docker LAN forwarding requires Docker Desktop.
+  Empty grant lists retain the engine's protections on both engines.
+  The Hermes and executor containers keep their own system-path protections.
+  The initializer drops its capabilities before starting Tor. On Docker it
+  also recalculates TCP checksums on exact local GRE return traffic after NAT.
 - This deployment intentionally blocks non-loopback IPv6 and unsupported UDP,
   including QUIC. Tor DNS supports A, AAAA, and PTR over UDP; it is not a general
   DNS server. Public TCP is routed through Tor, not destination-allowlisted.
@@ -71,9 +96,11 @@ cannot grant a direct uplink.
   forwarding, tunnels, and root login are disabled. The SSH daemon has only
   the capabilities needed for privilege separation; executed code runs as
   unprivileged UID 10000 with no capabilities.
-- Tor failure blocks public egress; established application namespaces keep
-  their firewall rules and have no direct fallback. Existing local teep/MCP/SSH
-  paths remain usable. Initial startup waits for Tor readiness.
+- Tor failure blocks public egress. Established application namespaces keep
+  their firewall rules. Local Teep, internal MCP and SSH stay available after
+  startup. Exact host and LAN forwarding also survives circuit failure while
+  the gateway namespace remains online. Stopping or restarting it can interrupt
+  local connections. Initial startup waits for Tor readiness.
 
 Do not independently restart or recreate `agent-net` or `executor-net` while
 their application containers exist. Namespace-sharing containers can retain the
@@ -191,15 +218,12 @@ declared options, stops startup.
 | Empty executor `/tmp` and `/run` tmpfs mounts | Podman's overlay sets `notmpcopyup`, retaining the same modes and destinations. This prevents image-seeded files owned by upstream UID 1000 from blocking runner UID 10000's runtime setup. |
 | Restart backoff | A container that exits at once restarts about every 0.3 s. Startup with Teep enabled requires an inference provider key on both engines. Check `podman ps` and restart counts when a service does not become healthy. |
 
-Pasta maps `169.254.1.2` to the host's own address, not to host loopback. A
-host service bound to the host's address (or to all addresses) is reachable
-there from teep, which has a direct uplink and no endpoint firewall; Hermes, the
-executor, Tor and HAProxy did not reach it (`make podman-paths-test`). This is
-teep's accepted direct uplink. On Docker, teep is expected to reach the host
-through its uplink gateway in the same way; this is not tested on Docker. Do not run
-host services that trust local network peers while the stack runs. A service
-bound only to `127.0.0.1` is not reachable at `169.254.1.2`. Tailscale was not
-tested.
+Pasta's native host alias reaches the host's interface address. Bind a
+granted host service to that reachable address. A listener bound only to
+loopback is inaccessible through the alias. The Teep direct uplink can also
+reach host services on that interface. The executor, Tor process and HAProxy
+cannot use the Hermes grants. For setup details, see
+[local inference and HTTP MCP](configuration.md#local-inference-and-http-mcp).
 
 Bind data under `data/` is owned by subordinate user IDs on the host; use
 `podman unshare` for host-side copies (see [backup scope](configuration.md#backup-scope)).
