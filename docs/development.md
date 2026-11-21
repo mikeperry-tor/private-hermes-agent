@@ -164,7 +164,10 @@ host-side IPv4 address. The live VM-listener fixture verifies default denial,
 executor denial with grants configured, and literal LAN denial even when
 requested on 29.10.0. Its host-grant check fails with the default AppArmor
 profile, which denies enabling the gateway's IPv4 forwarding switch and leaves
-it closed.
+it closed. A [named AppArmor profile scoped to the gateway](configuration.md#native-linux-docker-with-apparmor)
+passed the exact TLS host grant, ungranted socket and executor denial, gateway
+restart, and grant removal on Engine 29.10.0 with AppArmor 4.1. A networkless
+control confirmed the neighboring forwarding sysctl stayed denied.
 
 Live Funnel enrollment, provider attestation, paid research/inference, funded
 settlement, Electron-wide browser privacy and untested platforms are outside

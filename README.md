@@ -166,6 +166,12 @@ HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS=11434,8080
 HERMES_INTEGRATIONS_LAN_ENDPOINTS=192.168.1.50:8765,192.168.1.50:8766,192.168.1.51:9000
 ```
 
+> **NOTE**: Docker's default AppArmor profile can keep host port grants closed
+> on native Debian/Linux. Rootless Podman supports host and LAN grants on Linux.
+> If you need to keep Docker, see the
+> [gateway-only AppArmor workaround](docs/configuration.md#native-linux-docker-with-apparmor)
+> for host port grants.
+
 A fresh install with Teep disabled starts without a selected provider or model.
 Use Hermes provider setup to add a named OpenAI-compatible provider for the local
 endpoint and select its model. Configure any HTTP MCP services and credentials

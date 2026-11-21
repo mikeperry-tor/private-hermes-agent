@@ -356,10 +356,6 @@ mapping. Docker LAN grants are available on Docker Desktop. `make up` reports
 closed grants and the gateway logs the reason. Apply changes to the daemon's
 host mapping with `make down` and `make up`.
 
-On Debian 13 ARM64 with Docker Engine 29.10.0, Docker's default AppArmor
-profile blocks the IPv4 forwarding switch. The gateway stays up with host
-grants closed.
-
 The gateway forwards IPv4 fragmentation-needed feedback for granted TCP flows.
 VPNs or firewalls that suppress this feedback can still stall large transfers
 even when a small health response succeeds.
@@ -397,6 +393,53 @@ and plugins share the runtime's socket authority. Executor code has no direct
 local path, but its allowlisted Hermes tool RPC may invoke a configured local
 backend. Browser content and image-fetch restrictions apply independently.
 See [network and execution boundaries](architecture.md#network-and-execution-boundaries).
+
+### Native Linux Docker with AppArmor
+
+Docker's default AppArmor profile can block the gateway's IPv4 forwarding
+switch. `make up` then reports that local grants are closed, and the gateway
+stays available for Tor. Rootless Podman is the recommended Linux option for
+host and LAN grants. Docker host port grants can also work with a separate,
+administrator-managed AppArmor profile for the `tor` service. This workaround
+was checked on Debian 13 ARM64 with Docker Engine 29.10.0 and AppArmor 4.1.
+Literal LAN grants on Docker remain scoped to Docker Desktop.
+
+1. Create a static profile named `private-hermes-tor` in
+   `/etc/apparmor.d/private-hermes-tor`. Use the `baseTemplate` shipped with
+   your Docker Engine release and keep its rules. For the tested Debian host,
+   use `abi <abi/3.0>,` and `#include <tunables/global>` above the profile
+   declaration and `#include <abstractions/base>` inside it. Keep the template's
+   profile flags and rule body, starting at `network,`. Substitute
+   `private-hermes-tor` for `.Name` and `.PeerName`, and the daemon's AppArmor
+   label for `.DaemonProfile` (`unconfined` on the tested host).
+   [Docker's AppArmor guide](https://docs.docker.com/engine/security/apparmor/#understand-the-policies),
+   [Engine 29.10.0 template](https://github.com/moby/moby/blob/docker-v29.10.0/vendor/github.com/moby/profiles/apparmor/template.go)
+2. Add this rule inside the profile. The higher priority gives this one path
+   read and write access while the existing sysctl deny rule still applies to
+   other paths. The gateway still installs its firewall rules before enabling
+   forwarding. [AppArmor rule priorities](https://apparmor.net/man/4.1/apparmor.d/)
+
+   ```text
+   priority=1 /proc/sys/net/ipv4/ip_forward rw,
+   ```
+
+3. Compile the profile offline, then load it under its separate name.
+
+   ```sh
+   sudo apparmor_parser -Q -K /etc/apparmor.d/private-hermes-tor
+   sudo apparmor_parser -r -W /etc/apparmor.d/private-hermes-tor
+   ```
+
+4. Run `make down`. In your checkout's `compose.yaml`, append
+   `apparmor=private-hermes-tor` to the **`tor` service's** `security_opt` list.
+   Keep the existing entries so managed startup still applies its procfs
+   setting. Run `make up` and verify your granted endpoint from Hermes.
+
+Keep the Compose edit as a local patch you can reapply after stack updates.
+When updating Docker, refresh the named profile from the new release's default
+and verify the grant again. To remove the workaround, run `make down`, remove
+the `tor` profile entry, unload the named profile, and run `make up`.
+[Docker's profile loading and unloading instructions](https://docs.docker.com/engine/security/apparmor/#load-and-unload-profiles)
 
 ## Persistent data layout
 
