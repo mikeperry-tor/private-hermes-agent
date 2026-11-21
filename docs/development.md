@@ -399,6 +399,10 @@ round-trip excluding the live browser profile, human takeover refusal,
 active/startup cancellation, daemon/owner death and missing-harness recovery.
 Strict named-tab setup precedes model code, preserves intentional selection,
 repins after daemon restart, and retains traceback lines and `__main__` globals.
+Browser action children start with the executor's original isolated launch
+environment and the requested task workspace. The runner captures that
+environment before loading the harness. The updated runner is qualified on
+Docker Desktop ARM64 and Debian 13 ARM64 with rootless Podman.
 
 Run tool probes as Hermes/runner UID 10000. Root engine exec can create install
 locks with the wrong owner and invalidate restart checks. Real Chromium diagnostics

@@ -1,6 +1,6 @@
 Runtime and renderer changes from the upstream PR1–PR6 combined replay.
 Base: caafe5389ae585ef77387a962aee05b1bcf17029
-Head: e1311d5cea7b2be762877a74f4755bff4608e92c
+Head: 553cd75ac4da1c4e9cef7479d1962a026c593cda
 
 diff --git a/agent/agent_init.py b/agent/agent_init.py
 index fa4c1e24a000e9273b889982236fe675059d3ac1..d48bdd3083dfb4f3b38c35e981e352d335d2442e 100644
@@ -7687,10 +7687,10 @@ index 0000000000000000000000000000000000000000..409a41c3b0c90bbc5ada566830019832
 +        return tool_error(redact_sensitive_text(str(error), force=True))
 diff --git a/tools/browser_use_executor_runner.py b/tools/browser_use_executor_runner.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..b3da2bd3f6fc21150f4dab4f7a3daf7fac84e6d3
+index 0000000000000000000000000000000000000000..e02a56219f457c5e49028aa1cd76420099234f18
 --- /dev/null
 +++ b/tools/browser_use_executor_runner.py
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,125 @@
 +"""One executor-owned browser-harness session; EOF stops its CLI and daemon."""
 +import contextlib
 +import json
@@ -7744,7 +7744,9 @@ index 0000000000000000000000000000000000000000..b3da2bd3f6fc21150f4dab4f7a3daf7f
 +
 +
 +def main(shot_source):
-+    # Called through env -i, before importing the harness (which reads workspace .env).
++    # The launcher provides a clean environment via env -i. Keep later harness
++    # changes in this process from leaking into action children.
++    launch_env = dict(os.environ)
 +    for key in ('BH_HOME', 'BH_RUNTIME_DIR', 'BH_TMP_DIR', 'BH_AGENT_WORKSPACE', 'BH_DOWNLOAD_DIR'):
 +        Path(os.environ[key]).mkdir(mode=0o700, parents=True, exist_ok=True)
 +    from browser_harness import admin
@@ -7776,7 +7778,7 @@ index 0000000000000000000000000000000000000000..b3da2bd3f6fc21150f4dab4f7a3daf7f
 +                command = [sys.executable, '-c', _CHILD]
 +                proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 +                                        stderr=subprocess.PIPE, text=True, start_new_session=True,  # detached-spawn: ok — awaited; EOF/timeout kills this exact POSIX group
-+                                        cwd=workspace, env={**os.environ, 'BH_AGENT_WORKSPACE': workspace})
++                                        cwd=workspace, env={**launch_env, 'BH_AGENT_WORKSPACE': workspace})
 +                deadline = time.monotonic() + request['timeout']
 +                incoming = json.dumps({**request, 'shot': shot_source})
 +                while True:
