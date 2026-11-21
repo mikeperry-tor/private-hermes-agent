@@ -31,7 +31,9 @@ class TreasuryLaunchTests(unittest.TestCase):
                 command = deployment.maintenance_compose()
                 with self.assertRaisesRegex(deployment.EngineError, 'launch refused'):
                     treasury.Controller(command).wallet_command('prepare')
-                prepare.assert_called_once_with(command)
+                launch_model = prepare.call_args.args[1]
+                prepare.assert_called_once_with(command, launch_model)
+                self.assertEqual(set(launch_model['services']), {'x402_treazury-setup'})
                 # Only read-only model inspection preceded the refused launch;
                 # no onboarding container, log follower or financial work started.
                 self.assertEqual(len(run.call_args_list), 1)

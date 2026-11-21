@@ -27,6 +27,7 @@ class Settings:
     funnel_port: int
     node: str
     external_content: str
+    teep: bool
 
     @classmethod
     def read(cls, values):
@@ -61,7 +62,8 @@ class Settings:
         public_port = port(values['funnel_port'], 'TAILSCALE_FUNNEL_PORT')
         if public_port not in (443, 8443, 10000):
             raise ValueError('TAILSCALE_FUNNEL_PORT must be 443, 8443 or 10000')
-        return cls(onion, funnel, bind, local_port, username, host, public_port, node, external_content)
+        teep = boolean(values.get('teep_enabled', 'true'), 'TEEP_ENABLED')
+        return cls(onion, funnel, bind, local_port, username, host, public_port, node, external_content, teep)
 
 
 def authorities(host, port_number, default_port):

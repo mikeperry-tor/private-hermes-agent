@@ -115,11 +115,11 @@ Initialization uses the selected engine's Compose command to render configuratio
 so that command must already be installed. Existing settings are preserved when
 you rerun initialization.
 
-Set `NEARAI_API_KEY` in the generated root `.env` for the default NearAI
-`neardirect` inference route through Teep. The default model is
-`neardirect:z-ai/glm-5.3-flash`. Set `HERMES_DEFAULT_MODEL` in `.env` and
-run `make up` to choose another default. See [inference configuration](docs/configuration.md#host-inference-access)
-for model selection and the local OpenAI-compatible endpoint.
+Set a provider API key in the generated root `.env` to use Teep. The example
+selects `neardirect:z-ai/glm-5.3-flash` for NearAI with `NEARAI_API_KEY`. Set
+`TEEP_INSTALL_MODEL` to a model your provider serves, or leave it blank to choose
+in Hermes after startup. See [inference configuration](docs/configuration.md#host-inference-access)
+for Teep settings.
 
 To build and start the stack:
 
@@ -127,12 +127,22 @@ To build and start the stack:
 make up
 ```
 
+> **NOTE**: Always use `make up` and `make down` to manage the stack.
+> They prepare local state, validate the engine setup, and select the
+> services to start. Using `docker compose up` will bypass critical
+> initialization steps.
+
 Builds need Internet access, and use your host's default networking for this purpose, not Tor.
 
 Once the stack is up, open **[http://localhost:9120](http://localhost:9120)** and log
 in as `admin` with the password saved in the file `config/webapp/password`.
 
-The browser’s Code terminal opens in the same executor workspace as the agent.
+With Teep enabled and `TEEP_INSTALL_MODEL` blank, choose **I'll choose a
+provider later** if prompted in the WebApp. Open **Settings → Model**, select
+**Teep**, choose a model and apply the selection. In `make chat`, choose
+**Teep** and a model in the provider setup prompt.
+
+The browser's Code terminal opens in the same executor workspace as the agent.
 For an agent administration shell, set `WEBAPP_TERMINAL_ENVIRONMENT=agent`, run
 `make up` and reload the browser. See [terminal operation](docs/webapp.md#terminal-environment).
 

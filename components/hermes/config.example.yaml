@@ -1,11 +1,6 @@
-# Bootstrap copies this only when /opt/data/config.yaml does not exist.
-model:
-  provider: custom
-  base_url: http://10.203.83.3:8337/v1
-  api_key: unused
-  default: neardirect:z-ai/glm-5.3-flash
+# Setup uses this template only when /opt/data/config.yaml does not exist.
 providers:
-  custom:
+  teep:
     name: Teep
     base_url: http://10.203.83.3:8337/v1
     api_key: unused

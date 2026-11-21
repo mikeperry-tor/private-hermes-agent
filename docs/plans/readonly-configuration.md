@@ -17,13 +17,11 @@ to the SSH execution boundary are outside scope.
 
 ## Current baseline
 
-- `setup init` copies `components/hermes/config.example.yaml` into the `hermes-data` volume
-  only when `/opt/data/config.yaml` is absent.
-- For an existing config, setup checks the SSH backend and custom teep
-  endpoint before permitting agent startup.
-- Setup seeds a missing native Teep picker catalog and saves a nonblank root
-  `HERMES_DEFAULT_MODEL` preference on each managed startup. Any future
-  authoritative configuration design must account for these writes too.
+- `setup init` creates `/opt/data/config.yaml` from the packaged template. With
+  Teep enabled, a nonblank `TEEP_INSTALL_MODEL` seeds the initial selection and
+  starter catalog. A blank value leaves the selection to Hermes with Teep model
+  discovery enabled. Hermes owns saved provider and model choices.
+  Teep startup mode is a root deployment setting.
 - Hermes owns its writable state under `/opt/data`, including configuration,
   sessions, skills, and memories.
 - The networkless `hermes-config` command currently edits that same data volume

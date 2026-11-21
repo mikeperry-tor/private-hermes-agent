@@ -174,7 +174,8 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
 - Teep has its own direct uplink and explicitly approved host-loopback port.
   Provider keys belong there. Preserve its verification behavior; a health check
   is not evidence of successful attestation. Do not add direct-provider fallbacks
-  around the configured inference route.
+  around the configured inference route. Use managed `make up` and `make down`
+  for stack lifecycle and Teep selection. Provider choice stays in Hermes.
 - x402_treazury shares the agent network namespace for authenticated loopback MCP,
   but retains separate processes, mounts and wallet ownership. Only treasury
   receives its private Tor SOCKS socket. Keep wallet data away from Hermes and

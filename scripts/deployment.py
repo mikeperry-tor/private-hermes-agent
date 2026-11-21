@@ -1,4 +1,5 @@
 """Compose handles dotenv interpolation; this module validates feature settings."""
+from dataclasses import dataclass, field
 from functools import cache
 import io
 import json
@@ -6,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'components/webapp'))
@@ -21,6 +23,10 @@ ENGINES = ('docker', 'podman')
 # inherited DOCKER_HOST to the provider even with --remote=false.
 PODMAN_OVERRIDES = ('DOCKER_HOST', 'DOCKER_CONTEXT', 'CONTAINER_HOST', 'CONTAINER_CONNECTION')
 _AMBIENT_OVERRIDES = []
+# The nonempty space keeps Compose from expanding TEEP_SERVE_ARGS and
+# parses as no arguments after the Teep command's fixed `serve` word.
+TEEP_RENDER_PLACEHOLDERS = {'PRIVATE_HERMES_TEEP_PORT_OVERRIDE': '8337',
+                            'PRIVATE_HERMES_TEEP_ARGS_OVERRIDE': ' '}
 
 
 class EngineError(RuntimeError):
@@ -144,19 +150,19 @@ def check_engine():
         raise EngineError('Docker Compose 2.36 or later is required.')
 
 
-def prepare_launch(command):
-    """Check the engine, then create Podman networks, before a networked launch."""
+def prepare_launch(command, model):
+    """Check the engine and prepare the selected networks before a launch."""
     check_engine()
-    ensure_networks(command)
+    if model is not None:
+        ensure_networks(model)
 
 
 def remove_networks(command):
     """On Podman, remove the project networks that Compose `down` left.
 
-    ensure_networks() creates the networks of every profile; Compose `down`
-    removes only those of the services it manages. Only networks with this
-    project's Compose label are removed. A failure is reported and does not
-    block shutdown.
+    The full model covers networks left by older launches. Only networks with
+    this project's Compose label are removed. A failure is reported and does
+    not block shutdown.
     """
     if engine() != 'podman':
         return
@@ -180,7 +186,7 @@ def remove_networks(command):
             print(f'Could not remove Podman network {name}: {removed.stderr.strip()}', file=sys.stderr, flush=True)
 
 
-def ensure_networks(command):
+def ensure_networks(config):
     """On Podman, create the project's networks with their declared options.
 
     Compose creates networks through Podman's Docker-compatible API, which sets
@@ -191,7 +197,6 @@ def ensure_networks(command):
     """
     if engine() != 'podman':
         return
-    config = json.loads(_output(*command, '--profile', '*', 'config', '--format', 'json'))
     for key, network in (config.get('networks') or {}).items():
         if network.get('external'):
             continue
@@ -239,10 +244,23 @@ def compose_files(funnel, extra=()):
     return [argument for name in files for argument in ('-f', name)]
 
 
-def settings(extra=(), options=()):
-    result = subprocess.run([*compose_base(), *compose_files(False, extra), *options, 'config', '--format', 'json'],
-                            cwd=ROOT, text=True, capture_output=True, check=True)
-    return Settings.read(json.loads(result.stdout)['x-deployment'])
+def settings(extra=(), options=(), *, allow_unused_teep=False):
+    """Read deployment settings and return any command prefix needed for this launch."""
+    command = [*compose_base(), *compose_files(False, extra), *options, 'config', '--format', 'json']
+    prefix = ['env', *(f'{name}=' for name in TEEP_RENDER_PLACEHOLDERS)]
+    result = subprocess.run(prefix + command, cwd=ROOT, text=True, capture_output=True)
+    if result.returncode and allow_unused_teep:
+        # Compose parses commands and ports for unselected services too. Retry
+        # with placeholders only when reading a managed launch that omits Teep.
+        disabled = ['env', *(f'{name}={value}' for name, value in TEEP_RENDER_PLACEHOLDERS.items())]
+        retry = subprocess.run(disabled + command, cwd=ROOT, text=True, capture_output=True)
+        if retry.returncode == 0:
+            config = Settings.read(json.loads(retry.stdout)['x-deployment'])
+            if not config.teep:
+                return config, disabled
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or 'Compose could not render the deployment settings.')
+    return Settings.read(json.loads(result.stdout)['x-deployment']), prefix
 
 
 def compose(config, all_ingress=False, extra=()):
@@ -256,7 +274,7 @@ def maintenance_compose(all_ingress=False, executor_build=False, extra=()):
     os.environ.update(WEBAPP_TERMINAL_ENVIRONMENT='code', TOR_ONION_ENABLED='false', TAILSCALE_FUNNEL_ENABLED='false', WEBAPP_EXTERNAL_CONTENT='off',
                       WEBAPP_BIND='127.0.0.1', WEBAPP_PORT='9120', WEBAPP_USERNAME='admin',
                       TAILSCALE_FUNNEL_HOST='', TAILSCALE_FUNNEL_PORT='443',
-                      TAILSCALE_HOSTNAME='private-hermes', TEEP_HOST_PORT='8337', TEEP_SERVE_ARGS='')
+                      TAILSCALE_HOSTNAME='private-hermes', **TEEP_RENDER_PLACEHOLDERS)
     if not executor_build:
         # Saved-state inspection/shutdown do not select or build an executor.
         # An invalid optional desktop preference must not block those operations.
@@ -264,18 +282,13 @@ def maintenance_compose(all_ingress=False, executor_build=False, extra=()):
     return [*compose_base(), *compose_files(all_ingress, extra)]
 
 
-def maintenance_command(arguments):
-    if not arguments:
-        return False
-    if arguments[0] in ('build', 'logs', 'ps', 'top', 'port', 'exec', 'stop', 'down', 'rm', 'kill', 'pause', 'unpause'):
+def maintenance_command(launch):
+    if launch.action in ('build', 'logs', 'ps', 'top', 'port', 'exec', 'stop', 'down', 'rm', 'kill', 'pause', 'unpause'):
         return True
     # Explicit networkless maintenance jobs; do not normalize arbitrary launches.
-    if arguments[0] != 'run':
-        return False
-    service, no_deps, _ = _run_target(arguments)
-    return no_deps and service in ('hermes-config', 'setup-storage', 'mcp-config',
-                                  'onion-inspect', 'onion-init',
-                                  'x402_treazury-inspect', 'x402_treazury-admin')
+    return launch.action == 'run' and launch.no_deps and launch.targets[0] in (
+        'hermes-config', 'setup-storage', 'mcp-config', 'onion-inspect', 'onion-init',
+        'x402_treazury-inspect', 'x402_treazury-admin')
 
 
 def render(config):
@@ -291,8 +304,7 @@ def render(config):
 # Compose global options that the stack.py passthrough accepts before the subcommand.
 GLOBAL_OPTIONS = {'-p': 'project', '--project-name': 'project', '--profile': 'profile', '-f': 'file',
                   '--file': 'file', '--env-file': 'env', '--project-directory': 'directory'}
-# Compose subcommands that create no network. Every other subcommand, including
-# an unknown one, is prepared as a launch (run only for a networked service).
+# Compose subcommands that create no network.
 NO_NETWORKS = ('config', 'ps', 'ls', 'logs', 'top', 'port', 'images', 'version', 'events', 'exec', 'stop',
                'down', 'rm', 'kill', 'pause', 'unpause', 'build', 'pull', 'push', 'cp', 'wait', 'attach',
                'stats', 'commit', 'export', 'volumes')
@@ -307,26 +319,29 @@ RUN_FLAG_OPTIONS = ('--build', '-d', '--detach', '--dry-run', '-i', '--interacti
                     '--remove-orphans', '--rm', '-P', '--service-ports', '--use-aliases')
 
 
-def _run_target(rest, volumes=None):
+def _run_target(rest, volumes):
     """Find the service and launch flags before a run's container command."""
     arguments, no_deps, dry_run = iter(rest[1:]), False, None
+    build = False
     for value in arguments:
         if value == '--':
-            return next(arguments, None), no_deps, dry_run
+            return next(arguments, None), no_deps, dry_run, build
         if not value.startswith('-'):
-            return value, no_deps, dry_run
+            return value, no_deps, dry_run, build
         name, equals, operand = value.partition('=')
         if name in RUN_VALUE_OPTIONS:
             value = operand if equals else next(arguments, None)
             if value is None:
-                return None, no_deps, dry_run
-            if name in ('-v', '--volume') and volumes is not None:
+                return None, no_deps, dry_run, build
+            if name in ('-v', '--volume'):
                 volumes.append(value)
         elif name in RUN_FLAG_OPTIONS:
             if name == '--no-deps':
                 no_deps = not equals or operand in ('true', '1', 't', 'T', 'TRUE', 'True')
             elif name == '--dry-run':
-                dry_run = _dry_run_flag(value)
+                dry_run = _compose_flag_enabled(value)
+            elif name == '--build':
+                build = _compose_flag_enabled(value)
         elif not value.startswith('--'):
             # Native shorthand clusters, e.g. -Te NAME=value or -eNAME=value.
             # A value-taking option consumes the rest of the token or the next.
@@ -336,18 +351,18 @@ def _run_target(rest, volumes=None):
                     attached = value[index + 1:]
                     operand = attached.removeprefix('=') if attached else next(arguments, None)
                     if operand is None:
-                        return None, no_deps, dry_run
-                    if short == '-v' and volumes is not None:
+                        return None, no_deps, dry_run, build
+                    if short == '-v':
                         volumes.append(operand)
                     break
                 if short not in RUN_FLAG_OPTIONS:
                     raise ValueError(f'Unsupported Compose run option {short}; use separate supported flags.')
         else:
             raise ValueError(f'Unsupported Compose run option {name}.')
-    return None, no_deps, dry_run
+    return None, no_deps, dry_run, build
 
 
-def _dry_run_flag(value):
+def _compose_flag_enabled(value):
     # Go/pflag's accepted false spellings; malformed values fail in Compose.
     return value.partition('=')[2] not in ('false', 'False', 'FALSE', '0', 'f', 'F')
 
@@ -363,23 +378,31 @@ CREATE_FLAGS = ('--abort-on-container-exit', '--abort-on-container-failure',
                 '-V', '--renew-anon-volumes', '--timestamps', '--wait', '-y', '--yes')
 
 
-def check_bind_sources(command, rest, *, dry_run=False):
-    """Reject absent required sources before a supported container creation.
+@dataclass
+class ComposeLaunch:
+    action: str
+    targets: list = field(default_factory=list)
+    volumes: list = field(default_factory=list)
+    scales: dict = field(default_factory=dict)
+    no_deps: bool = False
+    build: bool = False
+    dry_run: Optional[bool] = None
 
-    Compose resolves paths, profiles and dependency selection. This is a host
-    preflight, not atomic enforcement against concurrent host filesystem changes.
-    """
-    if not rest or rest[0] in NO_NETWORKS or rest[0] in ('start', 'restart'):
-        return
-    action, volumes, targets, no_deps = rest[0], [], [], False
-    scales = {}
+
+def parse_launch(rest):
+    action = rest[0] if rest else ''
+    launch = ComposeLaunch(action)
+    if not action or action in NO_NETWORKS or action in ('start', 'restart'):
+        return launch
+    targets, volumes, scales = launch.targets, launch.volumes, launch.scales
     if action == 'run':
-        target, no_deps, _ = _run_target(rest, volumes)
+        target, launch.no_deps, launch.dry_run, launch.build = _run_target(rest, volumes)
         if target is None:
             raise ValueError('Compose run requires a service')
-        targets = [target]
+        targets.append(target)
     elif action in ('up', 'create'):
         arguments = iter(rest[1:])
+        recreate_dependencies = False
         for value in arguments:
             if value == '--':
                 targets.extend(arguments)
@@ -399,10 +422,16 @@ def check_bind_sources(command, rest, *, dry_run=False):
                     scales[service] = int(count)
             elif name in CREATE_FLAGS:
                 if name == '--no-deps':
-                    no_deps = _dry_run_flag(value)
+                    launch.no_deps = _compose_flag_enabled(value)
+                elif name == '--build':
+                    launch.build = _compose_flag_enabled(value)
+                elif name == '--dry-run':
+                    launch.dry_run = _compose_flag_enabled(value)
+                elif name == '--always-recreate-deps':
+                    recreate_dependencies = _compose_flag_enabled(value)
             else:
                 raise ValueError(f'Unsupported Compose creation option {name}; use separate supported flags.')
-        if no_deps and any(x.split('=')[0] == '--always-recreate-deps' for x in rest[1:]):
+        if launch.no_deps and recreate_dependencies:
             raise ValueError('Do not combine --no-deps and --always-recreate-deps')
     elif action == 'scale':
         for value in rest[1:]:
@@ -415,14 +444,43 @@ def check_bind_sources(command, rest, *, dry_run=False):
             raise ValueError('Compose scale requires SERVICE=COUNT')
     else:
         raise ValueError(f'Unsupported Compose creation command {action}; use up, create or run.')
-    if dry_run:
-        return
+    return launch
+
+
+def check_bind_sources(command, rest, *, dry_run=False):
+    """Check required binds and return the effective model for container creation."""
+    model, _ = inspect_launch(command, parse_launch(rest), dry_run=dry_run)
+    return model
+
+
+def inspect_launch(command, launch, *, dry_run=False, require_offline=False):
+    """Render the selected services once and check the requirements for this operation."""
+    action, targets = launch.action, launch.targets
+    if not action or action in NO_NETWORKS:
+        return None, False
+    if action in ('start', 'restart'):
+        return None, True
+    if dry_run and not require_offline:
+        return None, False
     model = json.loads(_output(*command, 'config', '--format', 'json',
                                *(['--', *targets] if targets else [])))
     services = model.get('services') or {}
+    # Compose can create dependency networks even when --no-deps prevents
+    # starting their containers. Check those dependencies before filtering.
+    def networked(name):
+        service = services.get(name, {})
+        return service.get('network_mode') != 'none' or any(
+            networked(dep) for dep in service.get('depends_on') or {})
+
+    needs_networks = action != 'run' or networked(targets[0])
+    if require_offline and needs_networks:
+        raise ValueError('Offline maintenance jobs require network_mode: none for the job and its dependencies. '
+                         'Remove the networking/dependency override before running this job.')
+    if dry_run:
+        return None, False
     # A run override supersedes the target mount, never a dependency's mount.
     overrides = {}
-    for volume in volumes:
+    for volume in launch.volumes:
         parts = volume.split(':')
         if len(parts) == 1:
             overrides[parts[0]] = None  # anonymous volume
@@ -439,11 +497,13 @@ def check_bind_sources(command, rest, *, dry_run=False):
                 overrides[destination] = None  # named volume
         else:
             raise ValueError('Unsupported Compose run volume syntax')
+    launch_services = {}
     for name, service in services.items():
-        if action != 'run' and scales.get(name, service.get('scale', service.get('deploy', {}).get('replicas', 1))) == 0:
+        if action != 'run' and launch.scales.get(name, service.get('scale', service.get('deploy', {}).get('replicas', 1))) == 0:
             continue
-        if no_deps and targets and name not in targets:
+        if launch.no_deps and targets and name not in targets:
             continue
+        launch_services[name] = service
         mounts = {mount['target']: mount for mount in service.get('volumes', [])}
         if action == 'run' and name == targets[0]:
             for destination, source in overrides.items():
@@ -456,34 +516,12 @@ def check_bind_sources(command, rest, *, dry_run=False):
             if not source or not Path(source).exists():
                 raise RuntimeError(f'Required bind source missing for service {name}: {source}. '
                                    'Restore the source or run its documented initialization before launching.')
-
-
-def needs_networks(command, rest):
-    """Only a none-mode run whose dependencies are also none-mode is offline.
-
-    Compose can create a namespace owner's networks for service:/container:
-    runs, or dependency networks for none-mode jobs, even with --no-deps.
-    Unknown services are treated as networked.
-    """
-    if not rest or rest[0] in NO_NETWORKS:
-        return False
-    if rest[0] != 'run':
-        return True
-    service, _, _ = _run_target(rest)
-    if service is None:
-        return True
-    config = json.loads(_output(*command, '--profile', '*', 'config', '--format', 'json'))
-    # Compose validates the dependency graph (including cycles) when rendering.
-    # --no-deps suppresses startup, but not dependency network creation.
-    def networked(name):
-        definition = (config.get('services') or {}).get(name) or {}
-        return definition.get('network_mode') != 'none' or any(
-            networked(dependency) for dependency in definition.get('depends_on') or {})
-    return networked(service)
+    model['services'] = launch_services
+    return model, needs_networks
 
 
 def split_passthrough(arguments):
-    """Split `compose` passthrough arguments into (files, global options, dry run, rest).
+    """Split `compose` passthrough arguments into (files, global options, dry run, rest, launch).
 
     The rest starts with the Compose subcommand. Files are returned apart so that
     the engine files stay last. An unsupported global option is an error: the
@@ -494,7 +532,7 @@ def split_passthrough(arguments):
     while rest and rest[0].startswith('-'):
         argument = rest.pop(0)
         if argument == '--dry-run' or argument.startswith('--dry-run='):
-            dry_run = _dry_run_flag(argument)
+            dry_run = _compose_flag_enabled(argument)
             options.append(argument)
             continue
         name, value = argument, None
@@ -513,11 +551,10 @@ def split_passthrough(arguments):
             files.append(value)
         else:
             options += [name, value]
-    if rest and rest[0] == 'run':
-        _, _, command_dry_run = _run_target(rest)
-        if command_dry_run is not None:
-            dry_run = command_dry_run
-    else:
+    launch = parse_launch(rest)
+    if launch.dry_run is not None:
+        dry_run = launch.dry_run
+    elif launch.action not in ('run', 'up', 'create', 'scale'):
         arguments = iter(rest[1:])
         for argument in arguments:
             if argument == '--':
@@ -531,8 +568,8 @@ def split_passthrough(arguments):
                     next(arguments, None)
                 continue
             if argument == '--dry-run' or argument.startswith('--dry-run='):
-                dry_run = _dry_run_flag(argument)
-    return files, options, dry_run, rest
+                dry_run = _compose_flag_enabled(argument)
+    return files, options, dry_run, rest, launch
 
 
 if __name__ == '__main__':

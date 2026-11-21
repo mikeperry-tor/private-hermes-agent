@@ -59,12 +59,14 @@ class MaintenanceScopeTests(unittest.TestCase):
                     ['run', '--rm', '--no-deps', 'hermes-config', 'set', 'terminal.backend', 'ssh'],
                     ['run', '--rm', '-T', '--no-deps', '--entrypoint', '/usr/local/bin/x402_treazury',
                      'x402_treazury-admin', 'wallet', 'preview'],
+                    ['run', '--rm', '--no-deps', '--entrypoint', '/usr/local/bin/x402_treazury',
+                     'x402_treazury-admin', 'config', 'show'],
                     ['run', '--rm', '--no-deps', '--volume', '/private/backup:/backup',
                      '--entrypoint', '/usr/local/bin/x402_treazury', 'x402_treazury-inspect', 'wallet', 'backup'])
         for command in commands:
             with patch.dict(os.environ, BAD), patch.object(sys, 'argv', ['stack.py', 'compose', *command]), \
                     patch.object(stack, 'settings', side_effect=AssertionError('unrelated validation')), \
-                    patch.object(stack, 'run') as run, patch.object(stack, 'check_bind_sources'):
+                    patch.object(stack, 'run') as run, patch.object(stack, 'inspect_launch'):
                 stack.main()
             self.assertEqual(run.call_args.args[0][-len(command):], command)
         for command in (['up'], ['run', '--rm', '--no-deps', 'hermes', 'gateway', 'run'],

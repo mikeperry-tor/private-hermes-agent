@@ -24,25 +24,109 @@ def main():
             smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
                           '/opt/hermes/.venv/bin/python', 'setup', '-c',
                           "from pathlib import Path; p=Path('/opt/data/.local/bin/ssh-keygen'); p.parent.mkdir(parents=True); p.write_text('#!/bin/sh\\nexit 99\\n'); p.chmod(0o755)")
-            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
+            install_model = 'neardirect:qualification/arbitrary-model'
+            smoke.compose('run', '--rm', '-T', '--no-deps', '-e', 'TEEP_ENABLED=true',
+                          '-e', 'TEEP_INSTALL_MODEL=' + install_model, '--entrypoint',
                           '/opt/hermes/.venv/bin/python', 'setup', '-c', """
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0,'/opt/private-hermes/provisioning')
+import hermes_yaml as yaml
+
+sys.path.insert(0, '/opt/private-hermes/provisioning')
 import setup
-sys.argv=['setup','init']
-with patch('private_files.os.link', side_effect=OSError('injected interrupted publication')):
- try: setup.main()
- except OSError: pass
- else: raise AssertionError('Expected interrupted default publication')
-assert not Path('/opt/data/config.yaml').exists()
-assert not list(Path('/opt/data').glob('tmp*'))
-""")
-            smoke.initialize_setup(smoke.COMPOSE)
-            print('PASS: interrupted initial Hermes default publication leaves no final file; real setup safely retries', flush=True)
+
+model = sys.argv[1]
+sys.argv = ['setup', 'init']
+config = Path('/opt/data/config.yaml')
+link = os.link
+
+def interrupt_config(source, destination):
+    if Path(destination) == config:
+        template = yaml.safe_load(Path(source).read_text())
+        assert template['model']['default'] == model
+        assert model in template['providers']['teep']['models']
+        raise OSError('injected config publication failure')
+    return link(source, destination)
+
+with patch('private_files.os.link', side_effect=interrupt_config):
+    try:
+        setup.main()
+    except OSError as error:
+        assert str(error) == 'injected config publication failure'
+    else:
+        raise AssertionError('Expected interrupted config publication')
+assert not config.exists()
+assert not list(config.parent.glob('tmp*'))
+""", install_model)
+            smoke.compose('run', '--rm', '-T', '--no-deps', '-e', 'TEEP_ENABLED=true',
+                          '-e', 'TEEP_INSTALL_MODEL=' + install_model, 'setup', 'init')
+            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
+                          '/opt/hermes/.venv/bin/python', 'setup', '-c', """
+from pathlib import Path
+import sys
+import hermes_yaml as yaml
+from hermes_cli.runtime_provider import frozen_runtime_config, resolve_runtime_provider
+
+config = yaml.safe_load(Path('/opt/data/config.yaml').read_text())
+assert config['model'] == {'provider': 'custom:teep', 'default': sys.argv[1]}
+assert sys.argv[1] in config['providers']['teep']['models']
+with frozen_runtime_config(config):
+    assert resolve_runtime_provider()['base_url'] == config['providers']['teep']['base_url']
+""", install_model)
+            print('PASS: interrupted publication retries with the selected install model and Teep catalog', flush=True)
             smoke.compose('run', '--rm', '-T', '--no-deps', 'hermes-config',
                           'set', 'model.default', 'setup-qualification-model')
+            smoke.compose('run', '--rm', '-T', '--no-deps', '-e', 'TEEP_ENABLED=false',
+                          '-e', 'TEEP_INSTALL_MODEL=fixture-ignored', 'setup', 'init')
+            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
+                          '/opt/hermes/.venv/bin/python', 'setup', '-c', r"""
+import os
+from pathlib import Path
+import sys
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+import hermes_yaml as yaml
+from hermes_cli.main import _has_any_provider_configured
+
+sys.path.insert(0, '/opt/private-hermes/provisioning')
+import setup
+
+saved = yaml.safe_load(Path('/opt/data/config.yaml').read_text())
+assert saved['model']['default'] == 'setup-qualification-model'
+assert 'fixture-ignored' not in saved['providers']['teep']['models']
+sys.argv = ['setup', 'init']
+for enabled, model in [('true', ''), ('false', 'fixture-disabled')]:
+    with TemporaryDirectory(dir='/tmp') as folder, patch.dict(
+            os.environ, HERMES_HOME=folder, TEEP_ENABLED=enabled, TEEP_INSTALL_MODEL=model):
+        setup.HERMES = Path(folder)
+        setup.main()
+        config = yaml.safe_load((setup.HERMES / 'config.yaml').read_text())
+        assert 'model' not in config
+        assert not _has_any_provider_configured(strict_profile_scope=True)
+        if enabled == 'true':
+            teep = config['providers']['teep']
+            assert teep['base_url'] == 'http://10.203.83.3:8337/v1'
+            assert teep['discover_models'] and 'models' not in teep
+        else:
+            assert config['providers'] == {}
+with TemporaryDirectory(dir='/tmp') as folder:
+    setup.HERMES = Path(folder)
+    path = setup.HERMES / 'config.yaml'
+    secret = 'fixture-credential-must-not-appear-in-setup-errors'
+    malformed = 'providers:\n  fixture:\n    api_key: ' + secret + '\n    api_key: duplicate\n'
+    path.write_text(malformed)
+    try:
+        setup.main()
+    except SystemExit as error:
+        message = str(error)
+        assert 'Invalid Hermes config.yaml at line' in message and secret not in message
+    else:
+        raise AssertionError('Expected malformed config refusal')
+    assert path.read_text() == malformed
+""")
+            print('PASS: blank install model leaves fresh profiles unselected and preserves saved choices', flush=True)
             for job, interpreter, uid, forbidden in (
                     ('hermes-config', '/opt/hermes/.venv/bin/python', 10000,
                      ['/var/lib/x402/state', '/persistent-data', '/run/webapp/auth.json']),
@@ -101,46 +185,6 @@ for section in ('terminal', 'model'):
             smoke.initialize_setup(smoke.COMPOSE)
             assert identities() == original_identities
             print('PASS: real setup reconstructs incomplete SSH public sidecars without replacing private identities', flush=True)
-            # An already initialized profile may predate the picker catalog.
-            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
-                          '/opt/hermes/.venv/bin/python', 'setup', '-c',
-                          "from pathlib import Path; import hermes_yaml as yaml; p=Path('/opt/data/config.yaml'); c=yaml.safe_load(p.read_text()); c.pop('providers'); p.write_text(yaml.safe_dump(c))")
-            smoke.initialize_setup(smoke.COMPOSE)
-            assert identities() == original_identities
-            # An arbitrary Teep model is accepted; setup, not host make init,
-            # applies the root preference to the persistent native profile.
-            preferred = 'neardirect:qualification/arbitrary-model'
-            smoke.compose('run', '--rm', '-T', '--no-deps', '-e',
-                          'HERMES_DEFAULT_MODEL=' + preferred, 'setup', 'init')
-            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
-                          '/opt/hermes/.venv/bin/python', 'setup', '-c', """
-from pathlib import Path
-from unittest.mock import patch
-import hermes_yaml as yaml
-from hermes_cli.model_switch_providers import _PickerBuild, _lap_user_provider_rows
-config = yaml.safe_load(Path('/opt/data/config.yaml').read_text())
-assert config['model']['default'] == 'neardirect:qualification/arbitrary-model'
-expected = set(yaml.safe_load(Path('/opt/private-hermes/hermes/config.example.yaml').read_text())['providers']['custom']['models'])
-expected.add(config['model']['default'])
-picker = _PickerBuild(current_provider='custom', current_base_url=config['model']['base_url'],
-                      current_model=config['model']['default'], max_models=None,
-                      for_picker=True, force_fresh_nous_tier=False, probe_custom_providers=True,
-                      probe_current_custom_provider=True, refresh=False, excluded=set(), curated={})
-with patch('hermes_cli.models.fetch_api_models', side_effect=AssertionError('Unexpected discovery')):
-    _lap_user_provider_rows(picker, config['providers'])
-row, = picker.results
-assert row['slug'] == 'custom' and row['is_current']
-assert set(row['models']) == expected
-assert row['api_url'] == 'http://10.203.83.3:8337/v1'
-""")
-            smoke.initialize_setup(smoke.COMPOSE)
-            smoke.compose('run', '--rm', '-T', '--no-deps', '--entrypoint',
-                          '/opt/hermes/.venv/bin/python', 'setup', '-c',
-                          "from pathlib import Path; import hermes_yaml as yaml; assert yaml.safe_load(Path('/opt/data/config.yaml').read_text())['model']['default']=='neardirect:qualification/arbitrary-model'")
-            smoke.compose('run', '--rm', '-T', '--no-deps', 'hermes-config',
-                          'set', 'model.default', 'setup-qualification-model')
-            assert identities() == original_identities
-            print('PASS: root model preference and native Teep picker accept additional model IDs without changing the inference route', flush=True)
             smoke.compose('run', '--rm', '-T', '--no-deps', 'hermes-config',
                           'set', 'terminal.backend', 'local')
             smoke.initialize_setup(smoke.COMPOSE)

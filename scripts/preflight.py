@@ -11,6 +11,7 @@ import textwrap
 import deployment
 from deployment import compose_base, compose_files, engine, engine_command
 
+
 ADDRESS_PLAN_HELP = ('Pinned subnets live in the networks: block of compose.yaml.',
                      'Funnel networks (funnel-link and tailscale-uplink) live in compose.funnel.yaml.')
 
@@ -324,11 +325,13 @@ def main():
     parser.add_argument('project', nargs='?', default='private-hermes')
     parser.add_argument('--funnel', action='store_true')
     parser.add_argument('--skip-ports', action='store_true')
+    parser.add_argument('--services', nargs='+', help='Check the selected Compose services and their networks')
     arguments = parser.parse_args()
     project = arguments.project
     check_engine()
     command = [*compose_base(), '-p', project, *compose_files(arguments.funnel)]
-    config = json.loads(output(*command, 'config', '--format', 'json'))
+    config = json.loads(output(*command, 'config', '--format', 'json',
+                               *(['--', *arguments.services] if arguments.services else [])))
     check_security_options(config)
     check_pinned_networks(config)
     identifiers = output(*engine_command(), 'network', 'ls', '-q').split()

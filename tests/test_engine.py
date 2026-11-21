@@ -1,6 +1,7 @@
 """Engine selection, engine commands, the Podman overlays and checks that depend on the engine."""
 import importlib.util
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -252,7 +253,7 @@ class PassthroughTests(unittest.TestCase):
         )
         for arguments, expected in cases:
             with self.subTest(arguments=arguments):
-                self.assertEqual(deployment.split_passthrough(arguments), expected)
+                self.assertEqual(deployment.split_passthrough(arguments)[:4], expected)
 
     def test_unsupported_or_incomplete_global_options_are_refused(self):
         for arguments in (['--ansi', 'never', 'up'], ['-c', 'ctx', 'up'], ['--profile'], ['--parallel=2', 'up']):
@@ -274,7 +275,7 @@ class PassthroughTests(unittest.TestCase):
         with patch.object(sys, 'argv', ['stack.py', 'compose', *arguments]), patch.dict(os.environ), \
                 patch.object(deployment, 'engine', return_value=selected), \
                 patch.object(deployment, '_output', return_value=model), \
-                patch.object(stack, 'settings', return_value=settings), \
+                patch.object(stack, 'settings', return_value=(settings, [])), \
                 patch.object(stack, 'prepare_launch') as prepare, patch.object(stack, 'remove_networks') as cleanup, \
                 patch.object(stack, 'run') as run:
             if rejected:
@@ -481,7 +482,7 @@ class NetworkCreationTests(unittest.TestCase):
                            'driver_opts': {'isolate': 'strict', 'no_default_route': 'true'}},
         'outside': {'name': 'shared', 'external': True}}}
 
-    def run_ensure(self, inspected):
+    def run_ensure(self, inspected, config=CONFIG):
         calls = []
         def run(arguments, **kwargs):
             calls.append(arguments)
@@ -490,9 +491,8 @@ class NetworkCreationTests(unittest.TestCase):
                 return subprocess.CompletedProcess(arguments, 0 if found else 125, json.dumps([found]) if found else '', '')
             return subprocess.CompletedProcess(arguments, 0, '', '')
         with patch.object(deployment, 'engine', return_value='podman'), \
-                patch.object(deployment, '_output', return_value=json.dumps(self.CONFIG)), \
                 patch.object(deployment.subprocess, 'run', side_effect=run):
-            deployment.ensure_networks(['docker', 'compose', '-p', 'private-hermes'])
+            deployment.ensure_networks(config)
         return [call[2:] for call in calls if call[:4] == ['podman', '--remote=false', 'network', 'create']]
 
     def test_missing_networks_are_created_with_declared_options_and_compose_labels(self):
@@ -504,6 +504,15 @@ class NetworkCreationTests(unittest.TestCase):
             ['network', 'create', '--label', 'com.docker.compose.project=private-hermes',
              '--label', 'com.docker.compose.network=webapp-publish',
              '--opt', 'isolate=strict', '--opt', 'no_default_route=true', 'private-hermes_webapp-publish']])
+
+    def test_local_only_launch_does_not_prepare_the_teep_uplink(self):
+        command = [*compose_command(), '--env-file', '/dev/null', '-p', 'local-only-fixture',
+                   '-f', 'compose.yaml', '-f', 'compose.podman.yaml']
+        with patch.dict(os.environ, TEEP_ENABLED='false'), patch.object(Path, 'exists', return_value=True):
+            launch = deployment.check_bind_sources(command, ['up', '--no-deps', 'agent-net', 'hermes', 'webapp-proxy'])
+        created = {call[-1] for call in self.run_ensure({}, launch)}
+        self.assertIn('local-only-fixture_inference', created)
+        self.assertNotIn('local-only-fixture_teep-uplink', created)
 
     def test_matching_networks_are_kept_and_weaker_ones_stop_startup(self):
         def labels(key):
@@ -549,10 +558,9 @@ class NetworkCreationTests(unittest.TestCase):
         for options in ({}, {'isolate': 'true'}):
             config = {'name': 'private-hermes', 'networks': {'net': {'name': 'private-hermes_net', 'driver_opts': options}}}
             with self.subTest(options=options), patch.object(deployment, 'engine', return_value='podman'), \
-                    patch.object(deployment, '_output', return_value=json.dumps(config)), \
                     patch.object(deployment.subprocess, 'run', side_effect=AssertionError('no network command')), \
                     self.assertRaisesRegex(RuntimeError, 'isolate: strict'):
-                deployment.ensure_networks(['podman', 'compose'])
+                deployment.ensure_networks(config)
 
     def test_network_removal_reports_a_failed_model_query_without_raising(self):
         with patch.object(deployment, 'engine', return_value='podman'), \
@@ -563,8 +571,8 @@ class NetworkCreationTests(unittest.TestCase):
 
     def test_docker_engine_creates_no_network(self):
         with patch.object(deployment, 'engine', return_value='docker'), \
-                patch.object(deployment, '_output', side_effect=AssertionError('no Compose call')):
-            deployment.ensure_networks(['docker', 'compose'])
+                patch.object(deployment.subprocess, 'run', side_effect=AssertionError('no network command')):
+            deployment.ensure_networks(self.CONFIG)
 
 
 class ProxyFirewallTests(unittest.TestCase):
@@ -689,6 +697,31 @@ class EngineDependentCheckTests(unittest.TestCase):
                 patch.object(sys, 'argv', ['preflight.py', 'private-hermes-test', '--skip-ports']), \
                 patch('sys.stdout', new_callable=io.StringIO):
             preflight.main()
+
+    def test_preflight_scopes_ports_and_subnets_to_selected_services(self):
+        existing = {'Name': 'foreign-network', 'IPAM': {'Config': [{'Subnet': '10.203.89.0/24'}]}}
+        args = ['preflight.py', '--services', 'hermes', 'webapp-proxy']
+
+        def output(*command):
+            if 'config' in command:
+                options = command[command.index('config'):]
+                return subprocess.check_output([*compose_command(), '--env-file', '/dev/null', '-f', 'compose.yaml',
+                                                *options], cwd=ROOT, text=True)
+            if command[-3:] == ('network', 'ls', '-q'):
+                return 'foreign-network'
+            if command[-3:] == ('network', 'inspect', 'foreign-network'):
+                return json.dumps([existing])
+            self.assertEqual(command[-2:], ('ps', '-q'))
+            return ''
+
+        with patch.object(preflight, 'output', side_effect=output), patch.object(preflight, 'check_engine'), \
+                patch.object(preflight, 'engine', return_value='docker'), patch.dict(os.environ, WEBAPP_PORT='19120'), \
+                patch('sys.stdout', new_callable=io.StringIO), patch.object(preflight.socket, 'socket') as probe:
+            with patch.object(sys, 'argv', args):
+                preflight.main()
+            probe.return_value.__enter__.return_value.bind.assert_called_once_with(('127.0.0.1', 19120))
+            with patch.object(sys, 'argv', [*args, 'teep']), self.assertRaisesRegex(SystemExit, 'teep-uplink'):
+                preflight.main()
 
     def test_preflight_tolerates_vanished_container_during_inspect(self):
         kept = {'Name': '/other', 'Config': {'Labels': {}}}

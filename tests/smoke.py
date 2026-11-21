@@ -21,7 +21,7 @@ from storage import initialize as initialize_storage
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from provisioning import initialize_setup, initialize_research_config
-from deployment import check_bind_sources, compose_files, needs_networks, engine, prepare_launch, remove_networks, compose_base, engine_command
+from deployment import compose_base, compose_files, engine, engine_command, inspect_launch, parse_launch, prepare_launch, remove_networks
 
 COMPOSE = [*compose_base(), '-p', 'private-hermes-test', *compose_files(False, extra=('tests/compose.yaml',))]
 
@@ -96,9 +96,9 @@ PODMAN_HOST_TARGETS = ('169.254.1.2', *GATEWAYS)
 
 
 def compose(*args, check=True, **kwargs):
-    check_bind_sources(COMPOSE, list(args))
-    if needs_networks(COMPOSE, list(args)):
-        prepare_launch(COMPOSE)
+    model, networked = inspect_launch(COMPOSE, parse_launch(args))
+    if networked:
+        prepare_launch(COMPOSE, model)
     # Include stopped profiled namespace users before removing their owners.
     # Report cleanup failures without replacing an original test exception.
     teardown = args[:1] == ('down',)

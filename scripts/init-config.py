@@ -36,7 +36,8 @@ if __name__ == '__main__':
     initialize(Path(__file__).resolve().parents[1], wallet_only=args.wallet)
     if not args.wallet:
         from deployment import render, settings
-        render(settings())
+        config, _ = settings(allow_unused_teep=True)
+        render(config)
     print('Initialized local configuration; existing settings and application volumes preserved.')
     if not args.wallet:
         print('Webapp password: config/webapp/password (0600); credentials were not printed.')

@@ -39,7 +39,8 @@ class PassthroughSettingsTests(unittest.TestCase):
                 patch.object(deployment, 'compose_base', return_value=self.provider), \
                 patch.object(stack, 'compose_base', return_value=self.provider), \
                 patch.object(sys, 'argv', ['stack.py', 'compose', *arguments]), \
-                patch.object(stack, 'run') as run, patch.object(stack, 'prepare_launch') as prepare, patch.object(stack, 'check_bind_sources'):
+                patch.object(stack, 'run') as run, patch.object(stack, 'prepare_launch') as prepare, \
+                patch.object(stack, 'inspect_launch', return_value=(None, True)):
             if error:
                 with self.assertRaisesRegex(ValueError, error):
                     stack.main_unlocked()
@@ -48,12 +49,14 @@ class PassthroughSettingsTests(unittest.TestCase):
                 return
             stack.main_unlocked()
             command = run.call_args.args[0]
-            model = json.loads(subprocess.check_output([*command[:-1], 'config', '--format', 'json'],
+            rest = deployment.split_passthrough(arguments)[3]
+            prefix = command[:-len(rest)]
+            model = json.loads(subprocess.check_output([*prefix, 'config', '--format', 'json'],
                                                       cwd=self.root, text=True))
         if '--dry-run' in arguments:
             prepare.assert_not_called()
         else:
-            self.assertEqual(prepare.call_args.args[0], command[:-1])
+            self.assertEqual(prepare.call_args.args[0], prefix)
         return command, model
 
     def test_supplied_inputs_choose_funnel_for_both_engine_models(self):
@@ -103,3 +106,56 @@ class PassthroughSettingsTests(unittest.TestCase):
             with self.subTest(engine=selected):
                 _, model = self.launch(selected, ['--dry-run', '--env-file', str(alternate), 'up'])
                 self.assertEqual(model['services']['webapp-proxy']['ports'][0]['published'], '19120')
+
+    def test_invalid_unused_teep_values_are_ignored_only_for_local_launches(self):
+        alternate = self.root / 'alternate.env'
+        alternate.write_text('TEEP_ENABLED=false\nTEEP_HOST_PORT=invalid\nTEEP_SERVE_ARGS=\'"\'\n')
+        options = ['--env-file', str(alternate)]
+        with patch.dict(os.environ, self.environment, clear=True), \
+                patch.object(deployment, 'ROOT', self.root), \
+                patch.object(deployment, 'engine', return_value='docker'), \
+                patch.object(deployment, 'compose_base', return_value=self.provider):
+            with self.assertRaises(RuntimeError):
+                deployment.settings(options=options)
+            config, prefix = deployment.settings(options=options, allow_unused_teep=True)
+            self.assertFalse(config.teep)
+            command = [*prefix, *deployment.compose(config), *options, 'config', '--format', 'json']
+            model = json.loads(subprocess.check_output(command, cwd=self.root, text=True))
+            self.assertEqual(model['services']['teep']['ports'][0]['published'], '8337')
+            with self.assertRaises(RuntimeError):
+                deployment.settings(options=options)
+            with patch.dict(os.environ, TEEP_ENABLED='true'):
+                with self.assertRaisesRegex(RuntimeError, 'invalid'):
+                    deployment.settings(options=options, allow_unused_teep=True)
+
+    def test_disabled_teep_retry_preserves_operator_interpolation_elsewhere(self):
+        alternate = self.root / 'alternate.env'
+        alternate.write_text('TEEP_ENABLED=false\nTEEP_HOST_PORT=19120\nTEEP_SERVE_ARGS=\'"\'\n'
+                             'WEBAPP_PORT=${TEEP_HOST_PORT}\n')
+        override = self.root / 'override.yaml'
+        override.write_text('services:\n  webapp-proxy:\n    environment:\n'
+                            '      FIXTURE_PORT: "${TEEP_HOST_PORT}"\n'
+                            '      FIXTURE_ARGS: "${TEEP_SERVE_ARGS}"\n')
+        options = ['--env-file', str(alternate)]
+        with patch.dict(os.environ, self.environment, clear=True), \
+                patch.object(deployment, 'ROOT', self.root), \
+                patch.object(deployment, 'engine', return_value='docker'), \
+                patch.object(deployment, 'compose_base', return_value=self.provider):
+            config, prefix = deployment.settings(extra=(str(override),), options=options, allow_unused_teep=True)
+            self.assertFalse(config.teep)
+            self.assertEqual(config.port, 19120)
+            command = [*prefix, *deployment.compose(config, extra=(str(override),)), *options]
+            model = json.loads(subprocess.check_output([*command, 'config', '--format', 'json'], cwd=self.root, text=True))
+            self.assertEqual(model['services']['teep']['command'], ['serve'])
+            self.assertEqual(model['services']['webapp-proxy']['ports'][0]['published'], '19120')
+            env = model['services']['webapp-proxy']['environment']
+            self.assertEqual((env['FIXTURE_PORT'], env['FIXTURE_ARGS']), ('19120', '"'))
+
+    def test_disabled_teep_allows_standalone_treasury_config(self):
+        alternate = self.root / 'alternate.env'
+        alternate.write_text('TEEP_ENABLED=false\nTEEP_HOST_PORT=invalid\n')
+        for selected in ('docker', 'podman'):
+            with self.subTest(engine=selected):
+                command, _ = self.launch(selected, ['--env-file', str(alternate), 'run', '--no-deps',
+                                                   'x402_treazury', 'config', 'show'])
+                self.assertEqual(command[-3:], ['x402_treazury', 'config', 'show'])

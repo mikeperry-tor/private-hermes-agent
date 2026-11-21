@@ -26,7 +26,7 @@ services:
         bind: {create_host_path: false}
   setup:
     environment:
-      HERMES_DEFAULT_MODEL: ""
+      TEEP_INSTALL_MODEL: ""
     volumes:
       - type: bind
         source: ./tests/fixtures/webapp

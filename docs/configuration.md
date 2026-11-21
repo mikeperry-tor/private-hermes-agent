@@ -22,7 +22,8 @@ Compose explicitly selects each service's environment variables:
 | Settings | Recipient |
 | --- | --- |
 | Inference provider API keys | teep |
-| `HERMES_DEFAULT_MODEL` | Offline setup, which saves the preferred Hermes default |
+| `TEEP_ENABLED` | Managed startup selects Teep. Defaults to `true`. |
+| `TEEP_INSTALL_MODEL` | Offline setup when creating a new Hermes profile with Teep enabled |
 | `TEEP_HOST_PORT` | Compose loopback port publication for teep |
 | `TEEP_SERVE_ARGS` | Compose command arguments for `teep serve` |
 | `COMPUTER_USE_ENABLED` | Executor build/security selection and Hermes's captured computer/browser tool policy |
@@ -86,17 +87,18 @@ guard direct first-run startup. Treasury activation
 reconnects MCP only after authenticated readiness succeeds.
 
 SSH client and host keys live in separate persistent directories; setup pins the
-executor host key and initializes its workspace/home. It publishes
-`components/hermes/config.example.yaml` only if Hermes configuration is absent.
+executor host key and initializes its workspace/home. It creates missing
+Hermes configuration from `components/hermes/config.example.yaml` and applies
+the first-install model setting when Teep is enabled.
 Defaults are written completely to same-directory temporary files and atomically
 published without replacing operator files. An interrupted first copy leaves no
 partial final configuration; retries preserve any existing complete file and modes.
 Initial SSH keys are generated in temporary storage and their private identity is
 published atomically before deriving the public file. Retries repair empty/truncated
 public files from the private identity; matching public files and operator comments
-are preserved. Existing keys and operator settings are preserved. Setup validates the configured
-Teep route and installs authentication. The serving container publishes managed
-SSH settings before Hermes loads profiles. These settings pin the runner endpoint,
+are preserved. Setup installs authentication. Hermes resolves the provider
+at runtime. The serving container publishes managed SSH settings before
+Hermes loads profiles. These settings pin the runner endpoint,
 identity, host-key configuration and workspace across profile loads. Their
 root-owned files live in the serving container and regenerate from Compose
 settings at startup.
@@ -228,53 +230,46 @@ Qualification evidence and platform/surface limitations are recorded in the
 
 ## Host inference access
 
-The recommended provider is NearAI via teep's `neardirect` backend. Set
-`NEARAI_API_KEY` in `.env`. `make up` refuses to start when no provider API key
-is set, because teep does not start without one. The native Hermes model picker has a **Teep** entry
-with these choices:
+Set `TEEP_ENABLED=false` to omit the Teep build, container, uplink, published
+port, and provider-key check. Fresh profiles leave the provider and model unselected.
+Existing profiles keep their saved provider and model.
+Apply changes in Teep mode with `make down` followed by `make up`.
 
-- `neardirect:z-ai/glm-5.3-flash` (initial default)
+The recommended provider is NearAI via teep's `neardirect` backend. Set
+`NEARAI_API_KEY` in `.env`. Managed startup requires a provider key when
+Teep is enabled. If you set an initial model, the **Teep** picker starts with
+that model and these NearAI entries:
+
+- `neardirect:z-ai/glm-5.3-flash` (the `.env.example` selection)
 - `neardirect:deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated`
 - `neardirect:deepseek-ai/DeepSeek-V4.1-Flash-1017`
 
-To set a preferred default, add this to the root `.env`, then run `make up`:
+Set `TEEP_INSTALL_MODEL` in the root `.env` before the first `make up` to
+choose the initial model for a fresh profile with Teep enabled.
 
 ```dotenv
-HERMES_DEFAULT_MODEL=neardirect:z-ai/glm-5.3-flash
+TEEP_INSTALL_MODEL=neardirect:z-ai/glm-5.3-flash
 ```
 
-This accepts any model ID supported by a configured Teep provider, including
-models outside the supplied choices. Keep the complete Teep ID, including its
-provider prefix and any organization path. Availability still depends on the
-provider's catalog and credentials; adding an ID does not validate inference.
+Keep the complete Teep model ID, including the provider prefix and any
+organization path. Setup adds that ID to the starter picker catalog.
+Availability depends on the Teep provider's catalog and credentials. A blank
+or unset value keeps a Teep provider entry with live model discovery and
+leaves the initial provider and model unselected. Choose Teep and a model in
+the WebApp's **Settings → Model** or in terminal provider setup. Set saved
+defaults and edit existing catalogs in Hermes.
 
-`make init` only creates missing host files; rerunning it does not change Hermes's
-saved model. `make up` runs offline setup, saves a nonblank `HERMES_DEFAULT_MODEL`
-to `model.default`, adds it to the native picker catalog, and recreates Hermes.
-The supplied catalog is seeded for existing profiles if absent; operator-edited
-catalogs are preserved. The picker uses this saved catalog rather than fetching
-Teep's full catalog automatically. Blank or absent `HERMES_DEFAULT_MODEL` preserves
-the saved default, including a choice made through Hermes's native configuration.
-Clearing the variable does not reset the previous choice. A nonblank value is
-reapplied on every `make up`; clear it to manage the default entirely in Hermes.
-Existing sessions may retain their session-specific model selections.
-
-Without an `.env` preference, use `hermes-config set model.default` followed by
-`make up` to save another default. Preserve the custom Teep endpoint and SSH
-backend when editing native configuration.
-
-List Teep's live model IDs and select an alternative with:
+List Teep's live model IDs or open the Hermes model picker from the terminal.
 
 ```sh
 python3 scripts/stack.py compose exec teep curl -fsS http://127.0.0.1:8337/v1/models
-python3 scripts/stack.py compose run --rm --no-deps hermes-config set model.default 'neardirect:deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated'
-make up
+python3 scripts/stack.py compose run --rm --no-deps hermes model
 ```
 
-The default Hermes command runs a messaging gateway. To configure messaging
-platform credentials and allowlists, run
+The default Hermes command runs a messaging gateway. With the stack running,
+configure messaging platform credentials and allowlists with
 `python3 scripts/stack.py compose run --rm --no-deps hermes setup`, then
-`make gateway`. Preserve the custom inference endpoint and SSH backend.
+`make gateway`.
 
 Extra Teep server arguments can be set in the root `.env`:
 

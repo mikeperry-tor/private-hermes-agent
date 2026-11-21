@@ -88,6 +88,22 @@ class BindSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Required bind'):
             self.check(services, ['up', '--scale=job=1', 'job'])
 
+    def test_no_deps_run_reuses_the_selected_model_for_network_preparation(self):
+        services = {
+            'job': {'network_mode': 'none', 'depends_on': {'dependency': {}}},
+            'dependency': {'networks': {'bridge': {}}, 'volumes': [mount('/absent-qualification-input')]},
+        }
+        networks = {'bridge': {}}
+        command = ['compose']
+        launch = deployment.parse_launch(['run', '--no-deps', 'job'])
+        with patch.object(deployment, '_output',
+                          return_value=json.dumps({'services': services, 'networks': networks})) as render:
+            model, networked = deployment.inspect_launch(command, launch)
+            render.assert_called_once_with('compose', 'config', '--format', 'json', '--', 'job')
+        self.assertTrue(networked)
+        self.assertEqual(model['services'], {'job': services['job']})
+        self.assertEqual(model['networks'], networks)
+
     def test_dry_run_validates_command_without_requiring_sources(self):
         with patch.object(deployment, '_output') as render:
             deployment.check_bind_sources(['compose'], ['up', 'job'], dry_run=True)

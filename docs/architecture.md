@@ -170,10 +170,10 @@ one-shot work uses the same launch classification as stack startup, so engine
 policy is checked before online wallet preparation, not only at later activation.
 
 Compose creates networks through Podman's Docker-compatible API, which sets
-only `isolate=true` and drops other bridge options. Before Compose starts
-services, `deployment.ensure_networks()` therefore creates each project network
-with the `podman` command, using the options the overlays declare and Compose's
-labels; Compose adopts these networks, and `make down` removes them. Every
+only `isolate=true` and drops other bridge options. Before Compose creates
+containers, `deployment.ensure_networks()` creates the networks selected by the
+Compose model using `podman`, the declared options and Compose's labels.
+Compose adopts these networks, and `make down` removes them. Every
 non-external network must declare `isolate: strict`; a network without it, or an
 existing network that is not a bridge network of this project or lacks the
 declared options, stops startup.
@@ -189,7 +189,7 @@ declared options, stops startup.
 | Unprivileged processes may bind any port (`net.ipv4.ip_unprivileged_port_start=0`) | Podman sets the floor to 1024 in a container. The overlay sets 0 for HAProxy so that it can bind a low port inside its namespace. This does not let the rootless user publish a host port below the host's own floor (`net.ipv4.ip_unprivileged_port_start`, usually 1024): keep `WEBAPP_PORT` and `TEEP_HOST_PORT` at 1024 or above unless the host allows lower ports. Publication then fails with the engine's own error. |
 | Docker desktop uses a pinned Moby-derived seccomp profile with Chromium namespace allowances | Both lean and desktop Podman executors use the native default seccomp policy, with no-new-privileges and Chromium sandboxing retained. Native policy differs from Docker's profile. Custom file profiles remain unsupported through the configured Compose API: it sends inline JSON while Podman expects a filename; preflight diagnoses those overrides. |
 | Empty executor `/tmp` and `/run` tmpfs mounts | Podman's overlay sets `notmpcopyup`, retaining the same modes and destinations. This prevents image-seeded files owned by upstream UID 1000 from blocking runner UID 10000's runtime setup. |
-| Restart backoff | A container that exits at once restarts about every 0.3 s. Startup refuses to run without an inference provider key, on both engines, because teep exits at once without one. Check `podman ps` and restart counts when a service does not become healthy. |
+| Restart backoff | A container that exits at once restarts about every 0.3 s. Startup with Teep enabled requires an inference provider key on both engines. Check `podman ps` and restart counts when a service does not become healthy. |
 
 Pasta maps `169.254.1.2` to the host's own address, not to host loopback. A
 host service bound to the host's address (or to all addresses) is reachable

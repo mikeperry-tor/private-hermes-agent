@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from deployment import (ROOT, check_bind_sources, check_engine, compose, compose_base, compose_files, prepare_launch, remove_networks, render,
-                        settings, maintenance_compose, maintenance_command, needs_networks, split_passthrough)
+from deployment import (ROOT, check_bind_sources, check_engine, compose, compose_base, compose_files,
+                        inspect_launch, maintenance_command, maintenance_compose, prepare_launch,
+                        remove_networks, render, settings, split_passthrough)
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config, report_research_config_diff
@@ -73,7 +74,7 @@ def main_unlocked():
         # Global options come before the subcommand. Keep the user's files
         # before the engine files, and use the same project and profiles for
         # network preparation, the command and cleanup.
-        files, options, dry_run, rest = split_passthrough(args.arguments)
+        files, options, dry_run, rest, launch = split_passthrough(args.arguments)
         if not rest:
             raise ValueError('Provide a Compose command after the global options')
         if rest[0] == 'config':
@@ -81,62 +82,66 @@ def main_unlocked():
             # replacing them with maintenance placeholders or pre-validating policy.
             run([*compose_base(), *compose_files(True, files), *options, *rest])
             return
-        if maintenance_command(rest):
+        if maintenance_command(launch):
             command = maintenance_compose(all_ingress=True, executor_build=rest[0] == 'build', extra=files) + options
-            if rest[0] == 'run' and needs_networks(command, rest):
-                raise ValueError('Offline maintenance jobs require network_mode: none for the job and its dependencies. '
-                                 'Remove the networking/dependency override before running this job.')
             if rest[0] == 'down':
                 command += ['--profile', '*']
-            check_bind_sources(command, rest, dry_run=dry_run)
+            inspect_launch(command, launch, dry_run=dry_run, require_offline=True)
             run(command + rest)
             if rest[0] == 'down' and not dry_run:
                 remove_networks(command)
             return
-        config = settings(extra=files, options=options)
-        command = compose(config, extra=files) + options
-        check_bind_sources(command, rest, dry_run=dry_run)
-        if not dry_run and needs_networks(command, rest):
-            prepare_launch(command)
+        standalone = (launch.action == 'run' and launch.no_deps
+                      and launch.targets[0] in ('hermes', 'x402_treazury'))
+        config, prefix = settings(extra=files, options=options, allow_unused_teep=standalone)
+        command = prefix + compose(config, extra=files) + options
+        model, networked = inspect_launch(command, launch, dry_run=dry_run)
+        if not dry_run and networked:
+            prepare_launch(command, model)
         run(command + rest)
         return
-    config = settings()
-    command = compose(config)
-    all_command = compose(config, all_ingress=True)
+    config, prefix = settings(allow_unused_teep=args.action == 'up')
+    command = prefix + compose(config)
     if args.action == 'config':
         run(command + ['config', '--quiet'])
     else:
         # Refuse a wrong engine or an endpoint override before setup writes anything.
         check_engine()
-        run_preflight([sys.executable, 'scripts/preflight.py', *(['--funnel'] if config.funnel else [])])
+        inference = ['teep'] if config.teep else []
+        funnel = ['tailscale'] if config.funnel else []
+        network_endpoints = ['agent-net', 'executor-net']
+        infrastructure = ['tor', *network_endpoints, 'executor', *inference]
+        application = ['webapp-proxy', 'hermes']
+        selected = [*infrastructure, *application, *funnel]
+        run_preflight([*prefix, sys.executable, 'scripts/preflight.py', *(['--funnel'] if funnel else []),
+                       '--services', *selected])
         path = ROOT / 'config/webapp/auth.json'
         if not path.is_file():
             raise RuntimeError('Run make init before starting the stack.')
         validate(json.loads(path.read_text()))
-        require_inference_key(command)
+        if inference:
+            require_inference_key(command)
         # Build shared images before setup consumes them or services are changed.
         # Include treasury even before preparation: setup/config seeding need it.
-        run(command + ['--profile', 'x402_treazury', 'build'])
+        build = [service for service in selected if service not in network_endpoints] + ['x402_treazury']
+        run(command + ['build', *build])
         render(config)
-        if not config.funnel:
-            stop_funnel(all_command)
+        if not funnel:
+            stop_funnel(prefix + compose(config, all_ingress=True))
         # A changed bind-mounted credential file does not itself recreate a
         # completed container. Always apply current settings before startup.
         initialize_research_config(command, ROOT)
         report_research_config_diff(command, ROOT)
         initialize_setup(command)
-        infrastructure = ['tor', 'agent-net', 'executor-net', 'executor', 'teep']
-        check_bind_sources(command, ['up', '--no-deps', *infrastructure])
-        prepare_launch(command)
+        model = check_bind_sources(command, ['up', '--no-deps', *selected])
+        prepare_launch(command, model)
         run(command + ['up', '-d', '--wait', '--no-deps', *infrastructure])
         controller = Controller(command, ROOT)
         # Setup already removed research registrations. The recreated gateway
         # reads that configuration without needing an old gateway's control RPC.
-        check_bind_sources(command, ['up', '--no-deps', 'webapp-proxy', 'hermes'])
-        run(command + ['up', '-d', '--no-deps', '--force-recreate', 'webapp-proxy', 'hermes'])
-        if config.funnel:
-            check_bind_sources(command, ['up', '--no-deps', 'tailscale'])
-            run(command + ['up', '-d', '--no-deps', 'tailscale'])
+        run(command + ['up', '-d', '--no-deps', '--force-recreate', *application])
+        if funnel:
+            run(command + ['up', '-d', '--no-deps', *funnel])
         controller.startup()
 
 

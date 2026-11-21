@@ -12,7 +12,7 @@ class FixtureCleanupTests(unittest.TestCase):
         for check in (True, False):
             result = subprocess.CompletedProcess([], 1, 'cleanup stdout', 'cleanup stderr')
             with self.subTest(check=check), patch.object(smoke, 'COMPOSE', ['compose']), \
-                    patch.object(smoke, 'check_bind_sources'), patch.object(smoke, 'needs_networks', return_value=False), \
+                    patch.object(smoke, 'inspect_launch', return_value=(None, False)), \
                     patch.object(smoke.subprocess, 'run', return_value=result), \
                     patch.object(smoke, 'remove_networks') as networks, redirect_stdout(io.StringIO()) as output:
                 with self.assertRaises(subprocess.CalledProcessError):

@@ -151,7 +151,7 @@ class ShutdownTests(unittest.TestCase):
             auth_path.write_text(json.dumps(credentials))
             # Ordering tests isolate host bind validation, covered separately in
             # test_bind_sources.py; a clean checkout has no operator state.
-            with patch.object(sys,'argv',['stack.py','up']), patch.object(stack,'ROOT',root), patch.object(stack,'settings',return_value=Settings.read(values())), patch.object(stack,'render') as render, patch.object(stack,'stop_funnel') as disable, patch.object(stack,'run') as run, patch.object(stack,'Controller'), patch.object(stack,'initialize_setup') as provision, patch.object(stack, 'initialize_research_config') as seed, patch.object(stack, 'report_research_config_diff') as diff, patch.object(stack, 'require_inference_key'), patch.object(stack, 'prepare_launch'), patch.object(stack, 'check_engine'), patch.object(stack, 'check_bind_sources'), patch.object(sys.modules['deployment'], 'engine', return_value='docker'), patch.dict('os.environ'):
+            with patch.object(sys,'argv',['stack.py','up']), patch.object(stack,'ROOT',root), patch.object(stack,'settings',return_value=(Settings.read(values()), [])) as settings, patch.object(stack,'render') as render, patch.object(stack,'stop_funnel') as disable, patch.object(stack,'run') as run, patch.object(stack,'Controller'), patch.object(stack,'initialize_setup') as provision, patch.object(stack, 'initialize_research_config') as seed, patch.object(stack, 'report_research_config_diff') as diff, patch.object(stack, 'require_inference_key') as key, patch.object(stack, 'prepare_launch'), patch.object(stack, 'check_engine'), patch.object(stack, 'check_bind_sources'), patch.object(sys.modules['deployment'], 'engine', return_value='docker'), patch.dict('os.environ'):
                 events = []
                 run.side_effect = lambda command: events.append(command)
                 diff.side_effect = lambda *args: events.append(['config-diff'])
@@ -159,8 +159,10 @@ class ShutdownTests(unittest.TestCase):
                 stack.main()
                 commands = [call.args[0] for call in run.call_args_list]
                 provision.assert_called_once()
-                build = next(c for c in commands if c[-1] == 'build')
-                self.assertEqual(build[-3:], ['--profile', 'x402_treazury', 'build'])
+                build = next(c for c in commands if 'build' in c)
+                self.assertTrue({'hermes', 'tor', 'executor', 'teep', 'x402_treazury', 'webapp-proxy'} <= set(build))
+                preflight = next(c for c in commands if 'scripts/preflight.py' in c)
+                self.assertIn('teep', preflight[preflight.index('--services') + 1:])
                 self.assertLess(events.index(build), events.index(['config-diff']))
                 self.assertLess(events.index(['config-diff']), events.index(['offline-setup']))
                 gateway = next(i for i,c in enumerate(commands) if '--force-recreate' in c and c[-1]=='hermes')
@@ -179,7 +181,7 @@ class ShutdownTests(unittest.TestCase):
                 render.reset_mock()
                 seed.reset_mock()
                 def fail_build(command):
-                    if command[-1] == 'build':
+                    if 'build' in command:
                         raise subprocess.CalledProcessError(1, command)
                 run.side_effect = fail_build
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -188,6 +190,21 @@ class ShutdownTests(unittest.TestCase):
                 disable.assert_not_called()
                 render.assert_not_called()
                 seed.assert_not_called()
+                run.reset_mock(side_effect=True)
+                provision.reset_mock(side_effect=True)
+                key.reset_mock()
+                prefix = ['env', 'TEEP_HOST_PORT=8337', 'TEEP_SERVE_ARGS=']
+                settings.return_value = (Settings.read(values(teep_enabled='false')), prefix)
+                stack.main()
+                commands = [call.args[0] for call in run.call_args_list]
+                self.assertFalse(any('teep' in command for command in commands))
+                self.assertTrue(all(command[:len(prefix)] == prefix for command in commands))
+                preflight = next(c for c in commands if 'scripts/preflight.py' in c)
+                checked = set(preflight[preflight.index('--services') + 1:])
+                started = {service for c in commands if 'up' in c for service in c[c.index('--no-deps') + 1:]
+                           if not service.startswith('--')}
+                self.assertEqual(checked, started)
+                key.assert_not_called()
 
     def test_funnel_startup_does_not_restart_setup_dependencies(self):
         sys.path.insert(0, str(ROOT / 'scripts'))
@@ -200,7 +217,7 @@ class ShutdownTests(unittest.TestCase):
             auth.write_text(json.dumps({'password_hash': hash_password('test-password'), 'secret': 's'*64}))
             selected = Settings.read(values(funnel_enabled='true', funnel_host='node.example.ts.net'))
             with patch.object(sys, 'argv', ['stack.py', 'up']), patch.object(stack, 'ROOT', root), \
-                    patch.object(stack, 'settings', return_value=selected), patch.object(stack, 'render'), \
+                    patch.object(stack, 'settings', return_value=(selected, [])), patch.object(stack, 'render'), \
                     patch.object(stack, 'initialize_setup') as setup, patch.object(stack, 'Controller'), \
                     patch.object(stack, 'initialize_research_config'), patch.object(stack, 'report_research_config_diff'), \
                     patch.object(stack, 'require_inference_key'), \
@@ -209,9 +226,10 @@ class ShutdownTests(unittest.TestCase):
                     patch.object(stack, 'run') as run:
                 stack.main()
                 setup.assert_called_once()
-                builds = [call.args[0] for call in run.call_args_list if call.args[0][-1] == 'build']
+                builds = [call.args[0] for call in run.call_args_list if 'build' in call.args[0]]
                 self.assertEqual(len(builds), 1)
                 self.assertIn('compose.funnel.yaml', builds[0])
+                self.assertIn('tailscale', builds[0])
                 startups = [call.args[0] for call in run.call_args_list if 'up' in call.args[0]]
                 self.assertTrue(any(command[-1] == 'tailscale' for command in startups))
                 self.assertTrue(all('--no-deps' in command for command in startups))
