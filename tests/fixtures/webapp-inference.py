@@ -49,4 +49,5 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
 
-ThreadingHTTPServer(('0.0.0.0',8337), Handler).serve_forever()
+if __name__ == '__main__':
+    ThreadingHTTPServer(('0.0.0.0',8337), Handler).serve_forever()

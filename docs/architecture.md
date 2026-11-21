@@ -60,9 +60,11 @@ cannot grant a direct uplink.
   host grants from LAN grants. IPv6 forwarding stays closed. Public traffic
   terminates at Tor's TransPort and DNSPort. Tor's own outbound connections
   cannot use the local exceptions.
-- Host port grants use the engine's numeric host mapping. Literal LAN grants
-  use the configured socket address, which may reach a host or VM service if
-  the engine routes to it.
+- The namespace firewall and gateway own the socket grants. Managed Hermes
+  clears inherited HTTP proxy settings so upstream clients use those routes
+  without a copy of the grant list. Host port grants use the engine's numeric
+  host mapping. Literal LAN grants use the configured socket address, which may
+  reach a host or VM service if the engine routes to it.
 - With a native host mapping for requested host ports or a supported LAN grant,
   managed startup lets the trusted router enable forwarding after filtering.
   Podman exposes `/proc/sys` and Docker uses `systempaths=unconfined`, which

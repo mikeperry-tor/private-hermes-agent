@@ -50,9 +50,8 @@ initial file is `config/network/mcp-allowlist.json`; its tracked default is
 `components/network/mcp-allowlist.json`. `make init` creates the local copy only
 if missing. Existing local policy is preserved. The service mounts it read-only,
 and managed startup refuses missing required bind sources before container
-creation. Raw Compose lacks this enforcement on the qualified Podman API. Run
-`make init` before starting a fresh checkout. Use `make up` and the
-`scripts/stack.py compose` wrapper so enabled ingress layers are selected.
+creation. Run `make init` before starting a fresh checkout, then use `make up`
+to select the enabled ingress layers.
 
 Other component files, such as Tor/SSH settings, resolver settings, and the
 initial Hermes configuration template, remain implementation-owned defaults.
@@ -360,6 +359,18 @@ host mapping with `make down` and `make up`.
 The gateway forwards IPv4 fragmentation-needed feedback for granted TCP flows.
 VPNs or firewalls that suppress this feedback can still stall large transfers
 even when a small health response succeeds.
+
+Managed Hermes uses the stack's network route for HTTP and HTTPS. The container
+and managed Hermes configuration clear `HTTP_PROXY`, `HTTPS_PROXY` and
+`ALL_PROXY` in both cases. This covers values inherited from the engine or saved
+in the Hermes profile `.env`. Container image builds can use their own proxy
+settings. Configure inference and HTTP MCP with the URL of the service itself.
+The gateway admits only the configured local sockets and routes public TCP
+through Tor. A public MCP OAuth issuer uses that public route.
+
+The native MCP SDK applies its origin policy to session requests. If an MCP
+endpoint redirects to a different origin, configure the final service URL.
+Hermes's separate endpoint diagnostic leaves redirects to the SDK handshake.
 
 Leave `TEEP_ENABLED=true` to switch between Teep and a named local provider in
 Hermes while the stack runs. Setup adds the Teep provider when creating a

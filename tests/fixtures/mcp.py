@@ -74,9 +74,6 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
-for port in (111, 8000, 8001):
-    server = ThreadingHTTPServer(('0.0.0.0', port), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
 def udp():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server:
         server.bind(('0.0.0.0', 111))
@@ -84,5 +81,9 @@ def udp():
             _, address = server.recvfrom(1024)
             server.sendto(b'rpcbind-open', address)
 
-threading.Thread(target=udp, daemon=True).start()
-threading.Event().wait()
+if __name__ == '__main__':
+    for port in (111, 8000, 8001):
+        server = ThreadingHTTPServer(('0.0.0.0', port), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=udp, daemon=True).start()
+    threading.Event().wait()

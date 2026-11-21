@@ -1,0 +1,22 @@
+diff --git a/tools/mcp_tool_transport.py b/tools/mcp_tool_transport.py
+--- a/tools/mcp_tool_transport.py
++++ b/tools/mcp_tool_transport.py
+@@ -477,7 +477,8 @@
+             configured_header_names={key.lower() for key in probe_headers})
+         try:
+             async with _build_client(
+-                    follow_redirects=True, timeout=_httpx.Timeout(timeout), transport=probe_transport,
++                    # The SDK decides which redirects its session can follow.
++                    follow_redirects=False, timeout=_httpx.Timeout(timeout), transport=probe_transport,
+                     **_present(mounts=_mcp_proxy_mounts(_httpx, url, ssl_verify, client_cert, self.name))) as client:
+                 resp = await client.head(url, headers=probe_headers)  # cheapest; GET on 405/501
+                 if resp.status_code in (405, 501):
+@@ -488,6 +489,8 @@
+                         url, content=_PROBE_INITIALIZE_BODY,
+                         headers={**probe_headers, "Content-Type": "application/json",
+                                  "Accept": "application/json, text/event-stream"})
++                    if post_resp.has_redirect_location:
++                        return  # Inconclusive: let the SDK try its initialize request.
+                     if _is_2xx(post_resp) and _content_type_base(post_resp) in self._MCP_CONTENT_TYPES:
+                         resp = post_resp
+         except _httpx.HTTPError:

@@ -443,7 +443,13 @@ services:
       TERMINAL_SSH_PORT: "2222"
       TERMINAL_SSH_USER: runner
       TERMINAL_SSH_KEY: /run/agent-ssh/id_ed25519
-      NO_PROXY: 10.203.83.3,10.203.84.0/24,localhost,127.0.0.1
+      # Use the namespace route from process startup, including before dotenv.
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      all_proxy: ""
     command: [gateway, run]
     restart: unless-stopped
 

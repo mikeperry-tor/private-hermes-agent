@@ -175,6 +175,67 @@ destination and transport behavior. Preserve that distinction when reusing
 results. The packaged integration has independent source and combined review within
 these coverage limits.
 
+### Local inference and HTTP MCP
+
+`tests/local_integration_smoke.py HOST_BIND LAN_ADDRESS` creates a disposable
+project and temporary inference and MCP listeners. Choose addresses reachable
+through the engine and use `--lan-ports ALLOWED DENIED` for an independently
+routed LAN fixture. Run it when the pinned stack subnets are free. The fixture
+builds the network and Hermes images under test tags. Use `--no-build` when
+the images under those tags already contain the code under qualification.
+
+The packaged Hermes 0.23.3 fixture on Docker Desktop checks that managed policy
+clears inherited and profile HTTP proxy variables across profile reload. It
+exercises native model discovery, endpoint metadata, streamed inference, and
+MCP initialize/list/call. Redirected HEAD, GET and POST diagnostics leave the
+MCP handshake to the SDK. The current client-path fixture still needs a native
+rootless Podman run.
+
+Native host and routed LAN coverage includes Docker Desktop 4.99.0 on arm64
+with Engine 29.9.3 and Compose 5.7.0, and rootless Podman 5.4.2 with Compose
+5.7.1 on Debian 13 ARM64 with Linux 6.12. Checks on both engines cover
+original TLS and HTTP names, an independent reachable control for each socket,
+exact port, UID and executor denial, and gateway restart and grant removal.
+The gateway stays healthy when a fixture denies forwarding enablement and
+both local paths stay closed. Controlled routed fixtures on both engines
+check IPv4 path MTU feedback for 64 KiB transfers in both directions through
+a 630-byte bottleneck.
+
+Native Podman also covers bridge-scoped host discovery and gateway startup with
+default system-path protections after grant removal. The current Docker Desktop
+fixture also covers LAN-only startup and continued access to the literal LAN
+socket when the host mapping is missing. These two cases still need a native
+rootless Podman run.
+
+Docker Desktop controls also cover local forwarding with Tor suspended and
+denial of a retained connection after grant removal. Authenticated browser
+checks cover streamed gateway turns after switching from the Teep route to a
+local provider and back through the model picker, using controlled inference
+servers for both routes. A fresh profile with a blank install model also
+discovers, saves, and uses a model from the live fixture catalog through
+**Settings → Model**.
+
+Existing lifecycle fixtures cover the supported down/backup/up workflow,
+persistent identities, Teep publication removal, and re-enablement with a saved
+local selection. Offline storage checks on both engines cover first-profile
+model and picker catalog creation, and Hermes's unconfigured-provider check
+for fresh profiles with Teep disabled or a blank install model. They also cover
+retry after interrupted publication and preservation of an existing selection.
+
+Managed startup uses the selected services for image builds, network and
+port preflight, and startup. Podman prepares the networks from the same
+Compose service selection, including the bridges used by its dependencies.
+Compose interpolates Teep settings even when those services omit
+Teep. If the initial render fails and retrying with inert Teep port and argument
+values establishes that Teep is disabled, only the Teep service's own fields
+receive those values. Normal Compose interpolation still applies to operator
+settings referenced elsewhere.
+Qualification on both engines covers managed startup and shutdown with malformed
+unused Teep settings, local-only startup with an occupied Teep uplink subnet,
+and subnet and port conflict rejection with Teep selected. A disposable treasury
+initialization check confirms that a pending grant edit preserves the running
+Tor, agent network and Hermes containers. The check substitutes the wallet action.
+
 ## Packaged Hermes qualification
 
 The packaged build derives from official Hermes v0.23.3 source

@@ -170,6 +170,19 @@ class OperatorConfigurationTests(unittest.TestCase):
         self.assertEqual(services['hermes']['environment']['WEBAPP_EXTERNAL_CONTENT'], 'tor_proxied')
         self.assertNotIn('WEBAPP_EXTERNAL_CONTENT', services['executor']['environment'])
 
+    def test_local_grants_are_passed_only_to_the_firewall_services(self):
+        grants = {
+            'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS': '11434',
+            'HERMES_INTEGRATIONS_LAN_ENDPOINTS': '192.168.50.4:8765',
+        }
+        result = subprocess.run([*compose_base(), '-f', 'compose.yaml', '--profile', '*', 'config', '--format', 'json'],
+                                cwd=ROOT, env=dict(os.environ, **grants), text=True,
+                                capture_output=True, check=True)
+        for name, service in json.loads(result.stdout)['services'].items():
+            environment = service.get('environment', {})
+            actual = {key: environment[key] for key in grants if key in environment}
+            self.assertEqual(actual, grants if name in ('agent-net', 'tor') else {}, name)
+
 
 if __name__ == '__main__':
     unittest.main()

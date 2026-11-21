@@ -171,6 +171,18 @@ tracked patch and pinned official image. For the next Hermes release, see
 | 0008 private image routes | Authenticated content and consent APIs with bounded public IPv4 raster retrieval | Image endpoint, CDN consumer and outage checks |
 | 0009 browser response policy | CSP, trusted bootstrap headers and inert private previews | Browser response, exact-origin socket and active-file checks |
 | 0010 browser content | Shared rendering, consent and image Save/Copy | Renderer and real browser checks across all content modes |
+| 0011 MCP probe redirects | Leave redirects to the native MCP SDK. The separate endpoint diagnostic treats a redirected initialize response as inconclusive. | Check HEAD, GET and initialize redirects in the local integration fixture. Remove when the Hermes pin's diagnostic preserves the SDK's redirect boundary. |
+
+Managed Hermes uses ordinary sockets for inference, discovery, MCP and OAuth.
+Compose clears the standard HTTP proxy variables before startup. The managed
+dotenv applies the same assignments after user profile loads and reloads.
+This keeps the gateway as the single source of socket permissions and avoids
+maintaining a second grant matcher across HTTPX, urllib, and MCP clients.
+Keep inherited HTTP proxies disabled for managed Hermes when updating the
+pins. Public connections already use Tor, and local grants are enforced by
+the namespace firewall and gateway. Verify that the pinned MCP SDK retains
+its native origin checks and that fixture TLS and MCP response limits retain
+their upstream behavior. See [local integration qualification](development.md#local-inference-and-http-mcp).
 
 The serving entrypoint generates `/etc/hermes/config.yaml` and `/etc/hermes/.env`.
 The files pin the native file backend, SSH endpoint and client configuration,

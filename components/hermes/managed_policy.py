@@ -48,6 +48,10 @@ def policy(env):
         },
     }
     dotenv = {"HERMES_CONFIG_BACKEND": "file", "TERMINAL_ENV": terminal["backend"]}
+    # Apply after profile dotenv loading so native clients keep using the
+    # namespace route and the gateway remains the authority for local grants.
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        dotenv[name] = dotenv[name.lower()] = ""
     dotenv.update({f"TERMINAL_{key.upper()}": value for key, value in terminal.items()
                    if key != "backend"})
     return config, dotenv
@@ -72,7 +76,7 @@ def main():
     config, dotenv = policy(os.environ)
     directory.mkdir(mode=0o755, exist_ok=True)
     publish(directory / "config.yaml", json.dumps(config, indent=2) + "\n")
-    publish(directory / ".env", "".join(f"{key}={value}\n" for key, value in dotenv.items()))
+    publish(directory / ".env", "".join(f"{key}={json.dumps(value)}\n" for key, value in dotenv.items()))
 
 
 if __name__ == "__main__":
