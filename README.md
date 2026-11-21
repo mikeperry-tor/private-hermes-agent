@@ -31,9 +31,13 @@ still use your browser's connection.
   supports both Docker and Rootless podman with [hardened services](#service-hardening): strong network isolation between containers,
   no host access by default, an SSH executor, and least-priviledge operation.
 - **[Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel)** provides
-  access to the Hermes Admin WebApp over a public HTTPS domain. It does not require
-  using a Tailnet or their VPN, and is available on the free tier. This allows
-  you to access your Hermes Admin panel from anywhere.
+  access to the Hermes Admin WebApp over public HTTPS, including on the free
+  plan. The deploying node joins a tailnet. Visitors can connect from a regular
+  browser without joining the tailnet or installing Tailscale. The stack's
+  Tailscale node terminates TLS with a local private key and a Let's Encrypt
+  certificate, meaning that Tailscale does not have the ability to decrypt
+  your traffic. Funnel relays forward encrypted traffic, and Tailscale controls
+  the public `ts.net` domain. The [Tailscale launch blogpost](https://tailscale.com/blog/introducing-tailscale-funnel) provides more detail.
 - **[Tor](https://hub.docker.com/r/dockurr/tor)** is used to route TCP
   traffic and DNS from Hermes and its executor through Tor, hiding their source
   network address from Internet destinations. Network rules block direct Internet
