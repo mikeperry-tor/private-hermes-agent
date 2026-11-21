@@ -247,6 +247,12 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   commits; do not wait for a separate commit request. Record the baseline and
   plan path for substantive planned work. Never commit failing intermediate work
   as though it were a completed phase.
+- Prefer Conventional Commit subjects such as `fix(ssh): preserve workspace sync`.
+  Keep the subject and body within 80 columns. For a change that addresses a
+  substantial problem, use two body paragraphs. Describe the problem before the
+  change in past tense, then describe how the commit solves it in present tense.
+  The two-paragraph format is optional for changes without a substantial problem,
+  such as routine documentation cleanup or plan updates.
 - Use independent read-only reviewers for substantive design/security changes,
   meaningful phase commits, named plan gates and the completed combined change.
   Scale review to the change; no fixed reviewer count or repeated review of an
