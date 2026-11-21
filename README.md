@@ -8,8 +8,9 @@ Private Hermes is a Docker/Podman Compose stack for running
 [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 with private research tools, code execution in a separate container, and an
 authenticated web interface. It brings together Tor-routed Internet access,
-confidential-computing inference through Teep, and paid research APIs through
-x402_treazury.
+confidential-computing inference through either
+[Teep](https://github.com/13rac1/teep) or local inference, and paid research APIs through
+[x402_treazury](https://github.com/mikeperry-tor/x402_treazury).
 
 The goal is to let an agent research and write code while keeping your network
 address, inference requests, and agent payment history private, and
@@ -56,8 +57,8 @@ still use your browser's connection.
   inference providers through an OpenAI-compatible API. It handles provider
   credentials and upstream attestation checks in a separate service with its own
   direct Internet connection. The stack preserves Teep's upstream verification
-  policy, including its allowed failures; service health alone does not prove
-  successful attestation.
+  policy, including its allowed failures. Teep is not required;
+  [local inference](#local-inference-and-http-mcp) is also supported.
 
 x402_treazury exposes twelve research tool groups covering web, science,
 shopping, world, social, property, travel, health, business, finance, security,
@@ -172,15 +173,17 @@ HERMES_INTEGRATIONS_LAN_ENDPOINTS=192.168.1.50:8765,192.168.1.50:8766,192.168.1.
 > [gateway-only AppArmor workaround](docs/configuration.md#native-linux-docker-with-apparmor)
 > for host port grants.
 
-A fresh install with Teep disabled starts without a selected provider or model.
-Use Hermes provider setup to add a named OpenAI-compatible provider for the local
-endpoint and select its model. Configure any HTTP MCP services and credentials
-in Hermes as well.
+Run `make down` followed by `make up` after changing either allow list or Teep
+mode.
+
+To configure local inference, use Hermes
+[provider setup](http://localhost:9120/#/settings?tab=providers&pview=custom-endpoints)
+to add an OpenAI-compatible provider for the local endpoint. **Use
+`host.docker.internal` for the host, rather than `localhost`**.
+
+You can configure any HTTP MCP services and credentials in Hermes as well.
 See the [configuration guide](docs/configuration.md#local-inference-and-http-mcp)
 for provider setup.
-
-Run `make down` followed by `make up` after changing either grant list or Teep
-mode. Hermes tools and in-process plugins can use granted sockets.
 
 > **NOTE**: Agent-created code can still invoke allowlisted Hermes tools by RPC from
 > the code sandbox container, including tools that access a configured local backend.
