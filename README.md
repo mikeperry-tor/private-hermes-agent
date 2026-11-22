@@ -240,7 +240,7 @@ make x402_treazury-prepare
 
 Preparation funds a single initial shared bootstrap wallet, warms provider
 catalogs, and connects research tools without restarting Hermes. The 12 MCP
-endpoints are added to Hermes Agent automatically, and become usable once
+endpoints are added to Hermes Agent automatically, and become ready once
 funding and catalog warming complete.
 
 Use `make x402_treazury-status` to inspect wallet funding status and the

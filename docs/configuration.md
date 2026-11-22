@@ -119,7 +119,7 @@ placeholder values for unused ingress or inference variables without modifying
 - `make down` uses this maintenance path and shuts down all ingress services
   even if a Teep port or argument setting is malformed.
 - `make build` uses only build inputs and never initializes operator state.
-- `stack.py compose config` and normal launches still validate real operator
+- `stack.py compose config` and normal launches still validate operator
   settings. Syntax errors in `.env` or Compose files must still be fixed before
   Compose can identify the project.
 
@@ -334,7 +334,8 @@ mcp_servers:
   if the daemon's host mapping changes.
 - **LAN grants:** Literal LAN grants work on Docker Desktop and rootless Podman;
   on native Linux Docker, LAN grants remain closed. If the host mapping is
-  unavailable, host grants stay closed while literal LAN grants remain usable.
+  unavailable, host grants stay closed while literal LAN grants remain
+  available.
   `make up` warns if any requested grant stayed closed and the gateway logs why.
 - **Path MTU:** The gateway forwards IPv4 fragmentation-needed ICMP replies for
   granted flows, though VPNs or firewalls that drop ICMP can still stall large
@@ -590,7 +591,7 @@ after preparation and do not use this file.
   access to `/opt/data`.
 
 Empty or unknown values fail serving validation while leaving inspection,
-backup, repair, and shutdown usable. After editing `.env`, run `make up` and
+backup, repair, and shutdown available. After editing `.env`, run `make up` and
 reload browser tabs. Switching modes recreates Hermes, preserves credentials and
 executor files, and clears local terminal tabs, saved working directories, and
 scrollback from the previous mode (saved gateway tabs survive, and running

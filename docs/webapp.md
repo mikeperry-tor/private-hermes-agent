@@ -235,7 +235,7 @@ bounding capability sets:
 - **Headers and origins:** Enforces exact `Host` headers separately on local,
   Funnel, and onion frontends, strips incoming `Forwarded` and `X-Forwarded-*`
   headers, and injects the trusted scheme and peer identity. Hermes trusts only
-  HAProxy's backend IP, so origin checks use the real host and scheme.
+  HAProxy's backend IP, so origin checks use the client's host and scheme.
   WebSockets and streaming pass through without added body or idle-timeout
   limits (HAProxy logs an expected startup warning about infinite timeouts).
 - **Rate limiting:** Hermes throttles login attempts to 10 per 60 seconds per
@@ -421,7 +421,7 @@ WEBAPP_BROWSER_PYTHON=/tmp/private-hermes-browser-tests/bin/python make webapp-t
 
 Set `PLAYWRIGHT_BROWSERS_PATH` if the browser cache lives outside its default
 location. Stop running deployments first because tests reuse the fixed subnets.
-No real Tailscale container starts, and no paid inference or MCP calls run.
+No Tailscale container starts, and no paid inference or MCP calls run.
 
 ### Qualification
 
@@ -441,7 +441,7 @@ Interactive opt-in and streaming media remain deferred.
   chat turn (Firefox and WebKit run focused HTTPS auth and navigation checks).
   Direct DNS and preconnect NetLog observation is Chromium-only. Although
   routine tests avoid external image fetches, they still wait for Tor bootstrap.
-- **`make webapp-live-test`:** Verifies real authenticated Tor image fetches,
+- **`make webapp-live-test`:** Verifies live authenticated Tor image fetches,
   Tor exit-node controls, transparent-route counters, and Tor outage and
   recovery. Run both `make webapp-test` and `make webapp-live-test` for full
   coverage.
@@ -455,7 +455,7 @@ against a live tailnet or public Funnel relay. When ready to enable live Funnel:
    `.ts.net` name matches `TAILSCALE_FUNNEL_HOST`.
 2. Connect from outside the tailnet: confirm unauthenticated requests require
    Hermes login, authenticated chat streaming and WebSockets work, and
-   `localhost` stays usable independently.
+   `localhost` stays reachable independently.
 3. Disable Funnel via `TAILSCALE_FUNNEL_ENABLED=false` and `make up`, confirm
    public access stops while `localhost` remains up, and verify `make down` and
    re-enablement preserve both Tailscale and Hermes state.

@@ -149,7 +149,7 @@ make up
   with their `Host` checks and token variable. Wallet pools, payment caps,
   sources, tools, and instructions are editable.
 - Invalid configuration blocks networked init, preparation, and serving without
-  falling back to defaults, while offline wallet inspection stays usable.
+  falling back to defaults, while offline wallet inspection stays available.
 - Editing policy does not invalidate prior preparation. On restart, `serve`
   applies the new policy and may fund newly added groups or download new
   catalogs if ZEC and automatic funding are available.

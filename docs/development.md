@@ -252,7 +252,7 @@ outside this table.
   consent, forbidden paths, restart and outage recovery, and withdrawal. Passes
   on both qualified engines.
 - **`make onion-live-test`:** Publishes a temporary authenticated onion service
-  and connects through a separate Tor client for real rendezvous, login, and
+  and connects through a separate Tor client for live rendezvous, login, and
   API access. Requires explicit public-network test authority and is excluded
   from `make check`. Recorded live rendezvous passes on both engines with Tor
   0.4.9.16 clients (reverify if Tor pin changes; bootstrap health alone does not
@@ -444,14 +444,14 @@ base preserved for PR7).
 
 - Native upstream suites cover duplicate dependency checks, browser ownership
   internals, and queued-action, lease, and cancellation regressions. Private
-  Hermes keeps packaged stack checks for real SSH file `ENOENT` and 404, allowed
+  Hermes keeps packaged stack checks for live SSH file `ENOENT` and 404, allowed
   and forbidden actions, takeover denial, HTTP file delivery, sandboxing,
   startup cleanup, terminal deployment modes, auth, and pinned keys, gateway
   URL no-fetch, the `desktop_tools_smoke.py` matrix, and all private raster and
   browser containment tests while PR7 is deferred.
 - On the pristine `main` submission base in Linux ARM64 Docker, the full
   upstream suite has pre-existing container-environment failures (file modes,
-  service management, Doctor checks, and two gateway real-profile copy tests
+  service management, Doctor checks, and two gateway profile copy tests
   outside this stack's executor-only contract). Focused candidate suites cover
   the changed code directly, and `tests/fixtures/session-resume-active-turn.json`
   supplies the fixture omitted from the runtime image (clearing inherited

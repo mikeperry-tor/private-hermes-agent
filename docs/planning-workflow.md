@@ -27,8 +27,7 @@ A complete plan states:
   assumptions.
 - **Preserved boundaries:** Accepted trust boundaries and operator workflows to
   keep intact. For integrated components, cite the pinned image or source commit
-  and verify its actual contract rather than assuming a reference checkout
-  matches.
+  and verify its contract rather than assuming a reference checkout matches.
 - **Simplest design:** Justify any new service, state transition, persistent
   record, configuration option, or abstraction against a concrete requirement.
   Do not build a framework for hypothetical future integrations.
@@ -77,11 +76,11 @@ self-contained brief containing:
 
 Keep plan-review boundaries clear:
 
-- New hardening must address a real threat within the agreed trust model.
+- New hardening must address a concrete threat within the agreed trust model.
 - Reviewer suggestions are proposals, not automatic scope expansion or
   authorization for extra services, migrations, frameworks, spending, or
-  publication. Delegation grants no additional access, spending, or publication
-  authority.
+  publication. Delegating work does not grant additional access, spending, or
+  publication authority.
 - One review may cover both a phase and a gate (or the final phase and combined
   completion) when the brief explicitly covers both. There is no fixed reviewer
   count and no need to re-review an unchanged snapshot.

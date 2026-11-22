@@ -224,7 +224,7 @@ or its dependencies.
 consistently across validation, overlay selection, network preparation, and
 cleanup; other global flags are rejected. It also recognizes `--dry-run` after
 subcommands such as `up`, `run`, and `down` (ignoring `--dry-run` passed to a
-container command). Dry runs neither create nor remove real networks.
+container command). Dry runs neither create nor remove container networks.
 
 ### Bind-source checks and network creation
 

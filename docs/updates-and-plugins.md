@@ -91,7 +91,7 @@ the wrapper never adds consent, scan-bypass, or force flags automatically.
 - **Bundled vs. user plugins:** Bundled plugins ship inside the pinned Hermes
   image, with standalone add-ons disabled by default (`plugins.enabled: []`). A
   user plugin with the same name can override a bundled plugin, so keep
-  overrides deliberate rather than shadowing bundled code unintentionally.
+  overrides intentional rather than shadowing bundled code unintentionally.
 - **Authority:** Plugins run inside Hermes with full agent privileges, outside
   the SSH executor sandbox, though without access to the `x402_treazury` wallet
   volume.
