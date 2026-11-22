@@ -1,9 +1,9 @@
 # Updates, plugins, and privacy defaults
 
-The stack manages Hermes, Tor, HAProxy and Tailscale through image digest pins,
-and teep/x402_treazury through source commits. Operator preferences in `.env`
-do not select image versions. User plugins use Hermes's native management and
-persistent profile storage.
+Private Hermes pins Hermes, Tor, HAProxy, and Tailscale by container image
+digest, and pins Teep and `x402_treazury` by Git commit. Operator settings in
+`.env` do not choose component versions. User plugins use Hermes's own plugin
+manager and persist inside `hermes-data`.
 
 ## Check stack versions
 
@@ -14,38 +14,28 @@ make check-updates
 python3 scripts/check-updates.py --json
 ```
 
-Requests run as UID 10000 inside Hermes's existing Tor-routed namespace. They
-fetch public Docker Hub manifests and GitHub commit metadata with anonymous,
-GET-only requests. Provider keys and stored Docker registry credentials are not
-used; public registry pull tokens stay anonymous and in memory.
-The checker reads the repository pins and reports:
+The checker runs as UID 10000 inside Hermes's Tor-routed namespace and makes
+anonymous `GET` requests to Docker Hub and GitHub without using provider keys or
+stored registry credentials (public pull tokens stay in memory). For each
+pinned component, it reports:
 
-- `matches`: the advertised artifact matches the pin, including a pinned
-  platform manifest present in an advertised multi-platform index.
-- `different`: the configured image channel or default source branch differs.
-  This is a review signal, not proof of a newer or compatible release.
-- `error`: metadata could not be checked, including anonymous rate limits.
-  The command exits nonzero and does not report the component as current.
+- **`matches`:** The published manifest or commit matches the repository pin
+  (including a pinned platform manifest inside a multi-platform index).
+- **`different`:** The upstream image channel or default source branch differs
+  from the pin. This signals a change to review, not proof of a newer or
+  compatible release.
+- **`error`:** Metadata could not be fetched (for example, anonymous rate
+  limiting). The command exits nonzero rather than reporting the pin as current.
 
-Hermes/Tor use their `latest` image channels, the optional executor desktop uses
-its `desktop` channel, Tailscale uses `stable`, and
-HAProxy stays on the pinned reference's version channel. Unpinned build-base
-tags are listed separately: there is no recorded digest to compare for those.
-The desktop check follows the `hermes-sandbox` image stage.
-The command changes no pins, installs no packages, and pulls no image layers.
-Checks are operator-invoked; plugin notifications have their own cadence below.
+Hermes and Tor track `latest`, the desktop executor tracks `desktop` (following
+`hermes-sandbox`), Tailscale tracks `stable`, and HAProxy tracks its pinned
+release channel. Unpinned build-base tags are listed separately. The checker
+modifies no pins, installs no packages, and pulls no image layers.
 
 ## Apply stack updates
 
-When upgrading this wrapper from v0.23.1, stop Bot Desktop from each profile's
-WebApp screen pane while the old deployment still shows it running. The old
-image can clear its desktop owner record. If an upgrade already left a desktop that
-cannot start or stop, return to the v0.23.1 wrapper and deployment settings
-with compatible saved state, stop the affected screens there, then retry the
-upgrade. Keep the executor home and Hermes volume so browser data and profile
-state survive. See [backup scope](configuration.md#backup-scope).
-
-Review updated wrapper repository pins and upstream release information, then:
+Review repository pin updates and upstream release notes, back up your state
+(see [backup scope](configuration.md#backup-scope)), and run:
 
 ```sh
 make build
@@ -53,36 +43,27 @@ make down
 make up
 ```
 
-`make up` automatically runs cached builds for the selected deployment and treasury
-before setup or service changes. `make x402_treazury-prepare` also runs a cached
-treasury build before inspecting completion or changing research services. Changed
-Dockerfiles, source pins and copied inputs rebuild their affected layers; unchanged
-layers reuse the selected engine's cache. Build failure stops the operation before
-those runtime changes. Builds may need Internet access; these commands do not search for newer
-upstream commits or force base-image pulls. Status, backup and shutdown remain
-independent of builds.
-
-The explicit `make build` above builds all images, including optional Funnel, ahead
-of shutdown and keeps the existing deployment available during the build. Image
-construction does not run initialization or deployment-policy checks, so it remains
-available when operator configuration needs repair. `make up` validates and applies
-actual operator settings; use `make check` explicitly for development qualification.
-`make down` waits for graceful financial shutdown and preserves named volumes
-and bind data. `make up` reapplies offline setup and verifies research readiness.
-Back up configuration, bind data, and the Hermes/treasury named volumes before
-applying changes; see [backup scope](configuration.md#backup-scope).
-
-The official Hermes image refuses in-place core updates. Its native passive
-core version check currently reports an image-managed install as unsupported;
-the stack checker supplies the useful version comparison. Treasury preparation
-completion survives source/build updates. Startup checks the current deployment
-policy and treasury identity; an invalid policy blocks research activation without
-discarding completion or requiring another funding/warming run. Missing or
-incomplete preparation still requires explicit `make x402_treazury-prepare`;
-review native funding policy before that operation. The editable research TOML
-is preserved across image builds; compare packaged defaults and apply desired
-policy changes explicitly. Ordinary policy edits retain initial preparation
-eligibility; see [research configuration](x402_treazury.md#edit-the-research-configuration).
+- **Pre-upgrade step from v0.23.1:** If upgrading from the v0.23.1 wrapper with
+  Bot Desktop running, stop Bot Desktop from each profile's WebApp screen pane
+  before shutting down so the old image clears its desktop owner record. If an
+  upgrade already left a desktop stuck, temporarily revert to the v0.23.1
+  wrapper with the same saved state, stop the desktop there, and retry the
+  upgrade while keeping `data/executor/home/` and `hermes-data`.
+- **Automatic builds:** `make up` runs cached builds for enabled services and
+  `x402_treazury` before setup or container changes; `make x402_treazury-prepare`
+  also runs a cached treasury build first. Running `make build` ahead of
+  `make down` builds all images (including optional Funnel) while the stack
+  stays up. Build failures abort before runtime state changes. Builds may need
+  host Internet access and never search for newer commits or force base pulls.
+- **State preservation:** `make down` waits for graceful treasury shutdown and
+  preserves named volumes, bind directories, and `config/x402_treazury/research_desk.toml`.
+  `make up` reruns offline setup, prints an advisory diff if your saved research
+  policy differs from packaged defaults, and reconnects a prepared treasury.
+  Invalid treasury policy blocks research activation without discarding
+  preparation history.
+- **In-place Hermes updates:** The official Hermes image disables in-place core
+  updates, so its built-in core version check reports an unsupported install;
+  use `make check-updates` instead.
 
 ## Manage persistent user plugins
 
@@ -94,191 +75,152 @@ python3 scripts/plugins.py update PLUGIN_NAME
 python3 scripts/plugins.py disable PLUGIN_NAME
 ```
 
-The wrapper executes the native Hermes CLI as UID/GID 10000 in the running
-agent's Tor namespace. Interactive terminals retain native dependency and
-capability consent prompts. For deliberate non-interactive dependency consent,
-the native installer accepts `--enable --yes-deps`; the wrapper does not add
-consent, scan bypasses, or force flags automatically.
+`scripts/plugins.py` runs the Hermes CLI as UID/GID 10000 inside Hermes's Tor
+namespace, keeping interactive dependency and capability consent prompts
+intact. For non-interactive installs, pass `--enable --yes-deps` explicitly;
+the wrapper never adds consent, scan-bypass, or force flags automatically.
 
-Plugin code is stored under `/opt/data/plugins`. Enablement, install provenance,
-and prepared dependency environments under `/opt/data/installs/` share the
-existing `hermes-data` volume. They survive container recreation and ordinary
-`make down`. Native plugin installation prepares Python environments in profile
-storage, rather than requiring edits to the image's Python environment. Some
-plugins also require system binaries or external services; those requirements
-still need component-specific deployment work.
+- **Persistence:** Plugin code lives under `/opt/data/plugins`, and enablement,
+  provenance, and Python virtual environments live under `/opt/data/installs/`
+  inside `hermes-data`. They survive container recreation and `make down`
+  without modifying the container image. Plugins that require OS packages or
+  external services still need deployment-level changes.
+- **Update cadence:** Hermes checks for plugin updates every 24 hours without
+  auto-applying them. Apply updates explicitly and follow Hermes's reload or
+  restart instructions.
+- **Bundled vs. user plugins:** Bundled plugins ship inside the pinned Hermes
+  image, with standalone add-ons disabled by default (`plugins.enabled: []`). A
+  user plugin with the same name can override a bundled plugin, so keep
+  overrides deliberate rather than shadowing bundled code unintentionally.
+- **Authority:** Plugins run inside Hermes with full agent privileges—outside
+  the SSH executor sandbox, though without access to the `x402_treazury` wallet
+  volume.
 
-Plugin update checks run every 24 hours; automatic application is disabled.
-Catalog updates follow native reviewed pins and consent checks; custom Git
-sources use their native update rules. Apply updates explicitly and follow the
-native interface's reload/restart guidance.
-
-Bundled plugins remain part of the pinned Hermes image. Optional standalone
-add-ons start disabled (`plugins.enabled: []`); backend/platform registrations
-are selected through their normal configuration. A matching user plugin can
-override a bundled plugin where its native discovery rules support that
-override. Keep overrides intentional instead of covering the entire bundled
-directory with persistent old code. Plugins execute with agent privileges;
-they are outside the SSH executor sandbox and have no treasury wallet mount.
-
-`make plugins-test` uses a disposable project to install and update a harmless
-plugin with a locally generated wheel dependency, then checks loading after
-container recreation. It uses no inference or paid research calls.
+`make plugins-test` tests installing, updating, and reloading a wheel-backed
+plugin across container recreation in a temporary Compose project with no
+inference or paid calls.
 
 ## Privacy defaults
 
-Shared-metrics collection and uploads are explicitly disabled, with the current
-consent offer recorded as declined. OTLP diagnostics export and computer-use
-telemetry are off. Browser telemetry environment overrides are applied to the
-agent and executor. Native update checks and plugin notifications remain enabled
-independently of those settings.
-
-HAProxy adds a CSP restricting fonts/styles to local resources and inline styles;
-browsers intersect it with Hermes's own CSP. Google Fonts requests are blocked
-for both local and Funnel ingress, and bundled/system font fallbacks remain
-available. This does not block functional model catalogs, tool downloads, or
-content the operator deliberately accesses. Those agent-side requests retain
-the existing Tor route. Profile settings are writable; these are explicit
-defaults, not immutable enforcement against arbitrary plugin or agent code.
+- **Telemetry off:** Hermes shared-metrics collection is disabled with the
+  consent prompt marked declined. OTLP diagnostics export, computer-use
+  telemetry, and browser telemetry environment flags are disabled in Hermes and
+  the executor. Update checks and plugin notifications stay enabled
+  independently.
+- **Font and style CSP:** HAProxy adds a `Content-Security-Policy` restricting
+  fonts and styles to local resources and inline styles, which browsers
+  intersect with Hermes's own CSP. This blocks Google Fonts on local, Funnel,
+  and onion ingress while preserving bundled and system font fallbacks, model
+  catalogs, and agent-side Tor requests.
+- **Scope:** Because profile files are writable, these are explicit defaults
+  rather than immutable controls against arbitrary agent or plugin code.
 
 ## Derived Hermes build and patch maintenance
 
-The derived Hermes image uses the official v0.23.3 image, source
-`caafe5389ae585ef77387a962aee05b1bcf17029`. The disposable frontend stage
-compares the clean install stamp, packaged source hash and native renderer
-receipt before applying the ordered patches. Upstream PM installs its
-hash-verified pnpm pin for the native frozen-lockfile build. The final image
-includes the patched Python components and rebuilt Webapp selected through
-`HERMES_WEBAPP_DIST`. It clears old renderer chunks before copying the output.
-The runtime omits pnpm. Its passive absence warning does not block Python plugin
-setup. See the [Hermes update workflow](update-workflow.md).
+The derived Hermes image (`private-hermes-agent:local`) builds from official
+Hermes v0.23.3 (source commit `caafe5389ae585ef77387a962aee05b1bcf17029`). In a
+separate frontend build stage, `components/hermes/verify-build.mjs` verifies
+the base image's install stamp, source hash, and renderer receipt before
+applying the ordered patch series under `components/hermes/patches/`.
 
-The candidate patch is the packaged Python and renderer diff of release-based
-replay recorded in the [release provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
-The export excludes upstream Python tests, website, contributor and Electron-only
-files. The local clone and reference checkouts are source references. The Docker build uses the
-tracked patch and pinned official image. For the next Hermes release, see
-[how to rebuild the candidate patch](update-workflow.md#rebuild-the-candidate-patch-for-a-new-release).
+That build stage installs a hash-verified `pnpm` pin for the frozen-lockfile
+frontend build, clears stale renderer chunks, and copies patched Python files
+plus the rebuilt WebApp (`HERMES_WEBAPP_DIST`) into the final runtime image.
+The runtime image omits `pnpm`; its advisory warning about missing `pnpm` does
+not affect Python plugin setup.
+
+`0001-upstream-candidates.patch` is exported from the release replay recorded
+in [v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance),
+excluding upstream Python tests, website files, contributor metadata, and
+Electron-only files. The Docker build uses only the tracked patches and pinned
+official image, never local reference checkouts. See
+[Hermes update workflow](update-workflow.md) and
+[rebuilding the candidate patch](update-workflow.md#rebuild-the-candidate-patch-for-a-new-release)
+for upgrade steps.
 
 ### Downstream responsibility inventory
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| 0001 upstream candidates | Strict managed reader and reload authority, native SSH trust and file classification, executor desktop/browser, native terminal, configurable URL context and managed tool ceiling from PR1–PR6 | Remove adopted portions when the official pin provides them and the affected packaged checks pass |
-| 0002 managed policy | Publish the serving container's root-owned managed YAML and dotenv before native bootstrap | Verify effective settings under conflicting profile input, repeat loading and offline operation |
-| 0003 desktop and terminal policy | Keep explicit desktop enablement and recovery guidance, local Code/Agent labels and startup acknowledgement, and safe absolute Code cwd | Retain until equivalent native deployment controls meet the terminal and desktop checks |
-| 0004 deployment policy | Capture content and desktop choices before profile dotenv loading, and validate WebApp content policy | Retain until native deployment policy preserves the same authority |
-| 0008 private image routes | Authenticated content and consent APIs with bounded public IPv4 raster retrieval | Image endpoint, CDN consumer and outage checks |
-| 0009 browser response policy | CSP, trusted bootstrap headers and inert private previews | Browser response, exact-origin socket and active-file checks |
-| 0010 browser content | Shared rendering, consent and image Save/Copy | Renderer and real browser checks across all content modes |
-| 0011 MCP probe redirects | Leave redirects to the native MCP SDK. The separate endpoint diagnostic treats a redirected initialize response as inconclusive. | Check HEAD, GET and initialize redirects in the local integration fixture. Remove when the Hermes pin's diagnostic preserves the SDK's redirect boundary. |
+| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop/browser transport, Code/Agent terminals, configurable URL context, and managed tool denial (PR1–PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0002-managed-policy` | Generates root-owned `/etc/hermes/config.yaml` and `/etc/hermes/.env` at container startup before Hermes loads profiles. | Verify effective settings under conflicting profile input, reloads, and offline jobs. |
+| `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code/Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
+| `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |
+| `0008-private-image-routes` | Authenticated Tor image proxy and origin-consent APIs with bounded public IPv4 raster retrieval. | Verify with image endpoint, CDN consumer, and outage checks. |
+| `0009-browser-response-policy` | Response CSP, trusted bootstrap headers, exact-origin WebSockets, and inert private previews. | Verify with browser response, WebSocket, and active-file checks. |
+| `0010-browser-content` | Shared content rendering, image consent UI, and image Save/Copy through the Tor proxy. | Verify with renderer unit tests and cross-browser tests across all four content modes. |
+| `0011-mcp-probe-redirects` | Leaves HTTP redirects to the MCP SDK and treats redirected `initialize` responses in Hermes's separate diagnostic probe as inconclusive. | Verify `HEAD`, `GET`, and `initialize` redirects in `tests/local_integration_smoke.py`; remove once upstream's diagnostic respects the SDK's redirect boundary. |
 
-Managed Hermes uses ordinary sockets for inference, discovery, MCP and OAuth.
-Compose clears the standard HTTP proxy variables before startup. The managed
-dotenv applies the same assignments after user profile loads and reloads.
-This keeps the gateway as the single source of socket permissions and avoids
-maintaining a second grant matcher across HTTPX, urllib, and MCP clients.
-Keep inherited HTTP proxies disabled for managed Hermes when updating the
-pins. Public connections already use Tor, and local grants are enforced by
-the namespace firewall and gateway. Verify that the pinned MCP SDK retains
-its native origin checks and that fixture TLS and MCP response limits retain
-their upstream behavior. See [local integration qualification](development.md#local-inference-and-http-mcp).
+### Managed container config and executor packaging
 
-The serving entrypoint generates `/etc/hermes/config.yaml` and `/etc/hermes/.env`.
-The files pin the native file backend, SSH endpoint and client configuration,
-executor-only desktop, Chromium sandbox, operator terminal mode, no-fetch URL
-references and the tool denial list. The managed dotenv also pins terminal
-selectors for the native launch bridge. Hermes retains those assignments during
-profile reload. Offline jobs operate on the saved profile. Browser startup and reload checks use the built image.
+At startup, the Hermes entrypoint writes `/etc/hermes/config.yaml` and
+`/etc/hermes/.env` to pin:
 
-The desktop executor uses the separately pinned Hermes sandbox image, OpenSSH
-and a hash-locked harness under `/opt/browser-harness`. The candidate sends its
-runner and the official screenshot helper over the existing SSH command stream.
-The requirements follow the Hermes Python lock and retain the Pillow 13 override
-with `--no-deps`. The live browser profile remains persistent and excluded from
-the native bulk synchronization archive. The derived agent's empty
-`/workspace` supports native cwd checks and is separate from the executor mount.
+- The SSH file backend, endpoint, and OpenSSH client config, plus executor-only
+  desktop, Chromium sandbox, operator terminal mode, `context_references.fetch_urls: false`,
+  and the `tools.disabled` list.
+- Cleared `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` values (applied on top
+  of Compose defaults and reapplied across profile reloads) so the namespace
+  firewall and `tor` gateway remain the single enforcement point for local
+  grants and Tor routing.
+- Derived `tools.disabled` entries:
 
-Run `make hermes-ui-test` for TypeScript and focused renderer tests in the
-disposable build stage. The upstream session-resume JSON fixture, omitted from
-the runtime image, is in `tests/fixtures/`. Run the [packaged checks](development.md#packaged-hermes-qualification)
-against both engines when changing the adopted source or deployment patch series.
+| Deployment setting | Disabled tools |
+| --- | --- |
+| Every deployment | `browser_cdp`, `browser_dialog`, `browser_vault`, `read_window_below` |
+| `COMPUTER_USE_ENABLED=false` | Add `computer_use`, `browser_exec` |
+| `WEBAPP_EXTERNAL_CONTENT` is `tor_proxied`, `ask`, or `off` | Add `desktop_preview`, `drive_preview`, `annotate_preview` |
+
+The desktop executor pairs the pinned `hermes-sandbox` image with OpenSSH and a
+hash-locked browser harness under `/opt/browser-harness` (following Hermes's
+Python lockfile plus the Pillow 13 `--no-deps` override). Hermes sends the
+runner and screenshot helper over SSH, keeps the live browser profile excluded
+from SSH sync archives, and provides an empty agent-side `/workspace` directory
+(separate from the executor's `/workspace`) for session `cwd` validation.
+
+Run `make hermes-ui-test` to execute TypeScript type-checking and focused
+renderer tests in the build stage (using `tests/fixtures/session-resume-active-turn.json`,
+which the official runtime omits). Run the
+[packaged Hermes checks](development.md#packaged-hermes-qualification) on both
+engines after modifying patches or base pins.
 
 ### Local preparation package dispositions
 
-The PR1–PR6 drafts in `upstream_work/submissions/` use the
-`upstream-pr/*` branches. The working clone `upstream_work/hermes-agent/`
-uses the `fork` remote for those refs and the release refs. Submit one branch per
-PR using the heads and merge order in the [submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit).
-See the [fork repository](https://github.com/mikeperry-tor/hermes-agent).
-The `stack-patches/v0.23.3/*` refs preserve the
-[v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
+Upstream submission drafts for PR1–PR6 live under `upstream_work/submissions/`
+and use `upstream-pr/*` branches in `upstream_work/hermes-agent/`, pushed to
+the `fork` remote ([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
+alongside the `stack-patches/v0.23.3/*` release refs. Submissions target
+`NousResearch/hermes-agent` (`origin`) under author identity
+`Mike Perry <mikeperry-git@untrusted.systems>`. Follow the branch heads and
+merge order in the
+[submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit) and
+[merge-order checklist](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist).
 
-Human submissions target `NousResearch/hermes-agent`, which is the clone's
-`origin` remote. PR1 supplies strict reads, validated snapshots and dotenv
-precedence through reload. PR2 provides the SSH fixes that PR3 builds on.
-PR4–PR6 each build directly on PR1.
-Follow the [merge-order checklist](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist)
-for overlap and validation.
-
-Candidate identities use `Mike Perry <mikeperry-git@untrusted.systems>`.
-Exact local heads and qualification scope are recorded in the preparation plan.
-
-| Package | Packaged use |
+| Package | Scope in Private Hermes |
 | --- | --- |
-| PR1 | Strict managed reads, dotenv bootstrap and reload, and profile-specific interpolation |
-| PR2 | Browser-profile sync exclusion, missing-path classification and pinned SSH client options |
-| PR3 | Native executor placement, desktop/browser transport and Chromium sandboxing |
-| PR4 | Native executor/gateway terminal selection with the stack's Code/Agent modes |
-| PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns |
-| PR6 | Managed `tools.disabled` derived from the deployment's desktop and external-content selections |
-| PR7 | Deferred. The stack carries its private content, raster and consent patches |
+| PR1 | Strict managed config reads, dotenv bootstrap and reload precedence, and profile-specific interpolation. |
+| PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT`/404 classification, and pinned SSH client options (required by PR3). |
+| PR3 | Executor-only desktop/browser placement, SSH transport, and Chromium sandboxing. |
+| PR4 | Native executor/gateway terminal selection backing the stack's Code and Agent modes (builds on PR1). |
+| PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on PR1). |
+| PR6 | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on PR1). |
+| PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`–`0010`). |
 
-The serving image derives `tools.disabled` from the deployment selections.
+PR7 is not submission-ready: it still needs decisions on shared Ask/Always
+renderer ownership and authenticated consent storage/API while preserving
+upstream's CDN consumer and IPv6 support (private audio/video streaming and
+interactive frames stay out of scope).
 
-| Selection | Disabled tool names |
-| --- | --- |
-| Every deployment | `browser_cdp`, `browser_dialog`, `browser_vault`, `read_window_below` |
-| `COMPUTER_USE_ENABLED=false` | Add `computer_use` and `browser_exec` |
-| `WEBAPP_EXTERNAL_CONTENT` is `tor_proxied`, `ask` or `off` | Add `desktop_preview`, `drive_preview` and `annotate_preview` |
+Related upstream issues and PRs tracked for conflict checks include `#156336`,
+`#130878`, `#130946` (renderer/consent), `#130023` (provenance), `#156728`
+(managed-policy readers), `#95247` (profile tool approvals), `#156598` (browser
+module move), `#156368` (Chromium cleanup), `#128539` (CDN consumer), and
+`#102667` (large gateway-local rasters). Recheck their status on GitHub before
+submitting or adopting changes.
 
-PR6 uses native managed filesystem authority, existing dispatch points and profile
-narrowing without enabling the hosted allowlist. It refreshes tool schemas and
-generated prompt guidance when the managed tool policy changes. Background review
-lists tools from the fork's effective schemas and managed policy. Startup readiness
-respects the tool selection, and warm CLI banners reuse only panels built under
-the current policy. Model-facing connector and catalog results omit denied tools.
-A registered MCP server stays selected when all its tools are temporarily denied.
-Explicit Doctor inspection can still report deployment
-dependencies. PR7 owns the content ceiling and content capture independently.
-The local drafts list the topic commits and their validation.
-The [preparation plan](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist)
-records overlaps and patch removal conditions. The
-[candidate qualification](development.md#local-upstream-candidate-qualification)
-records platform limits and candidate-only evidence.
-
-PR7 is a reviewed deferred design, not runnable or submission-ready. Its next
-steps are to resolve shared Ask/Always renderer ownership and native authenticated
-consent authority/storage/API, then implement and qualify the combined passive-
-raster package. Native UI preferences exclude permission grants. Preserve the
-existing CDN consumer and legitimate upstream IPv6 behavior; fixed `/opt/data`
-storage and Tor-only selection are downstream policy. Private audio/video
-streaming and interactive frames remain outside this package.
-
-The stack preserves the existing OpenSSH configuration file for both model
-execution and the operator Code terminal. Verify fresh SSH and SCP with valid,
-missing and mismatched known-host keys, desktop dependency loss and recovery,
-and refusal of browser routes outside managed executor Chromium.
-
-The retained plan and local comparison records include renderer/consent work #156336,
-#130878 and #130946, adjacent provenance #130023, managed-policy readers #156728,
-profile tool approvals #95247, browser module movement #156598 and Chromium cleanup
-#156368. The CDN consumer from #128539 must remain supported; #102667 concerns
-large gateway-local rasters. These are comparison references, not live tracker
-status or prerequisites. Recheck actual disposition before submission or adoption.
-
-Remove downstream mechanics only after the selected packaged upstream revision
-provides equivalent behavior and affected Docker/rootless-Podman qualification
-passes. Keep deployment choices, approved network grants, state preservation and
-unsupported-surface exclusions. A maintainer merge alone does not establish
-runtime qualification or authorize a production update.
+Remove a downstream patch only after a pinned official Hermes release ships the
+equivalent behavior and both Docker and rootless Podman qualification passes.
+Keep deployment choices, network grants, state preservation, and unsupported
+tool exclusions intact; an upstream merge alone does not qualify a stack update.
+See [local upstream candidate qualification](development.md#local-upstream-candidate-qualification)
+for candidate-level test coverage.

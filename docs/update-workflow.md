@@ -1,134 +1,127 @@
 # Hermes update workflow
 
-Use this procedure with the [build and patch maintenance guide](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance)
-and [planning workflow](planning-workflow.md). They describe how to select
-integration checks; the maintained component guides own the operating contracts.
+Use this workflow alongside
+[derived Hermes build and patch maintenance](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance)
+and the [planning workflow](planning-workflow.md) when upgrading the pinned
+Hermes Agent release.
 
-## Review the integration, not just patch applicability
+## Review the upstream diff and build inputs
 
-1. Record the wrapper baseline and exact upstream revision range. Inspect the
-   actual diff, including new routes and dispatch paths outside our patch targets.
-   A patch applying cleanly does not establish that its policy still covers every
-   relevant consumer.
-2. Resolve the official image digest and inspect the downloaded image's source
-   stamp, renderer receipt and calculated source hash. Check copied helpers,
-   omitted test fixtures and executor dependency pins against that same revision.
-   Keep reference checkouts read-only; their tag alone does not prove packaged
-   image contents.
-   Update the packaged Hermes version in `README.md` and the release tag in its
-   stock Compose comparison link together. Inspect that release's Compose file
-   and revise the hardening comparison if upstream defaults have changed.
-3. Check the native build recipe and toolchain before rebasing patches. Prefer
-   upstream's locked installation mechanism in disposable build stages. Verify
-   every patched Python target and the rebuilt renderer reach the final image.
-4. Trace changes through the accepted boundaries: SSH execution placement and
-   forbidden network paths; Teep routing; early deployment-policy capture;
-   registration, inline and stale tool dispatch; HTTP and WebSocket auth; content
-   responses and browser requests; configuration loading, migration and retries.
-   Check native guarantees before adding wrapper enforcement or budgets.
-5. Map concrete hazards to focused checks. Reuse existing suites and add a small
-   behavioral fixture for an uncovered route. Upstream feature completeness is
-   outside this wrapper's qualification scope.
+1. **Inspect the full revision range:** Record the wrapper's starting commit and
+   the upstream commit range. Review the full upstream diff, including new HTTP
+   routes, WebSocket handlers, and tool dispatch paths outside existing patch
+   targets—a clean patch apply does not guarantee policy coverage for new code
+   paths.
+2. **Verify the official image contents:** Resolve the official image digest and
+   inspect its source stamp, renderer receipt, and computed source hash. Check
+   copied helpers, omitted test fixtures, and executor Python/browser pins
+   against that same revision. Keep `reference_repos/` read-only; a checkout tag
+   alone does not prove what shipped in the container image.
+3. **Update user-facing version links:** Update the Hermes version in `README.md`
+   and its stock Compose comparison link together. Inspect upstream's new
+   `docker-compose.yml` and update the hardening comparison if upstream defaults
+   changed.
+4. **Verify the build recipe:** Check upstream's frontend build recipe and
+   hash-verified `pnpm` pin in a separate build stage before rebasing patches.
+   Confirm every patched Python file and the rebuilt WebApp bundle reach the
+   final runtime image.
+5. **Trace trust boundaries:** Audit upstream changes against the stack's
+   boundaries: SSH execution placement and firewall denials, Teep routing, early
+   deployment-policy capture, tool registration and stale-tool dispatch, HTTP
+   and WebSocket authentication, browser content headers, and configuration
+   loading/migration. Check upstream's own guarantees before adding wrapper
+   enforcement.
+6. **Map hazards to focused tests:** Reuse existing test suites and add small
+   behavioral fixtures for any uncovered route. Testing unrelated upstream
+   features is outside this wrapper's scope.
 
 ## Rebuild the candidate patch for a new release
 
-Publish the `stack-patches/<release>/*` refs to the `fork` remote to preserve
-the release's topic histories. Together with the pinned combined replay, they let
-maintainers reproduce the candidate patch and trace each topic to its
-release-based checks after the submission branches move. The local working
-clone is `upstream_work/hermes-agent/`. See the [fork repository](https://github.com/mikeperry-tor/hermes-agent)
-and the [v0.23.3 provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
+`stack-patches/<release>/*` refs on the `fork` remote
+([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
+preserve each release's topic commits and combined replay so maintainers can
+reproduce `0001-upstream-candidates.patch` even after `upstream-pr/*` submission
+branches advance. The local working clone is `upstream_work/hermes-agent/`; see
+[v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
 
-Use these steps when the next release still needs candidate changes.
+When a new Hermes release still needs candidate patches:
 
-1. Start a temporary replay from the exact source revision shipped in the new
-   official image. Use the current release replay to inventory the behavior
-   Private Hermes carries. Compare the corresponding `upstream-pr/*` topic
-   commits for fixes that belong on the new base.
-2. Replay the selected topic changes that the new release still needs. Include
-   the shared managed configuration prerequisite once and reconcile overlaps.
-   Verify any adopted behavior in the official release through upstream's tests
-   and the affected packaged checks. Drop the corresponding candidate patch
-   and duplicate feature tests once that release passes. Keep deployment
-   checks for the wrapper's configuration, isolation, ingress and storage.
-   If the release includes all candidate behavior, remove the candidate patch
-   and its build input together.
-3. Export the diff from the new release base to the new combined replay as
-   `0001-upstream-candidates.patch`. Exclude upstream Python tests, website files,
-   contributor metadata and Electron-only files. Record the exact base and replay
-   head in the patch header. Rebase the downstream deployment and privacy patches
-   separately and verify the complete series against the packaged source.
-4. Record the selected topics, overlap resolutions and qualification in the
-   upgrade plan. Update the build provenance with the exact combined replay
-   SHA and its ref under `stack-patches/<release>/combined`. Keep the
-   `upstream-pr/*` branches available for their PRs.
+1. Start a temporary replay branch from the exact source commit shipped in the
+   new official image. Compare the previous release replay against the
+   `upstream-pr/*` branches to identify which fixes belong on the new base.
+2. Replay only the topic commits the new release still lacks, including the
+   shared managed-configuration prerequisite (PR1) once and resolving overlaps.
+   For any feature upstream has adopted, verify it with upstream's tests and our
+   packaged checks, then drop that candidate patch and duplicate tests while
+   keeping wrapper tests for configuration, isolation, ingress, and storage. If
+   upstream has adopted all candidate changes, remove
+   `0001-upstream-candidates.patch` and its build input.
+3. Export the diff from the new release base to the combined replay head as
+   `0001-upstream-candidates.patch`, excluding upstream Python tests, website
+   files, contributor metadata, and Electron-only files. Record the base commit
+   and replay head in the patch header, then rebase the downstream deployment
+   and privacy patches (`0002`+) on top and verify the full series against the
+   packaged source.
+4. Record the carried topics, overlap resolutions, and test results in the
+   upgrade plan. Push the combined replay to `stack-patches/<release>/combined`
+   and keep `upstream-pr/*` branches intact for open PRs.
 
-## Keep qualification evidence attributable
+## Qualification and regression checklist
 
-- Build every image used by the selected fixture, including unchanged supporting
-  images whose local tags may be stale. Keep source/build failures distinct from
-  service readiness and application failures.
-- Serialize fixtures sharing fixed subnets or ports. Use disposable state and
-  dummy credentials. Test allowed paths alongside forbidden paths, dependency
-  loss and recovery; source inspection alone cannot qualify isolation.
-- Exercise populated configuration, native migration, deliberate CLI edits,
-  native profile reload and repeated setup. Check effective settings and
-  identity preservation.
-- Diagnose failures before changing policy. Tor connection/DNS failures, stale
-  images and browser-observation failures need different remedies. Preserve
-  failed fixture state when useful; never recover by allowing direct egress.
-- Reuse passed evidence when rerunning an affected phase, but retain its fixture
-  prerequisites. Screenshot/download checks, for example, need artifacts created
-  by earlier browser actions. Record skipped phases and their supporting evidence;
-  obtain a complete fixture run when phase dependencies remain uncertain.
-- Report implementation, validation and independent review separately. Record
-  the tested source/image, checks establishing current behavior and platform/live-
-  service limits in the owning guide. Keep execution/review chronology and phase
-  identifiers in the plan, not appended guide updates. Keep generated private logs
-  and runtime state out of commits.
+### Frontend, routes, and dispatch
 
-## Frontend and dispatch contracts
+- Build the frontend with upstream's frozen lockfile and hash-verified `pnpm`
+  pin in a separate build stage. The runtime image may omit `pnpm` (its
+  missing-binary warning is advisory), while dependency or build errors must
+  fail the build. Qualify Python plugin environment setup separately from
+  frontend tooling.
+- Audit saved-gateway HTTP/WebSocket relays, inline `browser_vault` dispatch,
+  peer routes, and backup-transfer routes in addition to patched files. Verify
+  authentication, exact-host/origin checks, response headers, and refusal of
+  unauthorized or invalid requests without state mutation. Test
+  unconfigured-provider refusal directly rather than enabling a provider or
+  widening grants to exercise a route.
+- Preserve ARM64 Chromium discovery, no-follow named-tab marker writes, and
+  upstream's restricted-client CDN consumer. Per-hop CDN redirect checks do not
+  replace bounded raster retrieval, IP pinning, TLS/credential isolation, or
+  origin consent.
 
-Use upstream's locked frontend recipe and hash-verified package-manager pin in a
-disposable build stage. The official runtime can omit pnpm; its passive warning
-is advisory, while dependency download or build failures must fail visibly.
-Qualify Python plugin environment preparation independently of frontend tooling.
+### Images, SSH files, and state migrations
 
-Trace saved-gateway HTTP/WebSocket relays, inline browser-vault dispatch, peer and
-backup-transfer routes as well as patched files. Retain native authentication,
-exact-host/origin, response enforcement and hosted-tool/argument checks. Test
-unauthorized/invalid-input refusal without mutation and unconfigured-provider
-refusal; do not enable a provider or widen network grants just to test a route.
-Native threaded availability checks own their budgets; test dependency failure
-and recovery before adding another wrapper deadline.
+- **Image Save and Copy:** Test menu dispatch, cancellation, one-time `ask`
+  approval, `off` refusal, original and extensionless filenames, saved-gateway
+  behavior, and proxy failure without direct browser fallback, plus native
+  CORS/size behavior in `browser_native`. (A controlled clipboard sink verifies
+  bytes and request placement, not OS clipboard permissions or Electron.)
+- **SSH file error classification:** Verify `ENOENT`/404 for missing files and
+  missing parent directories alongside regular files, directories, symlinks, and
+  sensitive paths. GNU `realpath` can succeed on a missing final path component,
+  so check the exact status code rather than accepting any error.
+- **Populated profile upgrades:** Upgrade a populated profile from the prior
+  official Hermes release (not just an empty profile) and load it twice. Verify
+  settings, transcripts, identities, and saved `.env`/auth/plugin files survive
+  schema migration. Check upstream defaults (such as `agent.clarify_timeout` in
+  [tool discovery default](configuration.md#tool-discovery-default)) against
+  documented configuration behavior rather than assuming prior defaults held.
+- **Build inputs:** Recheck the Python lockfile, executor browser harness,
+  screenshot helper, `tests/fixtures/session-resume-active-turn.json`, `pnpm`
+  pin, and stock Compose comparison against the new source before reusing older
+  test results.
 
-Preserve native ARM64 Chromium discovery and no-follow named-tab marker publication.
-Per-hop CDN redirect host checks alone do not replace bounded public-raster
-retrieval, connection-time destination validation, TLS/credential isolation or
-consent. Keep the native restricted-client CDN consumer supported when changing
-image routes.
+### Evidence discipline
 
-## Image, file and state checks
-
-Qualify Copy and Save through the shared browser image reader, including actual
-menu dispatch, cancellation, one-time approval, `off` refusal, original filenames,
-saved-gateway behavior and failure without direct-browser fallback. Preserve
-native CORS/size handling for `browser_native`. A controlled clipboard sink proves
-request placement and bytes, not OS clipboard permission or Electron containment.
-
-Require ENOENT/404 for a missing SSH file or parent alongside regular-file,
-directory, symlink and sensitive-path controls. GNU realpath can accept a missing
-final component; accepting any error would hide incorrect classification.
-
-Exercise a populated profile from the relevant prior official image, not only
-an empty profile or a schema number. Verify settings, sessions, identities and
-saved env/auth/plugin state after repeated supported loading. Native schema
-migration is not arbitrary database-downgrade support. Inspect clarification and
-other native defaults against [configuration semantics](configuration.md#tool-discovery-default)
-rather than replaying assumptions from a prior release.
-
-Verify the Python lock, executor harness closure, screenshot helper, omitted
-public session fixture, package-manager pin and stock Compose comparison against
-the selected packaged source before reusing evidence. The [current packaged
-qualification](development.md#packaged-hermes-qualification) records coverage and
-limits; it is not a sequence of upgrade reports.
+- Rebuild every image used by a test fixture so stale local tags cannot hide
+  changes. Keep build failures, service readiness failures, and application
+  failures distinct.
+- Serialize tests that share fixed subnets or host ports, using isolated test
+  projects and dummy credentials. Test both allowed and forbidden paths, plus
+  dependency outage and recovery—source inspection alone does not qualify
+  isolation.
+- When reusing passed evidence across partial reruns, preserve fixture
+  prerequisites (for example, screenshot and download checks depend on artifacts
+  from earlier browser steps) and note any skipped phases.
+- Record the tested source commit, passing checks, and platform or live-service
+  limits in
+  [packaged Hermes qualification](development.md#packaged-hermes-qualification).
+  Keep execution chronology and phase logs in the upgrade plan, not appended to
+  maintained guides, and keep private logs out of Git.

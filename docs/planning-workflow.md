@@ -1,150 +1,145 @@
 # Planning workflow
 
-This is maintained guidance for Private Hermes, used with
-[AGENTS.md](../AGENTS.md). Feature designs and acceptance criteria belong in
-`docs/plans/`; operating instructions belong in the relevant maintained guides.
-This workflow does not select a new architecture or authorize unrelated work.
+Use this workflow alongside [AGENTS.md](../AGENTS.md) when planning and
+executing substantial staged work. Feature plans and acceptance criteria live
+under `docs/plans/`; durable operating contracts live in the top-level guides
+under `docs/`.
 
-Use a plan when requested or when substantial staged work needs explicit design
-decisions, commit boundaries and acceptance criteria. Small changes, including
-ordinary documentation edits, need neither a ceremonial plan nor independent
-review. Scale the process to the actual change.
+Write a plan when the user asks for one or when multi-step work needs explicit
+design decisions, commit boundaries, and acceptance criteria. Small changes,
+including routine documentation edits, need neither a plan nor an independent
+review.
 
 ## Define and review the approach
 
-Before substantive planned implementation, identify the working branch, starting
-commit and plan path. Create or update the plan and commit it locally before
-implementing it. An already committed, still-current plan needs no duplicate
-commit. Preserve unrelated workspace changes.
+Before starting substantial planned work, record the working branch, starting
+commit, and plan path, then commit the plan locally before implementing it. (If
+an up-to-date plan is already committed, do not duplicate it.)
 
-A useful plan states:
+A complete plan states:
 
-- User intent, scope, current behavior, intended behavior and explicit deferrals.
-  Separate observed facts from proposals and unresolved assumptions.
-- Accepted trust boundaries and operator workflows to preserve. For affected
-  integrations, identify the relevant image/source revision and actual component
-  contract, not merely the presence of a reference checkout.
-- The simplest proposed approach. Justify added services, state transitions,
-  persistent records, configuration options and abstractions against concrete
-  needs. Do not add a framework to accommodate hypothetical future integrations.
-- Ordered, coherent implementation phases with stable identifiers, affected
-  consumers, focused acceptance checks and operating-documentation updates.
-  Do not create phases solely to satisfy a commit or review count.
-- Independent design and final combined review gates for substantive work, plus
-  intermediate gates where meaningful architectural or security boundaries
-  change. Specify what each gate establishes and the evidence it needs.
-- Missing evidence, remaining decisions and any live exposure, financial or
-  destructive operations outside current task authorization.
-- Docker and rootless Podman consumers, shared implementation choices, concrete
-  engine exceptions and affected native checks on each engine. Reuse the
-  [engine guidance](architecture.md#rootless-podman) and
-  [qualification workflow](development.md#qualification-and-maintenance); do not
-  assume identical Compose models prove identical runtime behavior.
+- **Intent and scope:** User goals, current behavior, intended behavior, and
+  explicit deferrals. Keep observed facts separate from proposals and open
+  assumptions.
+- **Preserved boundaries:** Accepted trust boundaries and operator workflows to
+  keep intact. For external integrations, cite the pinned image or source
+  commit and its documented contract rather than assuming a reference checkout
+  matches.
+- **Simplest design:** Justify any new service, state transition, persistent
+  file, configuration option, or abstraction against a concrete requirement. Do
+  not build a framework for hypothetical future integrations.
+- **Implementation phases:** Ordered phases with stable identifiers, consumers
+  to update, focused acceptance checks, and documentation updates. Do not split
+  phases merely to inflate commit or review counts.
+- **Review gates:** Independent design review before implementation, final
+  combined review at completion, and intermediate gates where architectural or
+  security boundaries change, stating what evidence each gate requires.
+- **Engine coverage:** Both Docker and rootless Podman impacts, shared choices,
+  concrete engine exceptions, and required native tests (see
+  [rootless Podman](architecture.md#rootless-podman) and
+  [qualification and maintenance](development.md#qualification-and-maintenance)).
+  Identical Compose models do not prove identical runtime behavior.
+- **Gaps and authority limits:** Missing coverage, unresolved decisions, and
+  any live network exposure, financial action, or destructive step outside
+  current task authorization.
 
-Check relevant active/deferred plans for shared-interface conflicts. Reconcile
-affected requirements with the change; do not silently restore superseded names,
-topologies or tooling. No legacy compatibility or migration machinery is needed
-for this prerelease stack unless the user explicitly requests it. Preserve
-current-format state and safe initialization/retry behavior.
+Check active and deferred plans under `docs/plans/` for shared-interface
+conflicts and reconcile them so superseded names, topologies, or tools are not
+reintroduced. For this prerelease stack, do not add legacy migration machinery
+unless explicitly requested; preserve current-format state and retry-safe
+initialization.
 
-Obtain independent design review before substantive implementation. Resolve
-material findings before building on affected decisions. Commit material design
-changes and review them again when they invalidate earlier conclusions.
+Obtain independent design review before substantive implementation, resolve
+material findings before building on them, and re-review if design changes
+invalidate earlier conclusions.
 
-## Independent review means a fresh subagent
+## Independent review
 
-Start each independent audit/review with a newly spawned, read-only subagent in a
-fresh conversation, with no prior turns or inherited history. Use
-`fork_turns="none"` when supported. Neither an implementer's self-review nor reuse
-of a previous review conversation counts as a new independent review.
+Each independent audit or review must run in a newly spawned, read-only
+subagent with a fresh conversation and no inherited history (`fork_turns="none"`
+where supported). Neither self-review by the implementer nor reusing an earlier
+review conversation qualifies.
 
-Give the reviewer a self-contained brief containing user intent, constraints,
-scope, baseline and exact reviewed SHA or identified snapshot including new files,
-relevant plans/guides, validation evidence, and earlier findings when applicable.
-The reviewer should inspect the repository independently, trace affected
-consumers and failure paths, and examine relevant unchanged high-risk code.
-Reviewers must not author the changes they review.
+Provide the reviewer a self-contained brief containing:
 
-Ask reviewers to challenge unnecessary complexity as well as correctness and
-security. New hardening must address a concrete threat within the agreed trust
-model. A recommendation does not itself authorize scope expansion, extra
-services, migrations or a new framework. Delegation grants no additional access,
-spending or publication authority.
+- User intent, constraints, and scope.
+- Starting commit and the exact reviewed commit SHA or file snapshot (including
+  untracked files).
+- Relevant plans, guides, validation evidence, and prior findings.
 
-Use reviews for meaningful phase commits, named gates and the final combined
-change. One review can cover a phase and a gate, or a final phase and completion,
-when its brief explicitly covers both scopes. There is no fixed reviewer count
-and no requirement to review an unchanged snapshot repeatedly. If independent
-review is unavailable, disclose it and perform useful remaining work without
-claiming the missing gate passed.
+Ask the reviewer to inspect the codebase directly, trace consumers and failure
+paths, check unchanged high-risk code, and challenge unnecessary complexity as
+well as correctness and security. Reviewers must not edit code they review.
 
-## Implement, commit and validate
+- New hardening must address a real threat within the agreed trust model.
+- Reviewer suggestions are proposals, not automatic scope expansion or
+  authorization for extra services, frameworks, spending, or publication.
+- One review may cover both a phase and a gate (or the final phase and combined
+  completion) when the brief explicitly covers both. There is no fixed reviewer
+  count and no need to re-review an unchanged snapshot.
+- If independent review is unavailable, disclose that gap and continue other
+  useful work without claiming the gate passed.
 
-Commit coherent work during development and at phase boundaries, including
-completed changes. Local development commits have standing authorization under
-AGENTS.md; do not wait for separate commit requests. Stage only named intended
-files. Incomplete checkpoints must be identified honestly and cannot be reported
-as completed phases or evidence that acceptance criteria passed.
+## Implement, commit, and validate
 
-Include affected consumers, focused checks and relevant guide updates with their
-implementation. Use native component behavior and straightforward helpers where
-appropriate. Do not turn plan execution or evidence collection into an additional
-orchestration, receipt or recovery system.
+Commit coherent work during development and at phase boundaries, staging only
+named intended files. `AGENTS.md` grants standing authorization for local
+development commits. Mark incomplete checkpoints honestly and never report them
+as completed phases.
 
-Validate changed behavior using existing focused checks and controlled fixtures.
-For affected runtime contracts, cover both supported engines and record actual
-engine, Compose provider, platform and filesystem limits where relevant. Missing
-native coverage is not a pass. Reuse unchanged evidence; documentation-only work
-does not require runtime suites or a new engine experiment.
-Security claims require allowed and forbidden path evidence, with failure and
-restart coverage where relevant. Keep fixtures separate from production state
-and secrets; serialize checks sharing fixed networks/runtime state. Do not add
-arbitrary resource limits or deadlines to force a test or workflow to finish.
+Include consumer updates, focused checks, and maintained guide edits alongside
+code changes rather than deferring them. Keep helpers small and explicit; do
+not turn test execution or evidence collection into a separate orchestration or
+recovery framework.
 
-Record phase/review evidence, findings, dispositions and remaining work in the
-plan. Keep generated reports and private logs outside tracked documentation.
-Maintained guides describe current contracts, repository status, qualification
-scope and limitations in place. Do not append phase/gate codes, approval histories,
-dated probe narratives, cleanup reports or superseding updates to them. Preserve
-useful evidence as a concise current qualification statement, not an execution
-journal. A retained plan is not a substitute for operator documentation.
+Validate behavior with focused tests and controlled fixtures:
+
+- Cover both Docker and rootless Podman for runtime changes and record engine,
+  Compose provider, platform, and filesystem limits. Missing native coverage is
+  never a pass.
+- Reuse still-valid evidence across unchanged components; documentation-only
+  changes do not need runtime suites.
+- Security changes require both allowed-path and forbidden-path tests, plus
+  failure and restart behavior.
+- Keep test fixtures isolated from operator state and secrets, serialize tests
+  that share fixed subnets, and avoid arbitrary resource limits or timeouts.
+
+Record phase results, review findings, dispositions, and open work inside the
+plan, keeping raw logs and private reports out of Git. Update maintained guides
+in place with current contracts, qualification status, and limits—never append
+phase/gate codes, approval logs, or dated investigation narratives to them.
 
 ## Resolve findings and finish
 
-Resolve material defects before dependent work or completion. Consider
-simplifications, but assess their scope and value rather than treating every
-suggestion as mandatory. Record reasons for rejecting recommendations. Deferring
-a material defect does not satisfy the affected acceptance criterion.
+Fix material defects before starting dependent work or claiming completion;
+deferring a material defect does not satisfy its acceptance criterion. Evaluate
+simplification suggestions on merit and record why any recommendation is
+rejected or deferred.
 
-Commit focused corrections. Use ordinary correction commits or fixup commits as
-appropriate; do not require a separate review ceremony for every trivial fixup.
-Re-review affected decisions or behavior when corrections invalidate prior
-evidence, using a fresh subagent. Reuse still-valid evidence and rerun affected
-checks; broaden testing only for changed inputs, failures or unresolved concerns.
+Commit focused fixes directly without a separate review ceremony for trivial
+edits. When a fix invalidates prior evidence, rerun the affected checks and
+re-review with a fresh subagent.
 
-At completion, independently review the resulting combined change, including
-corrections and relevant unchanged contracts. Verify acceptance criteria, current
-guides and affected plan consistency. Distinguish implementation, validation and
-review completion; unavailable checks are missing coverage, not passes.
+Before finishing, run an independent review of the combined change (including
+fixes, unchanged boundaries, maintained guides, and dependent plans). Report
+implementation, validation, and review status distinctly.
 
-After final independent review acceptance and resolution of material findings,
-remove the completed plan in the completion commit or a focused cleanup commit,
-unless the user explicitly requests that it remain as a reference.
-Before removal, ensure maintained guides contain the lasting operating contracts,
-current qualification scope and remaining limitations without execution chronology
-or retired phase/gate codes. Update inbound links and dependent plans to refer
-to those guides. Git history preserves the
-plan and detailed historical evidence; do not create an archive copy. Do not
-remove a plan merely because implementation is finished while required review
-or acceptance remains pending. Keep active and genuinely deferred plans explicit
-with a concrete next action. Do not create extra plans or guides merely to record
-incidental improvement ideas.
+After final review acceptance and resolution of material findings, remove the
+completed plan in the completion commit or a focused cleanup commit (unless the
+user asks to retain it as a reference):
 
-Do not rewrite existing history, push, merge or publish without authorization.
-Plan execution does not independently authorize live Funnel enrollment, funded
-operations or destruction of private state. Existing task authorization remains
-valid; do not repeatedly seek approval for already authorized work.
+1. Verify that maintained guides hold all lasting operating contracts,
+   qualification status, and limitations without execution chronology or
+   retired phase codes.
+2. Update inbound links and dependent plans to point to those guides.
+3. Delete the plan file—Git history preserves it, so do not create an archive
+   copy.
 
-At handoff, report what changed, the committed revision or uncommitted snapshot,
-plan status, review and validation evidence, and material limitations or next
-steps. Keep the handoff proportional to the task.
+Keep genuinely active and deferred plans explicit with a concrete next action,
+and do not create extra plans or guides for incidental ideas. Never rewrite
+history, push, merge, publish, enroll Funnel, spend funds, or destroy private
+state without explicit authorization.
+
+At handoff, summarize what changed, the committed revision or uncommitted
+state, plan status, validation and review results, and material limitations or
+next steps.
