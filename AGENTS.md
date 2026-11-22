@@ -92,7 +92,7 @@ issue drafts, code comments, and handoff notes.
   separate items with commas and conjunctions, or split them into bullets.
   Reserve slashes for file paths, URLs, `owner/repo` names, and standard
   protocol or identifier forms such as `HTTP(S)`, `UID/GID`, or `IPv4/IPv6`.
-- Keep paragraphs short (2–4 sentences, one idea per paragraph). Break
+- Keep paragraphs short (2-4 sentences, one idea per paragraph). Break
   multi-part details, options, and edge cases into headings, tables, or
   bulleted lists with clear lead-ins rather than dense walls of text.
 - Place each rule, caveat, and detail once in the section that owns it,
@@ -102,6 +102,12 @@ issue drafts, code comments, and handoff notes.
   scatter test-suite notes inside operator setup sections when a dedicated
   verification section exists.
 - Always use the Oxford (serial) comma (`a, b, and c`).
+- Use plain ASCII punctuation and symbols instead of Unicode special characters.
+  Avoid curly quotes, em and en dashes, ellipses, arrows, multiplication signs,
+  box-drawing characters, and decorative symbols; use ASCII equivalents such as
+  `"`, `'`, `-`, `--`, `...`, `->`, `x`, and ASCII diagrams instead. Non-English
+  text and English loanwords that keep their diacritics (such as "protégé") are
+  the only exceptions.
 - Enforce clear tense boundaries:
   - Maintained docs, READMEs, and code comments describe **current** behavior
     in present tense. Never narrate prior code states, how the code evolved, or
