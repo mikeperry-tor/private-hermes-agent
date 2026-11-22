@@ -194,9 +194,8 @@ checks, commit completed work, and distinguish implementation from qualification
 On implementation, update the fixed-twelve runtime requirements in the maintained
 [treasury guide](../x402_treazury.md) and related configuration/development guides.
 The completed predecessor plans are preserved in Git history. The maintained
-[endpoint diagnostic contract](../development.md#diagnostic-messages) and
-[operation-scoped state rules](../../AGENTS.md#scope-enforcement-to-the-operation)
-remain in effect.
+[endpoint diagnostic contract](../development.md#diagnostic-messages) and the
+repository's state-safety and retryable-setup rules remain in effect.
 [Read-only configuration](readonly-configuration.md) stays deferred; future work
 there must allow the explicit managed-registration writes described here.
 Browser-content work is unaffected; its research fixtures must use the new inputs.
