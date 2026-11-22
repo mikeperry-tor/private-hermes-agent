@@ -76,8 +76,9 @@ invariants across all changes:
   operator's administrative webapp authority distinct from the model's SSH
   executor. Browser-originated remote requests bypass the Tor gateway, so
   preserve the external-content ceiling, authenticated public-raster retrieval,
-  origin-scoped image consent, inert private previews, and deliberate external
-  link clicks, and qualify browser containment separately from Tor egress.
+  origin-scoped image consent, inert private previews, and user-initiated
+  external link clicks, and qualify browser containment separately from Tor
+  egress.
 - **No silent trust-boundary changes:** Explain any new threat and reconcile
   proposed hardening with documented trust decisions. Trusted offline setup may
   handle Hermes and wallet storage; the untrusted SSH executor must never gain
@@ -101,7 +102,7 @@ invariants across all changes:
   payments, or destructive recovery. Prefer runtime checks over extra persisted
   eligibility markers.
 - Distinguish authoritative state from advisory estimates, reporting
-  projections, and disposable caches. Missing optional corroboration or stale
+  projections, and temporary caches. Missing optional corroboration or stale
   derived data must not veto an established outcome or reopen completed work;
   repair derived data through its owning component while diagnosing conflicting
   required facts directly.
@@ -141,7 +142,7 @@ invariants across all changes:
   features, including WebApp credentials and private image consent, even when
   those files live beside component-owned state.
 - Preserve supported deployments across updates. When a wrapper-owned change
-  requires operator action, document the affected releases, the smallest safe
+  requires operator action, name the releases that require it, the smallest safe
   upgrade step, and backup and recovery requirements. Use a focused
   compatibility read or migration when necessary to preserve state or behavior,
   scoped to that format or interface, and regenerate derived files from
@@ -281,7 +282,7 @@ delegation request. Scale review to the change.
   inspection, and recorded evidence; they must not re-run already-run tests or
   lifecycle suites unless explicitly asked or to confirm a suspected finding
   with the smallest focused check needed (stating what was not re-run).
-- **Resolving findings and honest reporting:** Treat reviewer suggestions as
+- **Resolving findings and accurate reporting:** Treat reviewer suggestions as
   proposals rather than automatic scope expansion. Fix material defects before
   dependent work, evaluate compelling simplifications on merit, explain rejected
   or deferred items, and re-review when fixes invalidate earlier evidence.
@@ -318,7 +319,7 @@ delegation request. Scale review to the change.
   fixtures. Reuse unchanged evidence across unrelated work, and repeat or
   broaden checks only for new changes, failures, or unresolved concerns.
 - Reuse the repository's focused checks and isolated test projects. Serialize
-  tests sharing fixed networks or runtime state. Keep real financial secrets out
+  tests sharing fixed networks or runtime state. Keep live financial secrets out
   of fixtures, qualify filesystem and locking behavior on the target platform,
   and avoid prose snapshots or tests that merely mirror implementation details.
 - Record engine, provider, and platform limits, omitted checks, and missing
@@ -365,12 +366,15 @@ delegation request. Scale review to the change.
 
 - Maintained guides, component READMEs, and examples describe current behavior,
   support boundaries, and durable limits. Update the owning section in place and
-  remove superseded claims. Place each rule, caveat, and detail once in its
-  owning section, integrated into the surrounding structure, and link from
-  elsewhere (a brief safety reminder linking to the owning section is fine at
-  the point of action). Do not bolt unrelated caveats onto the end of a nearby
-  paragraph, and keep test notes in verification sections rather than operator
-  setup sections.
+  remove superseded claims.
+  - Place each rule, caveat, and detail once in its owning section, integrated
+    into the surrounding structure, and link from elsewhere (a brief safety
+    reminder linking to the owning section is fine at the point of action).
+  - Never append new topics to the bottom of a file or under an unrelated
+    heading, never duplicate reference tables across two guides, and keep test
+    notes in verification sections rather than operator setup sections. When a
+    setting, default, policy, or contract changes, search across all maintained
+    docs to remove every stale copy in the same change.
 - Keep [README.md](README.md) user-facing only: explain the stack, its
   components, the problems they solve, setup, everyday operation, and practical
   limits. Put implementation details, development procedures, and qualification
@@ -378,9 +382,12 @@ delegation request. Scale review to the change.
 - Keep development journals, changelogs, dated probe narratives, review logs,
   "initially", "later", and "retested" histories, and retired plan phase or gate
   codes out of permanent docs (and do not relocate them into archive or handoff
-  files). Execution chronology belongs in active plans; Git history preserves
-  completed work. Keep active and deferred work and next actions clear;
-  completed plans retained at the user's request stay marked as references.
+  files). Summarize testing contracts, boundaries, and entrypoints rather than
+  narrating individual tests' internal mocks, fixtures, or assertion order (test
+  source files own their own mechanics). Execution chronology belongs in active
+  plans; Git history preserves completed work. Keep active and deferred work and
+  next actions clear; completed plans retained at the user's request stay marked
+  as references.
 - Preserve concise, attributable qualification status (version or source pin,
   platform, checks establishing the contract, missing coverage, and limits), and
   keep raw logs and reports in ignored private storage. Runtime sequencing,
@@ -388,10 +395,17 @@ delegation request. Scale review to the change.
   remain valid when they explain a current fact.
 - When revising documentation, preserve current procedures, recovery steps,
   error conditions, security boundaries, and qualification limits while removing
-  superseded or redundant detail. Verify factual claims against the
-  implementation, Dockerfiles, Compose files, and pinned `reference_repos/`
-  revisions. Cross-check and update all inbound links when renaming, moving, or
-  removing headings.
+  superseded or redundant detail.
+  - When condensing prose, do not merge distinct `make` targets, Docker vs.
+    rootless Podman behavior, or ingress and content modes into one generalized
+    claim that blurs their differences. Keep every documented command runnable,
+    including required flags or environment variables (such as
+    `CONTAINER_ENGINE=podman`).
+  - Verify factual claims against the implementation, Dockerfiles, Compose
+    files, and pinned `reference_repos/` revisions.
+  - Before renaming headings, changing exact diagnostic strings, or editing
+    documented keys or code blocks, cross-check markdown inbound links and any
+    tests or scripts that assert on exact diagnostic strings or `.env` keys.
 - Keep the user-facing name `x402_treazury`, not an endpoint-specific nickname.
 
 ### Writing style
@@ -401,21 +415,37 @@ issue drafts, code comments, and handoff notes.
 
 - Write directly in plain English for human readers, and be concrete at the
   reader's level of detail. State the behavior, setting, command, or failure
-  mode directly rather than using vague shorthand or invented jargon (for
-  example, "the affected operation", "captured policy eligibility", or
-  "historical completion authority"). Use file paths, function names, and
-  implementation details in commit bodies, code comments, and maintainer docs
-  where they clarify the change, without turning prose into pseudocode.
+  mode directly rather than using vague shorthand, invented jargon, or
+  bureaucratic pseudo-legal framing (for example, "the affected operation",
+  "captured policy eligibility", "historical completion authority", "truthful
+  current behavior", or "does not certify the candidate"). Say what the code
+  does ("rejects the request", "does not fall back", "requires login"),
+  reserving terms such as "authority", "claim", and "proof" for concrete
+  security, financial, or protocol mechanisms. Use file paths, function names,
+  and implementation details in commit bodies, code comments, and maintainer
+  docs where they clarify the change, without turning prose into pseudocode.
 - State what a feature does rather than piling up defensive negative disclaimers
-  about what it does not do or does not prove. Only use caveats that prevent a
-  real misunderstanding or safety mistake.
+  about what it does not do or does not prove. State a shared scope limit or
+  qualification boundary once at the top of a document or section rather than
+  repeating the same boilerplate caveat after every subsection or list item.
+  Only add inline caveats that prevent a concrete misunderstanding or safety
+  mistake.
 - Keep internal process terms (qualification runs, replay branches, cleanup
   passes, or plan phases) out of user-facing docs, commit messages, and
   upstream PR and issue drafts.
-- Omit filler qualifiers such as "selected", "ordinary", "applicable",
-  "configured", "disposable", "harmless", "affected", "actual", "native",
-  "existing", "matching", "deliberate", "explicit", "saved", "current", or
-  "relevant" unless the adjective distinguishes two real cases in context.
+- Omit filler qualifiers (`"ordinary"`, `"applicable"`, `"disposable"`,
+  `"harmless"`, `"affected"`, `"actual"`, `"deliberate"`, `"relevant"`,
+  `"truthful"`, `"honest"`, `"usable"`, `"real"`). Use distinguishing
+  adjectives (`"selected"`, `"configured"`, `"native"`, `"existing"`,
+  `"matching"`, `"explicit"`, `"saved"`, `"current"`, `"retained"`) only when
+  they separate two concrete cases in context (for example, a `configured`
+  `.env` setting vs. a built-in default, `native` Linux Docker vs. Docker
+  Desktop, or `saved` credentials vs. a freshly generated secret).
+- Write complete, grammatical sentences with articles (`a`, `an`, `the`) and
+  clear active subjects. Avoid clipped telegram-style prose, dangling modifiers
+  (write "HAProxy rejects the request rather than falling back to direct
+  access", not "the request is rejected rather than falling back to direct
+  access"), and `+` used as a prose conjunction (write `and` or `with`).
 - Do not stack nouns or modifiers into dense noun-chains (such as "shared-
   namespace owner recovery qualification check" or "managed startup policy
   enforcement"); break them into clear subject-verb clauses.
@@ -425,9 +455,11 @@ issue drafts, code comments, and handoff notes.
   separate items with commas and conjunctions, or split them into bullets.
   Reserve slashes for file paths, URLs, `owner/repo` names, and standard
   protocol or identifier forms such as `HTTP(S)`, `UID/GID`, or `IPv4/IPv6`.
-- Keep paragraphs short (generally 1-4 sentences, one idea per paragraph). Break
-  multi-part details, options, and edge cases into headings, tables, or
-  bulleted lists with clear lead-ins rather than dense walls of text.
+- Keep paragraphs short (generally 1-4 sentences, one idea per paragraph) and
+  keep Markdown table cells concise as rendered (a short phrase, 1-2 sentences,
+  or 1-4 primary links per index cell -- never multi-paragraph walls of text).
+  Break multi-part details, options, and edge cases into headings, tables, or
+  bulleted lists with clear lead-ins.
 - Always use the Oxford (serial) comma (`a, b, and c`).
 - Use plain ASCII punctuation and symbols instead of Unicode special characters.
   Avoid curly quotes, em and en dashes, ellipses, arrows, multiplication signs,
