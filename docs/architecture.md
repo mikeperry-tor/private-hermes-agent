@@ -3,347 +3,404 @@
 Implementation details for maintainers. For setup and everyday use, start with
 [the README](../README.md).
 
-Hermes's agent and its code executor run in separate containers, filesystems,
-process namespaces, and network namespaces. Both have only isolated internal
-container networks. Their public TCP traffic is transparently redirected through
-an independently running Tor gateway; their DNS goes to Tor. Teep alone has a
-separate direct uplink for confidential-computing inference providers.
+Hermes and its code executor run in separate containers, filesystems, process
+namespaces, and network namespaces. Both connect only to isolated internal
+container networks. Public TCP traffic from both namespaces routes transparently
+through an independent Tor gateway, and DNS resolves through Tor. Only Teep has
+a direct Internet uplink for confidential-computing inference providers.
 
 ```text
 Hermes agent ── private SSH ── executor (/workspace, no agent volume or keys)
       │                           │
       ├── internal inference      └── executor route ─┐
       │      └── teep ── direct internet              │
-      ├── selected MCP IP:port grants                ▼
+      ├── allowed MCP IP:port grants                  ▼
       └── agent route ──────────────────────── transparent Tor ── internet
 ```
 
-No application receives a container-engine socket, host networking, privileged mode,
-`NET_ADMIN`, or `NET_RAW`. The trusted `agent-net` and `executor-net` services
-configure routes and firewall rules before applications start, then drop to
-UID/GID 65534 with every capability set empty and remain as stable namespace
-owners. Tor is in a third namespace and likewise drops to UID 101/GID 102 with
-empty sets after initialization; impersonating Tor's UID inside an application
-cannot grant a direct uplink.
+No application container receives a container-engine socket, host networking,
+privileged mode, `NET_ADMIN`, or `NET_RAW`. The `agent-net` and `executor-net`
+services configure routes and firewall rules before applications start, then
+drop to UID/GID 65534 with empty capability sets and remain running as stable
+namespace owners. Tor runs in a third namespace and drops to UID 101 / GID 102
+with empty capability sets after initialization, so impersonating Tor's UID
+inside an application container cannot grant a direct uplink.
 
 ## Network and execution boundaries
 
-- Internal networks use `gateway_mode: isolated` for IPv4 and IPv6, so their
-  bridges have no host-side address. Neither application has an uplink.
-- Each namespace also has a default-deny firewall. Agent grants are limited to
-  executor SSH at `10.203.82.3:2222`, teep at `10.203.83.3:8337`, configured MCP
-  IP/port pairs, and DNS at its Tor router. Operators can also grant the
-  Hermes UID exact host TCP ports and RFC1918 address/port pairs through
-  the gateway. The executor gets only Tor DNS,
-  public TCP through Tor, and replies to agent-initiated SSH connections.
-- Other private, shared-address, loopback (outside its own local process
-  namespace), link-local, multicast, reserved, and connected-network targets
-  are denied by default. This covers ordinary Docker VM/host gateways, RPC
-  port 111, metadata addresses, and DNS answers that point into prohibited space.
-  Docker embedded DNS at `127.0.0.11` is blocked before DNAT.
-- Private GRE links carry original-destination packets across internal bridges;
-  plain next-hop routing is blocked by Docker's internal bridge rules. The same
-  GRE topology is used on Podman. The links stay within the container host or
-  Docker Desktop VM; they are not Internet tunnels or encryption.
-  Only the trusted namespace services create them. Linux GRE support is required;
-  setup fails closed if it is unavailable. The GRE MTU is 1,400 bytes for both
-  the internal leg to Tor and the internal leg of exact host and LAN forwarding.
-  Tor opens separate outbound sockets on the uplink, where the outbound route
-  governs their MTU.
-- The router starts with IPv4 forwarding disabled and installs a default-drop
-  forwarding policy before enabling exact local exceptions. It matches the
-  agent tunnel and source, the original grant, the current backend, and the
-  uplink in both directions. It allows IPv4 fragmentation-needed feedback
-  only when connection tracking ties the reply to the granted flow. The
-  engine's native host mapping stays in the
-  gateway. Hermes uses a reserved IPv4 alias through the tunnel to distinguish
-  host grants from LAN grants. IPv6 forwarding stays closed. Public traffic
-  terminates at Tor's TransPort and DNSPort. Tor's own outbound connections
-  cannot use the local exceptions.
-- The namespace firewall and gateway own the socket grants. Managed Hermes
-  clears inherited HTTP proxy settings so upstream clients use those routes
-  without a copy of the grant list. Host port grants use the engine's numeric
-  host mapping. Literal LAN grants use the configured socket address, which may
-  reach a host or VM service if the engine routes to it.
-- With a native host mapping for requested host ports or a supported LAN grant,
-  managed startup lets the trusted router enable forwarding after filtering.
-  Podman exposes `/proc/sys` and Docker uses `systempaths=unconfined`, which
-  removes the default masked and read-only system paths. Native Linux Docker
-  retains its default system-path protections for LAN-only configurations
-  because Docker LAN forwarding requires Docker Desktop.
-  Empty grant lists retain the engine's protections on both engines.
-  The Hermes and executor containers keep their own system-path protections.
-  The initializer drops its capabilities before starting Tor. On Docker it
-  also recalculates TCP checksums on exact local GRE return traffic after NAT.
-- This deployment intentionally blocks non-loopback IPv6 and unsupported UDP,
-  including QUIC. Tor DNS supports A, AAAA, and PTR over UDP; it is not a general
-  DNS server. Public TCP is routed through Tor, not destination-allowlisted.
-- These controls cover the host/VM's private and connected address space. A
-  service exposed on an unrelated public Internet IP is still a public target;
-  add an explicit deny rule if such an address must be excluded too. A host
-  administrator or compromised container engine remains outside this boundary.
-- Hermes terminal commands, remote Python `execute_code`, and backend-aware
-  file tools use SSH. Native subagents remain orchestrator instances; their
-  code calls use this executor. Sessions/subagents share one executor user and
-  workspace: this is agent/executor separation, not tenant or per-task isolation.
-- Provider credentials and the agent data directory are not mounted into the
-  executor. Hermes can intentionally synchronize skills, selected caches, and
-  skill/operator-declared credential files to remote backends. Keep
-  `terminal.credential_files` and skill passthrough declarations under review.
-  Code's authorized Hermes tool RPC remains a capability, not a network bypass.
-  The executor's browser profile is excluded from native SSH sync-back archives;
-  it remains in its persistent home mount. Its live socket symlinks must not
-  prevent selected skills/caches from synchronizing through the native mechanism.
-- SSH is key-only, with pinned host identity. Password login, TCP/agent
-  forwarding, tunnels, and root login are disabled. The SSH daemon has only
-  the capabilities needed for privilege separation; executed code runs as
-  unprivileged UID 10000 with no capabilities.
-- Tor failure blocks public egress. Established application namespaces keep
-  their firewall rules. Local Teep, internal MCP and SSH stay available after
-  startup. Exact host and LAN forwarding also survives circuit failure while
-  the gateway namespace remains online. Stopping or restarting it can interrupt
-  local connections. Initial startup waits for Tor readiness.
+### Network isolation and default-deny firewalls
 
-Do not independently restart or recreate `agent-net` or `executor-net` while
-their application containers exist. Namespace-sharing containers can retain the
-old namespace rather than reattach to the replacement. This is a longstanding
-Docker shared-network-namespace lifecycle limitation, reported in
-[Compose #6626](https://github.com/docker/compose/issues/6626) and
-[Compose #11872](https://github.com/docker/compose/issues/11872); container restart
-policies do not guarantee dependency ordering or namespace reattachment after a
-crash or host restart. Independent owner restart is unsupported on either engine;
-Podman reattachment has not been qualified. This limitation predates the
-capability reductions and is not evidence of a failed privilege drop.
-For namespace-owner recovery or network-policy changes, run `make down` followed
-by `make up` to recreate the stack together.
-This preserves persistent data. Tor has its own namespace and can be restarted
-independently; its outage/recovery behavior is qualified separately.
+- **No host-side bridge gateways:** Internal networks use
+  `gateway_mode: isolated` for IPv4 and IPv6, so their bridges have no host-side
+  address. Neither Hermes nor the executor has a direct uplink.
+- **Per-namespace firewall rules:** Both `agent-net` and `executor-net` install
+  default-deny firewalls.
+  - Hermes can reach executor SSH at `10.203.82.3:2222`, Teep at
+    `10.203.83.3:8337`, allowed MCP IP/port pairs, and DNS on its Tor router.
+    Operators can also grant the Hermes UID specific host TCP ports and RFC1918
+    `address:port` pairs through the gateway.
+  - The executor can reach only Tor DNS, public TCP through Tor, and replies to
+    agent-initiated SSH connections.
+- **Blocked destinations:** Private, shared-address, loopback (outside a
+  container's own namespace), link-local, multicast, reserved, and
+  connected-network targets are denied by default. This blocks Docker VM/host
+  gateways, RPC port 111, cloud metadata addresses, and DNS answers pointing
+  into private space. Docker's embedded DNS at `127.0.0.11` is blocked before
+  DNAT.
+- **Protocol restrictions:** Non-loopback IPv6 and unsupported UDP (including
+  QUIC) are blocked. Tor DNS handles A, AAAA, and PTR queries over UDP and is
+  not a general DNS server. Public TCP is routed through Tor rather than
+  destination-allowlisted.
+- **Scope of network controls:** These rules cover the host/VM's private and
+  connected address space. A service exposed on a public Internet IP is still a
+  public target; add an explicit deny rule if it must be excluded. A host
+  administrator or compromised container engine is outside this boundary.
+
+### GRE transport and local socket forwarding
+
+Private GRE links carry original-destination packets across internal bridges,
+because Docker's internal bridge rules block plain next-hop routing. Podman uses
+the same GRE topology. These links stay inside the container host or Docker
+Desktop VM; they do not encrypt traffic or cross the Internet.
+
+Only `agent-net`, `executor-net`, and `tor` create GRE interfaces. Linux GRE
+support is required, and startup fails if it is unavailable. The GRE MTU is
+1,400 bytes for both the Tor path and the internal leg of host/LAN forwarding.
+Tor opens separate outbound sockets on its uplink, where the uplink route sets
+the MTU.
+
+The `tor` router starts with IPv4 forwarding disabled and installs a
+default-drop forwarding policy before enabling host or LAN exceptions:
+
+- Each forwarding rule matches the agent GRE tunnel, source address, granted
+  destination, backend address, and uplink in both directions.
+- IPv4 fragmentation-needed ICMP replies pass only when connection tracking ties
+  them to a granted flow.
+- Hermes uses a reserved IPv4 alias across the tunnel so the router can
+  distinguish host-port grants from literal LAN grants. The container engine's
+  host mapping stays inside the gateway.
+- IPv6 forwarding remains closed. Public traffic terminates at Tor's `TransPort`
+  and `DNSPort`, and Tor's own outbound connections cannot use host or LAN
+  exceptions.
+- Managed Hermes clears `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` so
+  inference and MCP clients rely on the firewall and gateway instead of a second
+  allowlist.
+
+When host-port or LAN grants are enabled, startup allows `tor` to write to
+`/proc/sys/net/ipv4/ip_forward` after installing its firewall rules:
+
+- On Podman, `/proc/sys` is exposed to `tor`.
+- On Docker, `tor` uses `systempaths=unconfined` (which removes Docker's default
+  masked and read-only system paths) and recalculates TCP checksums on GRE
+  return traffic after NAT.
+- Native Linux Docker keeps default system-path protections for LAN-only
+  configurations because Docker LAN forwarding requires Docker Desktop.
+- Empty grant lists keep default system-path protections on both engines.
+- Hermes and the executor always keep their default system-path protections, and
+  `tor` drops its initialization capabilities before starting the Tor daemon.
+
+### Code execution and SSH isolation
+
+Hermes terminal commands, remote Python `execute_code`, and backend-aware file
+tools run over SSH in the executor. Subagents stay in the Hermes process as
+orchestrator instances and run their code in the same executor. All sessions and
+subagents share one executor user (UID 10000) and `/workspace`: this separates
+the agent from executed code, not tasks or tenants from each other.
+
+- Provider credentials and the `hermes-data` volume are not mounted in the
+  executor.
+- Hermes can still copy skills, caches, and operator-declared credential files
+  to remote backends. Review `terminal.credential_files` and skill passthrough
+  declarations accordingly.
+- Code running in the executor can invoke allowlisted Hermes tools over RPC;
+  this is an authorized tool capability, not a network bypass.
+- The executor's browser profile stays in its persistent home mount and is
+  excluded from SSH sync-back archives so live socket symlinks do not break
+  skill and cache synchronization.
+- SSH allows key-based authentication only, with a pinned host key. Password
+  login, TCP forwarding, agent forwarding, tunnels, and root login are disabled.
+  The SSH daemon keeps only the capabilities required for privilege separation;
+  executed code runs as UID 10000 with empty capability sets.
+
+### Failure behavior and shared-namespace restarts
+
+If Tor fails, public egress stops, while `agent-net` and `executor-net` keep
+their firewall rules. Local Teep, internal MCP, and SSH continue working after
+startup. Host and LAN forwarding also survives Tor circuit failure as long as
+the `tor` container's network namespace stays up, though stopping or restarting
+`tor` interrupts active local connections. Initial startup waits for Tor
+bootstrap.
+
+Do not restart or recreate `agent-net` or `executor-net` while their application
+containers exist. Containers sharing a network namespace can remain stuck in the
+old namespace instead of attaching to the replacement. This is a known Docker
+limitation ([Compose #6626](https://github.com/docker/compose/issues/6626),
+[Compose #11872](https://github.com/docker/compose/issues/11872)), and restart
+policies do not guarantee dependency ordering or reattachment after a crash or
+host reboot. Independent owner restarts are unsupported on both Docker and
+Podman (Podman reattachment has not been tested).
+
+To recover a namespace owner or apply network-policy changes, recreate the stack
+together with `make down` followed by `make up`. Persistent data is preserved.
+Tor runs in its own namespace and can be restarted independently.
 
 ## Optional onion ingress
 
-The base stack always includes isolated `onion-ingress` (`10.203.86.0/24`),
-connecting only Tor (`.2`) and HAProxy (`.3`). `TOR_ONION_ENABLED` defaults false
-and changes publication/listeners/grants, not membership or Compose selection.
-Enabled Tor OUTPUT admits only UID 101 TCP from `10.203.86.2` to
-`10.203.86.3:8080` before private-destination denial. Existing raw PREROUTING
-denial still prevents agent/executor traffic from using this private exception.
-HAProxy admits new connections only from that Tor address on the onion listener;
-its only outbound backend remains `10.203.85.2:9120`. Disabled mode has neither
-new-connection grant nor onion listener/HiddenService configuration. The Podman
-overlay adds `isolate: strict` for this network like the other internal bridges.
+The base stack always creates the isolated `onion-ingress` network
+(`10.203.86.0/24`), connecting only Tor (`.2`) and HAProxy (`.3`).
+`TOR_ONION_ENABLED` (default `false`) toggles HiddenService publication, the
+HAProxy onion listener, and firewall grants without changing network membership
+or Compose overlays.
 
-`onion-inspect` and `onion-init` are networkless, dependency-free maintenance
-jobs using the existing network image and only the Tor bind. Inspection mounts
-it read-only; initialization runs native Tor with DisableNetwork=1 and drops all
-child capabilities. Its trusted parent retains KILL only to stop/reap the
-UID-101 child; serving Tor receives no extra capability. It preserves native
-keys and reconstructs derived files.
-The host target serializes mutation and requires removal of the runtime Tor
-container before writing, so a paused/restarting service cannot resume as a
-concurrent writer. Reading a saved address has no such restriction.
-Tor itself replaces malformed secret files, so the wrapper checks the native
-secret header/length before repair and enabled runtime start. This guard protects
-identity preservation, not an additional cryptographic identity certification.
-No serving component gains Tor-state access. See [onion operations](webapp.md#optional-onion-ingress).
+- When enabled, Tor's `OUTPUT` rules allow only UID 101 TCP from `10.203.86.2`
+  to `10.203.86.3:8080` ahead of private-destination denial. Raw `PREROUTING`
+  rules still block Hermes and executor traffic from reaching that address.
+- HAProxy accepts new connections on the onion listener only from `10.203.86.2`,
+  and its only outbound backend remains `10.203.85.2:9120`.
+- When disabled, neither the firewall grant nor the onion listener or
+  HiddenService configuration is present.
+- The Podman overlay adds `isolate: strict` to `onion-ingress` alongside the
+  other internal bridges.
+
+`onion-inspect` and `onion-init` are networkless maintenance jobs that reuse the
+network image and mount only `data/tor/`:
+
+- `onion-inspect` mounts `data/tor/` read-only.
+- `onion-init` runs Tor with `DisableNetwork=1` and drops all child
+  capabilities. Its parent process retains `KILL` only to stop and reap the
+  UID-101 child; serving Tor receives no extra capabilities.
+- `make onion-address` serializes writes and requires the runtime `tor`
+  container to be removed (`make down`) before creating or repairing files, so a
+  paused or restarting Tor container cannot write concurrently. Reading an
+  existing address has no such restriction.
+- Because Tor replaces malformed secret files on its own, the wrapper checks the
+  secret key header and length before repair or enabled startup to protect the
+  saved identity from silent rotation.
+
+No serving component other than Tor mounts `data/tor/`. For operator commands
+and recovery steps, see [optional onion ingress](webapp.md#optional-onion-ingress).
 
 ## Rootless Podman
 
-Managed container creation checks required bind sources in the effective Compose
-model before creating containers or networks. This applies to both engines,
-including offline setup/treasury jobs and `stack.py compose up/create/run/scale`.
-Checks follow selected services and dependencies; `--no-deps` excludes dependency
-mounts, and run-volume overrides replace mounts at the same target. Noncreating
-inspection, shutdown and exec remain available. Unsupported creation commands
-and watch recreation are refused; use explicit supported commands. Managed `make down` and wrapper `compose down` include all profiles so stopped treasury namespace users
-are removed before their owner; operator volumes are preserved unless explicitly
-removed. Use `stop` for selected services instead of project-wide shutdown. Bare Compose
-bypasses the bind check. It prevents ordinary missing-source mistakes but cannot
-prevent concurrent host deletion after checking; Podman 5.4.2's compatible API
-still lacks native enforcement of `create_host_path: false`.
+The same network topology and isolation boundaries apply on rootless Podman.
+`CONTAINER_ENGINE` (`docker` or `podman`, set in the environment or root `.env`,
+default `docker`) selects the engine; any other value raises an error without
+falling back.
 
-
-The same topology and boundaries apply on rootless Podman. `CONTAINER_ENGINE`
-(`docker` or `podman`, from the environment or root `.env`, default `docker`)
-selects the engine; any other value is an error, never a fallback.
 `scripts/deployment.py` builds every engine and Compose command from that
-selection: `docker` and `docker compose`, or the local `podman --remote=false`
-and `podman --remote=false compose`. With Podman it adds `compose.podman.yaml`,
-and `compose.podman.funnel.yaml` with Funnel, as the last Compose files, after
-any file a command adds.
+selection: `docker` and `docker compose`, or local `podman --remote=false` and
+`podman --remote=false compose`. Under Podman, it appends `compose.podman.yaml`
+(and `compose.podman.funnel.yaml` when Funnel is enabled) after all other
+Compose files.
 
-With Podman, the stack removes `DOCKER_HOST`, `DOCKER_CONTEXT`, `CONTAINER_HOST`
-and `CONTAINER_CONNECTION` from the environment of its commands: `podman compose`
-passes an inherited `DOCKER_HOST` to its Compose provider. Inspection, backup and
-shutdown then use the local Podman; a launch refuses to start while one of these
-variables is set (`make up` checks this before preflight and setup). The Make
-targets run the Podman command without these variables too. Before each launch
-(`make up`, treasury startup and wallet creation, the test fixtures, and every
-`stack.py compose` subcommand except those that create no network, such as
-`config`, `ps`, `logs`, `exec`, `stop`, `down` or `build`; `run` is exempt only
-when the job and all dependencies use `network_mode: none`), `deployment.prepare_launch()` checks the
-engine: on Docker, Docker Engine 28+ (not Podman behind a `docker` command) and
-Compose 2.36+; on Podman, rootless 5.4+, the user API socket, and Docker Compose
-2.36+ as the provider. `stack.py compose` reads the global options before the
-subcommand (`-p`, `--profile`, `-f`, `--env-file`, `--project-directory`,
-`--dry-run`) and uses them for settings validation, ingress selection,
-preparation, the command and cleanup alike; it
-refuses other global options.
-Native `--dry-run` placement after the subcommand is also recognized, including
-`up`, `run` and `down`; a container command's own `--dry-run` argument is not a
-Compose flag. Dry runs neither prepare nor remove real project networks.
-Shared-namespace runs and none-mode jobs with dependencies can create their
-owner's/dependencies' networks even with `--no-deps`, so they are prepared too.
-Named offline maintenance jobs reject overrides that network the job or its
-dependencies; inspection and repair retain their networkless path. Treasury
-one-shot work uses the same launch classification as stack startup, so engine
-policy is checked before online wallet preparation, not only at later activation.
+### Environment sanitization and launch checks
 
-Compose creates networks through Podman's Docker-compatible API, which sets
+Under Podman, the stack strips `DOCKER_HOST`, `DOCKER_CONTEXT`,
+`CONTAINER_HOST`, and `CONTAINER_CONNECTION` from subprocess environments
+because `podman compose` forwards an inherited `DOCKER_HOST` to its Compose
+provider. Inspection, backup, and shutdown then target local Podman, while
+container launches refuse to start if any of those variables is set (`make up`
+checks this before preflight and setup).
+
+Before launching containers, `deployment.prepare_launch()` verifies engine
+versions and prerequisites:
+
+- **Docker:** Docker Engine 28+ (rejecting Podman shimmed behind a `docker`
+  binary) and Compose 2.36+.
+- **Podman:** rootless Podman 5.4+, an active user API socket, and official
+  Docker Compose 2.36+ as the provider.
+
+This check runs for `make up`, treasury initialization and preparation, test
+fixtures, and `stack.py compose` commands that create networks. Read-only and
+shutdown commands (`config`, `ps`, `logs`, `exec`, `stop`, `down`, `build`) are
+exempt, as is `run` when the job and all of its dependencies use
+`network_mode: none`. Shared-namespace `run` commands and `none`-mode jobs with
+networked dependencies still trigger network preparation even with `--no-deps`.
+Offline maintenance jobs reject CLI overrides that attach a network to the job
+or its dependencies.
+
+`stack.py compose` accepts `-p`, `--profile`, `-f`, `--env-file`,
+`--project-directory`, and `--dry-run` before the subcommand and applies them
+consistently across validation, overlay selection, network preparation, and
+cleanup; other global flags are rejected. It also recognizes `--dry-run` after
+subcommands such as `up`, `run`, and `down` (ignoring `--dry-run` passed to a
+container command). Dry runs neither create nor remove real networks.
+
+### Bind-source checks and network creation
+
+On both Docker and Podman, managed container creation checks that required bind
+sources exist in the effective Compose model before creating containers or
+networks. This covers `make up`, offline setup and treasury jobs, and
+`stack.py compose up/create/run/scale`:
+
+- Checks follow the targeted services and their dependencies (`--no-deps`
+  excludes dependency mounts, and `run -v` overrides replace mounts at the same
+  target).
+- Inspection, shutdown, and `exec` bypass the check. Unsupported creation
+  commands and `watch` recreation are refused.
+- `make down` and `stack.py compose down` include all profiles so stopped
+  treasury containers sharing `agent-net` are removed before their namespace
+  owner; named volumes are preserved unless explicitly removed. Use `stop` to
+  halt individual services.
+- Bare Compose bypasses the bind check. The check catches missing host paths
+  before launch, though it cannot prevent concurrent host deletion afterward
+  (Podman 5.4.2's Docker-compatible API does not enforce
+  `create_host_path: false`).
+
+Compose creates networks through Podman's Docker-compatible API, which preserves
 only `isolate=true` and drops other bridge options. Before Compose creates
-containers, `deployment.ensure_networks()` creates the networks selected by the
-Compose model using `podman`, the declared options and Compose's labels.
-Compose adopts these networks, and `make down` removes them. Every
-non-external network must declare `isolate: strict`; a network without it, or an
-existing network that is not a bridge network of this project or lacks the
-declared options, stops startup.
+containers, `deployment.ensure_networks()` creates the project's networks
+directly with `podman`, keeping all declared options and Compose labels. Compose
+adopts those networks, and `make down` removes them. Every non-external network
+must declare `isolate: strict`; missing options or a mismatched existing network
+halts startup.
+
+### Engine differences
 
 | Docker behavior | Rootless Podman counterpart |
 | --- | --- |
-| Isolated gateway mode: internal bridges have no host-side address | Rootless bridges live in the user's network namespace, so the gateway is not a host address. The endpoint firewalls deny connected networks and `169.254.0.0/16` on both engines. |
-| No forwarding between different bridge networks | Netavark forwards between bridges unless they are isolated. Every network has `isolate=strict`, which also blocks traffic from the user's other networks without isolation. |
-| `enable_ip_masquerade: false` on `webapp-publish` | `no_default_route=true`: HAProxy has no default route. |
-| Published ports enter on the publication interface | The rootless port forwarder runs inside HAProxy's namespace and connects over loopback to one of its addresses. The local frontend listens on all proxy addresses, and the proxy firewall admits new connections to the webapp port only on `lo`, so traffic from connected networks stays dropped. HAProxy's `X-Forwarded-For` value is therefore a proxy address for every client. |
-| Embedded DNS at `127.0.0.11` | aardvark-dns at each network gateway, denied by the endpoint firewalls with the connected networks. teep resolves provider names through it on `teep-uplink`. |
-| `healthcheck.start_interval`, `gw_priority` | Removed by the overlay. Podman's API refuses `start_interval`. `gw_priority` is not needed: the other network of teep and Tailscale is internal and gives no default route. |
-| Unprivileged processes may bind any port (`net.ipv4.ip_unprivileged_port_start=0`) | Podman sets the floor to 1024 in a container. The overlay sets 0 for HAProxy so that it can bind a low port inside its namespace. This does not let the rootless user publish a host port below the host's own floor (`net.ipv4.ip_unprivileged_port_start`, usually 1024): keep `WEBAPP_PORT` and `TEEP_HOST_PORT` at 1024 or above unless the host allows lower ports. Publication then fails with the engine's own error. |
-| Docker desktop uses a pinned Moby-derived seccomp profile with Chromium namespace allowances | Both lean and desktop Podman executors use the native default seccomp policy, with no-new-privileges and Chromium sandboxing retained. Native policy differs from Docker's profile. Custom file profiles remain unsupported through the configured Compose API: it sends inline JSON while Podman expects a filename; preflight diagnoses those overrides. |
-| Empty executor `/tmp` and `/run` tmpfs mounts | Podman's overlay sets `notmpcopyup`, retaining the same modes and destinations. This prevents image-seeded files owned by upstream UID 1000 from blocking runner UID 10000's runtime setup. |
-| Restart backoff | A container that exits at once restarts about every 0.3 s. Startup with Teep enabled requires an inference provider key on both engines. Check `podman ps` and restart counts when a service does not become healthy. |
+| `gateway_mode: isolated` gives internal bridges no host-side address | Rootless bridges live in the user's network namespace, so their gateways are not host addresses. Endpoint firewalls deny connected networks and `169.254.0.0/16` on both engines. |
+| No forwarding between different bridge networks | Netavark forwards between bridges unless isolated. Every network sets `isolate=strict`, which also blocks traffic from the user's non-isolated networks. |
+| `enable_ip_masquerade: false` on `webapp-publish` | `no_default_route=true`, leaving HAProxy with no default route. |
+| Published ports enter on the publication interface | The rootless port forwarder runs inside HAProxy's namespace and connects over loopback. The local frontend listens on all proxy addresses, and the proxy firewall admits new webapp connections only on `lo`, dropping traffic from connected networks. As a result, HAProxy sees a proxy address in `X-Forwarded-For` for every client. |
+| Embedded DNS at `127.0.0.11` | `aardvark-dns` at each network gateway, blocked by endpoint firewalls along with connected networks. Teep resolves provider names through it on `teep-uplink`. |
+| `healthcheck.start_interval` and `gw_priority` | Removed by `compose.podman.yaml`. Podman's API rejects `start_interval`, and `gw_priority` is unnecessary because Teep's and Tailscale's second networks are internal and provide no default route. |
+| `net.ipv4.ip_unprivileged_port_start=0` lets unprivileged processes bind any port | Podman defaults this floor to 1024 inside containers. The overlay sets it to 0 for HAProxy so it can bind low internal ports. Host port publication still follows the host's own floor (usually 1024): keep `WEBAPP_PORT` and `TEEP_HOST_PORT` at 1024 or above unless the host lowers its floor. |
+| Desktop executor uses a pinned Moby-derived seccomp profile with Chromium namespace allowances | Both lean and desktop Podman executors use Podman's default seccomp policy, keeping `no-new-privileges` and Chromium sandboxing. Custom file seccomp profiles are unsupported through the Compose API because Compose sends inline JSON while Podman expects a file path; preflight flags those overrides. |
+| Empty executor `/tmp` and `/run` tmpfs mounts | The overlay sets `notmpcopyup` with the same modes and targets so image-seeded files owned by upstream UID 1000 do not block runner UID 10000. |
+| Standard restart backoff | A container that exits immediately restarts roughly every 0.3 s. Check `podman ps` and restart counts if a service fails to become healthy (for example, when Teep is enabled without an API key). |
 
-Pasta's native host alias reaches the host's interface address. Bind a
-granted host service to that reachable address. A listener bound only to
-loopback is inaccessible through the alias. The Teep direct uplink can also
-reach host services on that interface. The executor, Tor process and HAProxy
-cannot use the Hermes grants. For setup details, see
+Pasta's native host alias reaches the host's interface address rather than host
+loopback. Bind any granted host service to that reachable interface address; a
+loopback-only listener is unreachable through the alias. Teep's direct uplink
+can also reach host services on that interface, whereas the executor, Tor, and
+HAProxy cannot use Hermes's host grants. See
 [local inference and HTTP MCP](configuration.md#local-inference-and-http-mcp).
 
-Bind data under `data/` is owned by subordinate user IDs on the host; use
-`podman unshare` for host-side copies (see [backup scope](configuration.md#backup-scope)).
-`tests/podman_paths_smoke.sh` checks the allowed and forbidden paths of a running
-Podman stack, including a client on a network without isolation.
+Bind data under `data/` is owned by subordinate UIDs on the host. Copy it inside
+the user namespace with `podman unshare` (see
+[backup scope](configuration.md#backup-scope)). `tests/podman_paths_smoke.sh`
+tests allowed and forbidden paths on a running Podman stack, including a client
+on a non-isolated network.
 
-## Images and other Hermes isolation choices
+## Component images and runtime isolation
 
-- Tor: `dockurr/tor:0.4.9.17`, pinned by digest in
-  `components/network/Dockerfile`. The derived image adds our firewall/route setup
-  and local authenticated bootstrap health check. Tor runs as UID 101 after
-  initialization with empty capability sets; there is no TCP control API, TCP
-  SOCKS service, or HTTP proxy.
-  A private SOCKS Unix socket is mounted only into the x402_treazury container.
-- Hermes: derived from official v0.23.3, with base digest and explicit source
-  checks in `components/hermes/`. Runtime and maintenance share the derived
-  image; see [patch/build procedure](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance).
-- teep: built from commit `6548996bb53ffa74e05d2b2f52e71534d1650149`
-  with Go 1.26. It runs as UID 10002, read-only except temporary files, without
-  `--offline`, `--force`, or debug tags. Upstream's default attestation policy
-  (including allowed failures) is preserved. Health is not proof of attestation.
-- Executor: lean Alpine by default, or a pinned Debian desktop sandbox selected
-  by `COMPUTER_USE_ENABLED`. Both have Python, Node, Git, SSH, curl, read-only root
-  and separate writable home/workspace. The desktop adds Xvnc/Xfce, Chromium and
-  cua-driver and an isolated browser-harness environment, with no GUI-specific
-  container capabilities. Base tags and OS packages can change on rebuild; review/pin further when qualifying upgrades.
+- **Tor:** `dockurr/tor:0.4.9.17`, pinned by digest in
+  `components/network/Dockerfile`. The derived image adds route/firewall setup
+  and a local authenticated bootstrap health check. After initialization, Tor
+  runs as UID 101 with empty capability sets and exposes no TCP control API, TCP
+  SOCKS port, or HTTP proxy. Only `x402_treazury` mounts its private SOCKS Unix
+  socket.
+- **Hermes:** derived from official Hermes v0.23.3, with base digest and source
+  verification in `components/hermes/`. Runtime and offline maintenance share
+  this image; see
+  [derived Hermes build and patch maintenance](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance).
+- **Teep:** built from commit `6548996bb53ffa74e05d2b2f52e71534d1650149` with
+  Go 1.26. It runs as UID 10002 with a read-only root filesystem (except
+  temporary files) and without `--offline`, `--force`, or debug tags. Upstream's
+  default attestation policy (including its allowed failures) is preserved. A
+  passing health check does not prove attestation succeeded.
+- **Executor:** a lean Alpine image by default, or a pinned Debian desktop image
+  when `COMPUTER_USE_ENABLED=true`. Both include Python, Node, Git, SSH, and
+  `curl`, with a read-only root filesystem and writable `/home/runner` and
+  `/workspace` mounts. The desktop image adds Xvnc/Xfce, Chromium, `cua-driver`,
+  and an isolated browser harness with no GUI-specific container capabilities.
+  Base tags and OS packages can change on rebuild; review them when qualifying
+  upgrades.
 
-Browser automation's trusted gateway helper starts an SSH stdio launcher for each
-harness identity. The launcher and native harness daemon live in the executor;
-each model program runs in a separate executor process group. The existing native
-owner-death supervisor covers the gateway's SSH process group. Closing that
-connection stops the remote program and daemon; native session cleanup closes the
-same owner. Program output is data, and screenshot paths are fetched from the
-executor into generated gateway cache files through native bounded transfer.
-No model program, workspace helper or printed path is imported/opened as gateway
-code or a gateway-selected file. Native session bookkeeping may retain its
-gateway-loopback CDP forward; remote Python uses the executor-local endpoint.
-No published endpoint or internal network grant is added.
+For browser automation, Hermes's gateway helper launches an SSH stdio process
+per harness identity. The launcher and harness daemon run inside the executor,
+and each model program runs in its own executor process group. Closing the SSH
+connection stops both the remote program and the daemon via Hermes's
+owner-death supervisor. Program output is treated as untrusted data, and
+screenshots are copied into gateway cache files via bounded transfers; no model
+program, workspace helper, or printed path is imported or opened directly by the
+gateway. Remote Python connects to the executor-local CDP endpoint rather than
+any published port or new internal grant.
 
 ### Executor capability requirements
 
-The root SSH listener retains four shared container grants; the Debian desktop
-variant also needs `AUDIT_WRITE` for interactive PTYs. These are native OpenSSH
-requirements for the pinned account/privilege-separation setup, not authority
-assigned to model commands.
+The root SSH listener keeps four capabilities in both executor variants, plus
+`AUDIT_WRITE` in the Debian desktop variant for interactive PTYs. These are
+OpenSSH requirements for privilege separation, not privileges granted to model
+commands.
 
-| Capability | Native responsibility / failure without it |
+| Capability | Responsibility / failure without it |
 | --- | --- |
-| `CHOWN` | Set runner ownership on `/dev/pts`; PTY setup otherwise fails |
-| `SETUID` | Drop to the image's unprivileged SSH account and create runner sessions; `setresuid` otherwise fails |
-| `SETGID` | Clear supplementary groups during privilege separation/session setup; `setgroups` otherwise fails |
-| `SYS_CHROOT` | OpenSSH pre-authentication chroot and Podman Chromium namespace chroot |
-| `AUDIT_WRITE` (desktop only) | Debian OpenSSH PTY audit submission; session exits if `linux_audit_write_entry` is denied |
+| `CHOWN` | Sets runner ownership on `/dev/pts`; PTY allocation fails without it. |
+| `SETUID` | Drops to the unprivileged SSH account and starts runner sessions (`setresuid` fails without it). |
+| `SETGID` | Clears supplementary groups during privilege separation (`setgroups` fails without it). |
+| `SYS_CHROOT` | Supports OpenSSH pre-authentication chroot and Podman's Chromium namespace chroot. |
+| `AUDIT_WRITE` (desktop only) | Submits Debian OpenSSH PTY audit records; sessions exit if `linux_audit_write_entry` is denied. |
 
-The lean Alpine executor has the four shared grants and expected bounding set
-`0x400c1`; the desktop executor has expected bounding set `0x200400c1`.
-`AUDIT_CONTROL` is absent: submitting an audit record does not permit audit-policy
-changes. Read-only root/key mounts and no-new-privileges remain in effect.
+The lean Alpine executor has bounding set `0x400c1`; the desktop executor has
+bounding set `0x200400c1`. `AUDIT_CONTROL` is omitted, so audit submission
+cannot modify audit policy. Read-only root filesystems, read-only key mounts,
+and `no-new-privileges` stay enabled.
 
 Authenticated runner sessions and GUI processes run as UID 10000 with empty
-effective, permitted, inheritable and ambient capability sets under
-`NoNewPrivs=1`. The listener's bounding set is not a claim that children retain
-those effective privileges. Native terminal fixtures establish PTY behavior on
-both qualified engines; other OpenSSH/account designs require their own evidence.
+effective, permitted, inheritable, and ambient capability sets under
+`NoNewPrivs=1`. The listener's bounding set does not grant those capabilities to
+child sessions.
 
-Desktop GUI software requires Chromium user-namespace syscalls in the selected
-seccomp policy, separately from daemon capability grants. Chromium diagnostics
-confirm namespace, PID/network-namespace and seccomp-BPF sandbox layers. Root in
-a child user namespace gains no authority over the parent-owned executor network
-namespace: native checks deny joining it and creating raw sockets there. Keep
-runner capability evidence, root listener grants and namespace-local browser
-capabilities distinct. See [desktop checks](development.md#executor-desktop-qualification)
-and [terminal coverage](development.md#code-terminal-qualification) for commands,
-qualified ARM64 targets and practical limits.
+Desktop Chromium also requires user-namespace syscalls in the engine's seccomp
+policy, independently of daemon capabilities. Chromium's sandbox uses user, PID,
+and network namespaces plus seccomp-BPF. Becoming UID 0 inside a child user
+namespace grants no control over the parent-owned executor network namespace:
+joining it and creating raw sockets there are both denied. See
+[executor desktop qualification](development.md#executor-desktop-qualification)
+and [code terminal qualification](development.md#code-terminal-qualification).
 
 ### Hermes capability boundary
 
-Hermes starts as root for the native s6 bootstrap and supervision. Its explicit
-container grants are `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETUID` and
-`SETGID`; both-engine lifecycle probes showed each is required for profile
-readiness, permission repair or clean shutdown. Engine defaults not used by that
-lifecycle, including `NET_ADMIN`, `NET_RAW`, `SETPCAP`, `SYS_CHROOT` and `MKNOD`,
-are dropped. Dropped application processes have empty effective, permitted,
-inheritable and ambient sets; they inherit bounding set `0xeb`, which is not
-authority under `NoNewPrivs=1` with no file capabilities. Clearing that bounding
-set would require replacing the native s6 drop or adding a helper and is deferred.
+Hermes starts as root for s6 bootstrap and process supervision. Its container
+capabilities are `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETUID`, and
+`SETGID`, each required for profile readiness, permission repair, or clean
+shutdown on both engines. Unused engine defaults (`NET_ADMIN`, `NET_RAW`,
+`SETPCAP`, `SYS_CHROOT`, `MKNOD`, and others) are dropped.
 
-Root services and profile wrappers share a `PATH`. The user-writable profile
-wrapper directory `/opt/data/.local/bin` is placed last so root s6, cont-init and
-wrapper command lookup prefers trusted directories, while uniquely named profile
-wrappers still resolve. This prevents a UID-10000 executable in the writable
-directory from shadowing a root service command.
+After dropping privileges, application processes have empty effective,
+permitted, inheritable, and ambient capability sets. They inherit bounding set
+`0xeb`, which grants no authority under `NoNewPrivs=1` with no file
+capabilities. Clearing that bounding set would require replacing s6's privilege
+drop and is deferred.
 
-Additional Hermes controls have narrower responsibilities:
-`HERMES_WRITE_SAFE_ROOT` guards selected file tools but not arbitrary shell code; Python `code_execution.mode:
-strict` changes staging/interpreter selection, not OS containment. Iron-proxy
-can broker additional SDK credentials and enforce HTTP destination policies;
-its default host-proxy wiring is not enabled here. Cloud microVM backends and
-an external VM executor offer stronger kernel separation, but introduce a
-separate runtime/provider. These optional mechanisms are not part of this stack's
-execution boundary.
+Root services and profile wrappers share `PATH`. The writable profile wrapper
+directory `/opt/data/.local/bin` sits last in `PATH` so root s6, `cont-init`,
+and wrapper lookups prefer system directories, preventing a UID-10000 executable
+from shadowing a root service command while still resolving uniquely named
+wrappers.
 
-## Ordinary WebApp terminals
+Other Hermes options have narrower scopes and are not part of this stack's
+execution boundary:
 
-`WEBAPP_TERMINAL_ENVIRONMENT` selects Code (default, SSH executor) or Agent
-(native Hermes shell) at process bootstrap, before profile dotenv loading.
-The code-terminal patch changes only the ordinary-terminal preparation branch,
-retaining native tickets, identity/profile ownership, PTY registry, replay,
-resize, explicit close and expiry. Saved gateway shells retain their own path.
-A remote cwd probe runs outside the registry lock; local PTY spawn uses the
-profile home while metadata reports the remote launch cwd.
+- `HERMES_WRITE_SAFE_ROOT` guards some file tools, not arbitrary shell commands.
+- Python `code_execution.mode: strict` changes staging and interpreter
+  selection, not OS containment.
+- Iron-proxy can broker SDK credentials and enforce HTTP destination rules, but
+  its default host-proxy wiring is disabled here.
+- Cloud microVM backends and external VM executors offer stronger kernel
+  isolation at the cost of a separate runtime or provider.
 
-Code shells use the existing captured SSH connection inputs and private key with
-strict pinned host verification, batch authentication and forwarding disabled.
-OpenSSH transports terminal resize and input/signals through a remote PTY. The
-same runner filesystem, process namespace and Tor/private-destination policy
-apply to human and model commands, including both executor image variants.
-No additional network grant, mount or service is introduced. Native PTY setup
-requires the daemon-only CHOWN grant described above. Selecting
-Code does not revoke the authenticated operator's administrative WebApp authority.
-See [terminal operation](webapp.md#terminal-environment).
+## WebApp terminal architecture
+
+`WEBAPP_TERMINAL_ENVIRONMENT` selects **Code** (default, SSH executor) or
+**Agent** (Hermes container shell) at process bootstrap, before profile dotenv
+files load. The code-terminal patch modifies only the local-terminal preparation
+branch, keeping Hermes's ticket authentication, profile ownership, PTY registry,
+replay, resize, close, and expiry behavior intact. Saved gateway terminals keep
+their separate remote path.
+
+Remote working-directory validation runs outside the PTY registry lock so a slow
+SSH probe does not block unrelated terminal operations. Local PTY creation uses
+the profile home directory while session metadata reports the remote launch
+directory.
+
+Code shells reuse Hermes's SSH connection settings and client key with strict
+pinned host verification, batch authentication, and forwarding disabled. OpenSSH
+forwards resize events, input, and signals over a remote PTY. Human and model
+commands share the same runner filesystem, process namespace, and Tor firewall
+policy in both lean and desktop executors, with no extra network grants, mounts,
+or services. Choosing Code mode does not remove an authenticated operator's
+administrative WebApp authority. See
+[terminal environment](webapp.md#terminal-environment).
