@@ -64,21 +64,37 @@ issue drafts, code comments, and handoff notes.
 
 - Write directly in plain English for human readers. Omit filler qualifiers
   such as "selected", "ordinary", "applicable", "configured", "disposable",
-  "harmless", "affected", or "actual" unless the adjective distinguishes two
-  real cases.
+  "harmless", "affected", "actual", "native", "existing", "matching",
+  "deliberate", "explicit", "saved", "current", or "relevant" unless the
+  adjective distinguishes two real cases in that sentence.
+- Do not stack nouns or modifiers into dense noun-chains (such as "shared-
+  namespace owner recovery qualification check" or "managed startup policy
+  enforcement"); break them into clear subject-verb clauses.
 - Be concrete at the reader's level of detail. Avoid vague shorthand and
-  invented jargon (for example, "the affected operation" or "captured policy
-  eligibility"); state the behavior, setting, command, or failure mode
-  directly. Keep file paths, function names, and implementation details in
-  commit bodies, code comments, and maintainer docs where they clarify the
-  change, without turning prose into pseudocode.
+  invented jargon (for example, "the affected operation", "captured policy
+  eligibility", or "historical completion authority"); state the behavior,
+  setting, command, or failure mode directly. Keep file paths, function names,
+  and implementation details in commit bodies, code comments, and maintainer
+  docs where they clarify the change, without turning prose into pseudocode.
+- Do not pack multiple concepts into slash-joined compounds (such as
+  "identity/mount/profile/cwd restoration" or "policy/credential/storage
+  validation"). Spell out separate items with commas and conjunctions, or split
+  them into bullets.
+- State what a feature does rather than piling up defensive negative disclaimers
+  about what it does not do or does not prove. Keep only caveats that prevent a
+  real misunderstanding or safety mistake, and state each caveat once in the
+  section that owns it.
+- Do not repeat the same rule or caveat across multiple sections of a document
+  or across sibling guides; state it once in its owning section and link to it
+  from elsewhere.
 - Always use the Oxford (serial) comma (`a, b, and c`).
 - Keep paragraphs short (2–4 sentences, one idea per paragraph). Break
-  multi-part details, options, and edge cases into headings or bulleted lists
-  with clear lead-ins rather than dense walls of text.
+  multi-part details, options, and edge cases into headings, tables, or
+  bulleted lists with clear lead-ins rather than dense walls of text.
 - Place new information in the section that owns it and integrate it into the
   surrounding structure. Do not bolt unrelated caveats onto the end of a
-  nearby paragraph.
+  nearby paragraph, and do not scatter test-suite notes inside operator setup
+  sections when a dedicated verification section exists.
 - Enforce clear tense boundaries:
   - Maintained docs, READMEs, and code comments describe **current** behavior
     in present tense. Never narrate prior code states, how the code evolved, or
