@@ -166,40 +166,49 @@ Changes made in `upstream_work/hermes-agent/` and `upstream_work/submissions/`:
     `tests/hermes_cli/test_update_secret_import_lock.py::test_complete_update_dispatch_does_not_import_cryptography`
     exits 2 inside Docker containers on pristine `main` (`25a1302ea`) as well
     because `hermes update` refuses container installs.
+  - **Rebase onto `origin/main` (`88a1c1f4b`):** Rebased all 9 branches onto
+    `origin/main` `88a1c1f4b` (pre-rebase heads saved under
+    `refs/qualification/pre-origin-main-rebase/`). `agent/tool_executor.py` on
+    `origin/main` had grown to 1,997 lines (3 lines under the 2,000-line
+    `FILE_LINES` target), causing PR6 (`feat/managed-tool-denials`) to hit
+    2,001 lines; collapsed a 2-line comment+check in
+    `_unwrap_tool_search_call` to 1 line so `agent/tool_executor.py` stays at
+    exactly 2,000 lines (no behavioral change; no v0.23.3 backport needed).
+    Re-ran `scripts/check`, Python suites, desktop Vitest, and the combined
+    9-branch replay in Docker (`upstream_work/pr-rebased-evidence/`): all
+    9 branches and the combined replay passed all 22 `scripts/check` checks
+    (0 blocking) and all test suites cleanly (PR1 231, PR2a 13, PR2b 42 + 6
+    Doctor port, PR3a 161 + 6 Vitest, PR3b 329, PR4a 3 + 142 Vitest, PR4b 152
+    + 215 Vitest, PR5 71, PR6 1,031, combined replay 335).
 - **Remaining / future work:**
-  - Push updated local `fix/*` and `feat/*` branches to the fork when ready
-    (`repush.sh` will also pick up the two new branches
-    `fix/executor-desktop-browser` and `fix/terminal-ssh-cwd`).
-  - Rebase onto latest `NousResearch/hermes-agent` `main`, refresh duplicate/PR
-    overlap checks, check `SECURITY.md` §3.1 before public discussion, and run
-    `just check` + `just test` on the final base before opening each PR.
+  - Push the rebased `fix/*` and `feat/*` branches to the fork (`repush.sh`).
+  - Refresh duplicate/PR overlap checks and verify `SECURITY.md` §3.1 before
+    opening each PR.
   - Native macOS, Windows, and WSL2 test coverage remains pending (will be
     covered by upstream CI lanes when PRs are opened).
   - No production defects requiring a v0.23.3 stack backport were found during
-    this restructuring (the only code adjustment was the 4-line formatting fix
-    in PR6's `test_compression_concurrent_fork.py` for the `FILE_LINES`
-    ratchet, plus moving the repeated-arg test from `test_browser_required_sandbox.py`
-    into `test_browser_cleanup.py` for the PR3a/PR3b split).
+    this restructuring or rebase.
 
 ## 1. Branches to submit
 
 The working clone is `upstream_work/hermes-agent/`. The submission drafts in
 `upstream_work/submissions/` point to the local heads below. The target is
 `NousResearch/hermes-agent`. The submission stack starts at upstream main
-`25a1302eacb563c59eb3b7454c1a53f8c89f274c`. The author identity is
+`88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5` (previous base `25a1302ea` preserved
+for `PR7`). The author identity is
 `Mike Perry <mikeperry-git@untrusted.systems>`.
 
 | Topic | Draft | Submission branch | Head | Review base |
 | --- | --- | --- | --- | --- |
-| PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `f64d2e4a2fbc3147b2c1611fb0be47d8627142dc` | Upstream main |
-| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `202eaf4080b732383240a34e4ea52124cafebff2` | Upstream main |
-| PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `8b8c6258df07a55ff9765a42c5e7eb490d7e85bf` | PR1 |
-| PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `0067934dcc86790666056cf707d8468d8e11632a` | Upstream main |
-| PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `206f65f6c496d809ea83c330d9e1bb97e8fe74d7` | PR2b + PR3a |
-| PR4a Literal SSH/OSC 7 working directories | `PR4a-terminal-ssh-cwd.md` | `fix/terminal-ssh-cwd` | `fb599f986d6fdf621afa43ffabc113c4bd2d3e96` | Upstream main |
-| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `5983ae9bcad2d6c6a68a6b71912f7afabc502fbd` | PR1 + PR4a |
-| PR5 URL reference fetching | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `8387a9c99250ea3d42a42c585d689da03a619434` | PR1 |
-| PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `ffd83a6fc22d9c17bab2353889d4dc77cb983e2a` | PR1 |
+| PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | Upstream main |
+| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `734837a9f07c9636566b32220467540eb1afdcd0` | Upstream main |
+| PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | PR1 |
+| PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
+| PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
+| PR4a Literal SSH/OSC 7 working directories | `PR4a-terminal-ssh-cwd.md` | `fix/terminal-ssh-cwd` | `868773aa8ba037511134868cf9a9c3bbf90a1337` | Upstream main |
+| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `703b3f869152b432e58937b13497c09ac55a3cab` | PR1 + PR4a |
+| PR5 URL reference fetching | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `c3a6b8a0bc49a16b907f98917cfbc50c5cd84e4e` | PR1 |
+| PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
 
 The original `upstream-pr/*` refs preserve the exact qualification heads.
