@@ -6,22 +6,32 @@ Teep inference, x402_treazury research tools, and an authenticated webapp with
 optional Tailscale Funnel and Tor onion ingress. Do not add framework selection
 or unrelated services.
 
-## Read the project before changing it
+Treat [security boundaries](#security-boundaries),
+[state safety and upgrades](#state-safety-and-retryable-setup), and
+[authority limits](#authority-limits) as hard non-negotiables; simplicity,
+review, workflow, and writing-style rules serve those invariants.
 
-- Read [README.md](README.md) for the user-facing overview and operator commands.
-  Read [architecture and isolation](docs/architecture.md) and
-  [development and qualification](docs/development.md) for implementation and checks.
-  Consult the maintained guides for the area you are changing:
-  [configuration and backups](docs/configuration.md),
-  [webapp](docs/webapp.md), [x402_treazury](docs/x402_treazury.md),
-  [updates, plugins, and privacy](docs/updates-and-plugins.md), and
-  [Hermes update workflow](docs/update-workflow.md).
+## Guides and references
+
+Read the maintained guide for the area you are changing before editing; detailed
+contracts and defaults live there rather than in copies here.
+
+| Change area | Read first |
+| --- | --- |
+| User overview, setup, and operator commands | [README.md](README.md) |
+| Network isolation, GRE, Tor, Teep, and executor topology | [architecture and isolation](docs/architecture.md) |
+| `.env` settings, offline setup, local inference, and backups | [configuration and backups](docs/configuration.md) |
+| Local webapp, Funnel, onion ingress, content policy, and terminals | [webapp](docs/webapp.md) |
+| Paid research MCP endpoints, wallet preparation, and funding policy | [x402_treazury](docs/x402_treazury.md) |
+| Derived Hermes image, patches, plugins, and privacy defaults | [updates, plugins, and privacy](docs/updates-and-plugins.md) |
+| Upgrading to a new official Hermes release | [Hermes update workflow](docs/update-workflow.md) |
+| Test commands, engine parity, and qualification status | [development and qualification](docs/development.md) |
+| Creating, executing, revising, or completing a staged plan | [planning workflow](docs/planning-workflow.md) |
+
 - Read plans under `docs/plans/` that touch the area you are changing and
   inspect the implementation before changing a shared interface. Plans describe
   intended work; their existence does not make a proposed feature implemented or
   independently authorize it.
-- Read the [planning workflow](docs/planning-workflow.md) before creating,
-  executing, materially revising, or completing an implementation plan.
 - `reference_repos/` contains read-only reference checkouts. Do not edit them or
   put build or runtime state there. Check exact revisions: a reference checkout
   can differ from the pinned image or source used by the stack.
@@ -29,134 +39,80 @@ or unrelated services.
   instructions unless explicitly adopted. Preserve this project's accepted
   design rather than importing their topology, restrictions, or tooling.
 
-## Maintain current documentation
+## Engineering and security
 
-- Maintained guides, component READMEs, and examples describe current behavior,
-  repository status, support boundaries, and durable limitations. Update the
-  owning section in place and remove superseded claims; readers must not
-  reconcile a sequence of updates to discover what is true.
-- Keep [README.md](README.md) user-facing only: explain the stack, its
-  components, the problems they solve, setup, everyday operation, and practical
-  limitations. Put implementation details, development procedures, and
-  qualification evidence in documents under `docs/`, and link to them instead of
-  expanding the README with maintainer material.
-- Runtime sequencing, recovery procedures, version pins, data-as-of dates, and
-  submission provenance remain valid when they explain a current fact.
-  Distinguish them from the sequence in which an agent discovered or changed
-  that fact.
-- Do not append development journals, changelogs, dated test or probe narratives,
-  review-acceptance logs, cleanup reports, or "initially", "later", and
-  "retested" histories outside plans. Do not carry retired plan phase or gate
-  codes into permanent docs. Keep execution chronology and phase evidence in the
-  plan; Git history preserves completed development history. Do not create an
-  archive or another handoff document to relocate the journal.
-- Preserve concise, attributable qualification status: version or source pin,
-  platform, checks that establish the contract, missing coverage, and practical
-  limits. Keep detailed logs and generated reports in ignored private evidence
-  storage. A source pin or evidence identifier may support a factual claim; it
-  must not become a chronology of approvals or failed attempts.
-- Keep active and deferred work and concrete next actions clear. A completed
-  plan retained at the user's request stays marked as a reference, without
-  exporting its historical phase or status updates into maintained guides.
-- Keep the user-facing name `x402_treazury`, not an endpoint-specific nickname.
+### Security boundaries
 
-## Writing style
+See [architecture and isolation](docs/architecture.md) and
+[webapp](docs/webapp.md) for exact grants and topology. Preserve these
+invariants across all changes:
 
-These rules apply to all prose: documentation, plans, commit messages, PR and
-issue drafts, code comments, and handoff notes.
+- **Never weaken isolation to fix a failure:** Do not add host networking,
+  privileged application containers, container-engine socket mounts, broad
+  private-network grants, or direct-egress fallbacks. Dependency failure must
+  never silently select a weaker transport or policy.
+- **Agent and executor separation:** Hermes and its SSH executor keep separate
+  mounts, processes, and network namespaces. Model and subagent code runs in the
+  executor without agent state, provider keys, or wallet mounts (this is not
+  per-task or tenant isolation).
+- **Tor egress and exact grants:** Public TCP and DNS from both namespaces route
+  through the transparent Tor gateway, denying direct Internet, unsupported UDP,
+  non-loopback IPv6, unintended peers, and private destinations by default.
+  Operator grants for exact host TCP ports and RFC1918 destinations apply only
+  to Hermes, never the executor. Keep internal grants exact for SSH, Teep, and
+  enabled MCP services; authorized Hermes tool RPC never widens executor network
+  access, and configuration flags alone do not prove these boundaries.
+- **Teep and treasury separation:** Teep keeps provider keys on its own direct
+  uplink and approved host-loopback port without direct-provider fallbacks (a
+  health check does not prove attestation; provider choice stays in Hermes).
+  `x402_treazury` shares `agent-net` for authenticated loopback MCP while
+  keeping separate processes, mounts, wallet ownership, and exclusive access to
+  Tor's private SOCKS socket.
+- **Ingress and browser containment:** Keep ingress separate from egress:
+  HAProxy uses a fixed Hermes backend with restricted outbound access, optional
+  Funnel provides public HTTPS (not tailnet authorization), and neither grants
+  Hermes host, tailnet, or direct Internet access. Preserve authentication and
+  exact host and origin checks for local, Funnel, and onion access, and keep the
+  operator's administrative webapp authority distinct from the model's SSH
+  executor. Browser-originated remote requests bypass the Tor gateway, so
+  preserve the external-content ceiling, authenticated public-raster retrieval,
+  origin-scoped image consent, inert private previews, and deliberate external
+  link clicks, and qualify browser containment separately from Tor egress.
+- **No silent trust-boundary changes:** Explain any new threat and reconcile
+  proposed hardening with documented trust decisions. Trusted offline setup may
+  handle Hermes and wallet storage; the untrusted SSH executor must never gain
+  that authority.
 
-- Write directly in plain English for human readers, and be concrete at the
-  reader's level of detail. State the behavior, setting, command, or failure
-  mode directly rather than using vague shorthand or invented jargon (for
-  example, "the affected operation", "captured policy eligibility", or
-  "historical completion authority"). Use file paths, function names, and
-  implementation details in commit bodies, code comments, and maintainer docs
-  where they clarify the change, without turning prose into pseudocode.
-- State what a feature does rather than piling up defensive negative disclaimers
-  about what it does not do or does not prove. Only use caveats that prevent a
-  real misunderstanding or safety mistake.
-- Keep internal process terms (qualification runs, replay branches, cleanup
-  passes, or plan phases) out of user-facing docs, commit messages, and
-  upstream PR and issue drafts.
-- Omit filler qualifiers such as "selected", "ordinary", "applicable",
-  "configured", "disposable", "harmless", "affected", "actual", "native",
-  "existing", "matching", "deliberate", "explicit", "saved", "current", or
-  "relevant" unless the adjective distinguishes two real cases in that
-  sentence.
-- Do not stack nouns or modifiers into dense noun-chains (such as "shared-
-  namespace owner recovery qualification check" or "managed startup policy
-  enforcement"); break them into clear subject-verb clauses.
-- Do not pack multiple concepts into slash-joined compounds (such as
-  "identity/mount/profile/cwd restoration", "policy/credential/storage
-  validation", or "host/VM", "auth/consent", "outage/recovery"). Spell out
-  separate items with commas and conjunctions, or split them into bullets.
-  Reserve slashes for file paths, URLs, `owner/repo` names, and standard
-  protocol or identifier forms such as `HTTP(S)`, `UID/GID`, or `IPv4/IPv6`.
-- Keep paragraphs short (2-4 sentences, one idea per paragraph). Break
-  multi-part details, options, and edge cases into headings, tables, or
-  bulleted lists with clear lead-ins rather than dense walls of text.
-- Place each rule, caveat, and detail once in the section that owns it,
-  integrated into the surrounding structure, and link to it from elsewhere. Do
-  not repeat the same rule or caveat across multiple sections or sibling guides,
-  do not bolt unrelated caveats onto the end of a nearby paragraph, and do not
-  scatter test-suite notes inside operator setup sections when a dedicated
-  verification section exists.
-- Always use the Oxford (serial) comma (`a, b, and c`).
-- Use plain ASCII punctuation and symbols instead of Unicode special characters.
-  Avoid curly quotes, em and en dashes, ellipses, arrows, multiplication signs,
-  box-drawing characters, and decorative symbols; use ASCII equivalents such as
-  `"`, `'`, `-`, `--`, `...`, `->`, `x`, and ASCII diagrams instead. Non-English
-  text and English loanwords that keep their diacritics (such as "protégé") are
-  the only exceptions.
-- Enforce clear tense boundaries:
-  - Maintained docs, READMEs, and code comments describe **current** behavior
-    in present tense. Never narrate prior code states, how the code evolved, or
-    lab-note investigation chronology.
-  - Commit messages and PR descriptions state the prior bug or limitation in
-    **past tense** and the new behavior or fix in **present tense**. Never
-    describe both the old broken state and the new state in present tense.
-- When revising or tightening documentation, preserve every operational detail,
-  recovery procedure, error condition, security boundary, qualification limit,
-  and inbound heading anchor. Verify factual claims against the repository's
-  implementation, Dockerfiles, and Compose files (and exact pinned revisions in
-  `reference_repos/`), and verify local links and anchors after editing.
+### State safety and retryable setup
 
-## Prefer the least machinery that meets the requirement
+- Gate each operation only on its own concrete requirements. Keep inspection,
+  backup, repair, and shutdown available when unrelated services or deployment
+  settings are invalid; validate network and serving policy before those
+  capabilities run, not before reading local state.
+- Preserve valid persistent state and completed setup across unrelated source,
+  build, and configuration changes. Do not invalidate access, discard
+  completion, or repeat setup based on whole-file hashes, build identities,
+  timestamps, or arbitrary versions. Require invalidation only for a
+  demonstrated incompatibility, and explain the requirement, consequence, and
+  recovery.
+- Keep prior completion, current readiness, and access to stored data distinct.
+  A dependency or policy failure may block an operation, but it never
+  invalidates an existing wallet or authorizes initialization, rotation,
+  payments, or destructive recovery. Prefer runtime checks over extra persisted
+  eligibility markers.
+- Distinguish authoritative state from advisory estimates, reporting
+  projections, and disposable caches. Missing optional corroboration or stale
+  derived data must not veto an established outcome or reopen completed work;
+  repair derived data through its owning component while diagnosing conflicting
+  required facts directly.
+- Make initialization retry-safe with direct, atomic file writes: save
+  recoverable inputs before derived outputs, preserve keys, credentials, and
+  operator choices, and reconstruct missing derived files from intact
+  authoritative state. If recovery is impossible, report the missing material
+  and the exact recovery command. Test interruption and retry paths, including
+  identity preservation.
 
-- Start with each component's built-in capabilities and straightforward code.
-  Preserve useful Python setup and lifecycle helpers and the documented Make
-  workflow; neither a language ban nor moving code into containers makes a
-  design simpler.
-- Before adding a service, persistent record, configuration option, or
-  abstraction, identify its concrete responsibility and why an existing
-  component cannot reasonably own it. Prefer fewer responsibilities and state
-  transitions, not merely fewer files or containers. Separate images are
-  appropriate for genuinely separate components; avoid merged setup images just
-  to reduce service counts.
-- Before adding enforcement, check the owning component's own guarantees. Add a
-  wrapper check only for a concrete invariant those guarantees do not cover; do
-  not mirror its budgets, accounting, readiness, or recovery state. An existing
-  limit is not a reason to keep it or add another.
-- Do not build generic orchestration, adapter registries, lifecycle or recovery
-  engines, configuration frameworks, or provenance systems for speculative
-  needs. Use Compose behavior directly where suitable, and small focused helpers
-  where Compose does not meet a demonstrated requirement.
-- Support Docker and rootless Podman through the engine selector and the Make
-  and Compose workflow. Prefer shared service behavior and explicit grants;
-  justify engine-specific overlays with demonstrated engine differences. Consult
-  the maintained engine guidance rather than adding a compatibility framework.
-- Fail visibly with useful reasons, without secret values. Do not mask failures
-  with broad exception handling, silent fallback, or unconditional success.
-- Do not introduce arbitrary container resource limits, storage quotas, or work
-  deadlines. Base safeguards on component requirements and observed failure
-  modes. Allow for Tor latency and distinguish slow progress from failure.
-- Keep timeout contracts distinct: connection establishment, response
-  inactivity, polling and reporting cadences, signed expiry, and test deadlines
-  protect different boundaries. Progress must not extend financial authority,
-  and a reporting cadence must not become a failure deadline. Let valid work
-  continue while it makes progress.
-
-## Compatibility for deployed stacks
+### Deployed stack compatibility and upgrades
 
 - The documented `make` entrypoints are the only supported ways for users to
   operate the stack. Direct Compose, container-engine, and helper invocations
@@ -172,12 +128,12 @@ issue drafts, code comments, and handoff notes.
   unsupported.
 - Private Hermes owns its deployment contract: supported root `.env` settings
   and their defaults and precedence, wrapper-owned files under `config/`,
-  documented `make` entrypoints, and the storage and identity layout. The layout
-  includes Compose project and volume names, bind paths, permissions, and the
-  inputs needed to back up and restore a deployment. Preserve the meaning of
-  retained settings, especially those governing exposure, authentication, and
-  spending. Options may be retired if the recommended upgrade workflow leaves
-  existing deployments operational and preserves state.
+  documented `make` entrypoints, and the storage and identity layout (Compose
+  project and volume names, bind paths, permissions, and backup inputs).
+  Preserve the meaning of retained settings, especially those governing
+  exposure, authentication, and spending. Options may be retired if the
+  recommended upgrade workflow leaves existing deployments operational and
+  preserves state.
 - Hermes and the other components own their own formats, schema migrations, and
   downgrade limits. Keep their state attached to upgraded services with the
   required ownership and mounts, and let the components read and migrate it.
@@ -188,7 +144,7 @@ issue drafts, code comments, and handoff notes.
   requires operator action, document the affected releases, the smallest safe
   upgrade step, and backup and recovery requirements. Use a focused
   compatibility read or migration when necessary to preserve state or behavior,
-  scoped to that format or interface. Regenerate derived files from
+  scoped to that format or interface, and regenerate derived files from
   authoritative state when possible.
 - Qualify upgrades through this workflow using populated fixtures from a prior
   release. Check effective configuration, credential and identity preservation,
@@ -196,97 +152,47 @@ issue drafts, code comments, and handoff notes.
   state, rotate credentials, or initialize another wallet to recover from an
   upgrade failure. Document when rollback requires a pre-upgrade backup.
 
-## Scope enforcement to the operation
+### Simplicity, errors, and timeouts
 
-- Each blocking check must protect a concrete requirement of the operation being
-  attempted. Keep inspection, backup, repair, and shutdown available when
-  unrelated services or deployment settings are invalid. Validate network and
-  serving policy before those capabilities are used, without making it a
-  prerequisite for reading local state.
-- Preserve valid persistent state and completed setup across unrelated source,
-  build, and configuration changes. Do not use whole-file hashes, build
-  identities, timestamps, or arbitrary versions as reasons to revoke access,
-  discard completion, or repeat setup. Require invalidation only for a
-  demonstrated incompatibility, explaining the requirement, practical
-  consequence, and recovery.
-- Keep prior completion, current readiness, and access to stored data distinct.
-  A dependency or policy failure may block that operation; it does not
-  invalidate an existing wallet or authorize initialization, rotation, payments,
-  or destructive recovery. Prefer checking runtime requirements over adding
-  another persisted eligibility marker.
-- Distinguish authoritative state from advisory estimates, reporting
-  projections, and disposable caches. Missing optional corroboration or stale
-  derived data must not veto an established outcome or reopen completed work.
-  Repair derived data through its owning component instead of adding agreement
-  checks, certificates, or parallel accounting. Conflicting required facts still
-  need scoped diagnosis.
-- Make initialization retry-safe with direct file persistence and small, focused
-  code: atomically publish individual files, save recoverable inputs before
-  derived outputs, and reconstruct missing derived files from intact
-  authoritative state. Preserve keys, credentials, and operator choices. If
-  recovery is impossible, report the specific missing material and the recovery
-  command the operator must run.
-- Do not turn partial-initialization handling into startup journals, recovery
-  frameworks, or speculative state machines. Test interruption and retry paths,
-  including identity preservation, and stop at the simplest behavior that meets
-  the demonstrated need.
+- Start with each component's built-in capabilities and straightforward code.
+  Preserve useful Python setup and lifecycle helpers and the documented Make
+  workflow; neither a language ban nor moving code into containers makes a
+  design simpler.
+- Before adding a service, persistent record, configuration option, or
+  abstraction, identify its concrete responsibility and why an existing
+  component cannot own it. Prefer fewer responsibilities and state transitions,
+  not merely fewer files or containers; keep separate images for genuinely
+  separate components rather than merging setup images.
+- Check upstream component guarantees before adding wrapper enforcement
+  or patches. Add a wrapper check only for a concrete invariant those guarantees
+  do not cover; do not mirror component budgets, accounting, readiness, or
+  recovery state. An existing limit is not a reason to keep it or add another.
+- Do not build generic orchestration, adapter registries, startup journals,
+  recovery or compatibility frameworks, configuration engines, speculative state
+  machines, or provenance systems. Use Compose directly where suitable, small
+  focused helpers where Compose falls short, and documented engine overlays only
+  for demonstrated Docker vs. rootless Podman differences.
+- Fail visibly with useful reasons and no secret values. Do not mask failures
+  with broad exception handling, silent fallback, or unconditional success.
+- Do not introduce arbitrary container resource limits, storage quotas, or work
+  deadlines. Base safeguards on component requirements and observed failure
+  modes, allow for Tor latency, and distinguish slow progress from failure.
+- Keep timeout contracts distinct: connection establishment, response
+  inactivity, polling and reporting cadences, signed expiry, and test deadlines
+  protect different boundaries. Progress must not extend financial authority,
+  and a reporting cadence must not become a failure deadline. Let valid work
+  continue while it makes progress.
 
-## Preserve the accepted boundaries
-
-- Hermes and its SSH executor have separate mounts, processes, and network
-  namespaces. Model and subagent code runs in the executor without agent state,
-  provider credentials, or wallet mounts. This is not per-task or tenant
-  isolation.
-- Public TCP from both namespaces goes through the transparent Tor gateway;
-  DNS follows the Tor policy. Preserve denial of direct Internet, unsupported
-  UDP, non-loopback IPv6, unintended peers, and private destinations by default.
-  Operators may grant the Hermes identity exact engine-host TCP ports and
-  RFC1918 address and port pairs through the gateway. Preserve executor denial,
-  Tor-only public egress, and separation from inter-service grants.
-  Configuration flags alone do not establish these boundaries.
-- Preserve exact internal grants for SSH, Teep, and enabled MCP services. The
-  executor cannot directly access agent APIs, inference, or MCP endpoints.
-  Authorized Hermes tool RPC is a separate capability, not permission to widen
-  the executor's network access.
-- Teep has its own direct uplink and an explicitly approved host-loopback port.
-  Provider keys belong there. Preserve its verification behavior; a health check
-  is not evidence of successful attestation. Do not add direct-provider
-  fallbacks around the Teep inference route. Use managed `make up` and
-  `make down` for stack lifecycle and Teep selection. Provider choice stays in
-  Hermes.
-- x402_treazury shares the agent network namespace for authenticated loopback
-  MCP, but retains separate processes, mounts, and wallet ownership. Only
-  treasury receives its private Tor SOCKS socket. Keep wallet data away from
-  Hermes and the executor; do not add per-port relays without a concrete need.
-- Keep ingress separate from egress. HAProxy has a fixed Hermes backend and
-  restricted outbound access. Optional Funnel provides public HTTPS, not tailnet
-  authorization. Neither component may give the agent host, tailnet, or direct
-  Internet connectivity. Preserve authentication, exact host and origin checks,
-  and credential handling for local, Funnel, and onion access.
-- An authenticated webapp operator has administrative agent authority. Its
-  interactive terminal is distinct from the model's SSH execution backend.
-  Document that distinction instead of claiming all browser actions are confined
-  to the executor.
-- Browser-originated remote requests do not pass through the stack's Tor
-  gateway. Preserve the deployment external-content ceiling, authenticated
-  public-raster retrieval, origin-scoped image consent, and inert private
-  previews. Browser-native interactive opt-in and streaming remain deferred to
-  part 2. Preserve deliberate external link clicks and qualify browser
-  containment separately from Tor egress.
-- Never solve a failure by adding host networking, privileged application
-  containers, container-engine socket mounts, broad private-network grants, or
-  direct egress. Dependency failure must not silently select a weaker transport
-  or policy.
-- Do not add hardening against a hypothetical threat by silently revising an
-  accepted trust boundary. Explain the threat and reconcile it with documented
-  trust decisions. Trusted offline setup may handle both Hermes and wallet
-  storage; the untrusted SSH executor must not gain that authority.
-
-## Repository, configuration, and persistence
+### Repository layout, configuration, and scripts
 
 - Runtime Compose files live at the root. Component Dockerfiles, defaults, and
   container scripts live under `components/`; host helpers under `scripts/`;
   qualification code and test fixtures under `tests/`.
+- Keep host helpers in `scripts/` and unit tests in `tests/test_*.py` on the
+  Python standard library (plus repo-local modules) so operator commands and
+  `make check` work with bare `python3` and no virtualenv. Keep optional
+  browser-test dependencies isolated in `tests/requirements-browser.txt`, and
+  use strict error handling (`set -eu`) with quoted expansions in shell scripts.
 - Root `.env` is the unified operator input. Add settings to `.env.example` and
   explicit service mappings together. Do not load the entire file into services
   or place image or source versions there. Pins live in Compose and Dockerfiles.
@@ -308,93 +214,251 @@ issue drafts, code comments, and handoff notes.
   from applying updates. Disabled telemetry and optional notifications are
   separate decisions.
 
-## Plans, review, and development commits
+## Independent review and planning
 
-- Use a plan when requested or when substantial staged work needs clear design
-  decisions and acceptance criteria. Small changes need no ceremonial plan,
-  extra subsystem guide, or independent review.
-- State current and intended behavior, preserved boundaries, the simplest
-  proposed approach, unresolved assumptions, and named deferrals. Include
-  consumers, focused validation, and permanent documentation in coherent
-  implementation phases. Reconcile other plans affected by shared changes.
-- Commit coherent work during development and at plan phase boundaries,
-  including completed changes. This is standing authorization for local
-  development commits; do not wait for a separate commit request. Record the
-  baseline and plan path for substantive planned work. Never commit failing
-  intermediate work as though it were a completed phase.
-- Follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
-  specification for commit subjects (for example,
-  `fix(ssh): preserve workspace sync`) and keep subjects and bodies within 80
-  columns. In addition to that standard, use two body paragraphs for changes
-  that fix a substantial bug or limitation: describe the prior problem in past
-  tense, then describe the fix in present tense (see
-  [Writing style](#writing-style)). The two-paragraph body is optional for
-  routine documentation cleanup or plan updates.
-- Preserve unrelated tracked, untracked, and ignored files. Stage only named
-  intended files; never use `git add .` or `git add -A`. Do not rewrite git
-  history without authorization. Keep reference checkouts, secrets, wallet data,
-  runtime state, and generated private evidence out of commits.
-- Use independent read-only reviewers for substantive design or security
-  changes, meaningful phase commits, named plan gates, and the completed
-  combined change. Scale review to the change; no fixed reviewer count or
-  repeated review of an unchanged snapshot is required. Small documentation
-  edits can use self-review.
-- An independent review or audit means a newly spawned subagent with a fresh
-  conversation and no prior turns or inherited conversation history. Use
-  `fork_turns="none"` when supported. Do not reuse an implementation agent or a
-  prior review conversation for a new independent review. Supply context in the
-  review brief; the reviewer's own fresh inspection supplies the assessment.
-- Give reviewers self-contained briefs with intent, constraints, exact SHA or
-  identified snapshot including new files, the guides for the changed area, and
-  evidence. Ask them to trace consumers and failure paths and challenge
-  unnecessary complexity. Reviewers must not author the changes they
-  independently review.
-- Reviewers must not re-run already-run tests, suites, or lifecycle
-  qualification as part of a review unless the user specifically asks them to,
-  or unless a new focused check is needed to confirm a suspected finding. Verify
-  from the supplied snapshot, source inspection, and recorded evidence, state
-  what was not re-run, and if confirmation is required run only the smallest
-  check needed.
-- Reviewer suggestions are proposals, not automatic scope additions. Address
-  material defects, consider simpler solutions, and explain rejected or deferred
-  recommendations. Keep unrelated improvements separate.
-- Resolve material findings before dependent work. Commit focused corrections;
-  re-review and rerun checks when changes invalidate earlier evidence. Do not
-  require a separate review ceremony for every trivial fixup. Phase reviews do
-  not substitute for assessing the resulting combined change.
-- Distinguish implemented, validated, and independently reviewed work. Disclose
-  unavailable reviews or checks rather than claiming completion evidence that
-  does not exist. Update operating guides with implementation and keep plan
-  status accurate. After final review acceptance, remove completed plans using
-  the planning workflow, preserving maintained documentation and resolving
-  links.
+Use independent subagents for design challenge, audits, and implementation
+review as a normal part of engineering work, without waiting for a separate
+delegation request. Scale review to the change.
+
+### Independent subagent review
+
+- **Applies independently of plans:** Run independent review for any non-trivial
+  code, Compose, firewall, ingress, policy, storage, behavioral, or substantive
+  documentation change, including standalone fixes and single-commit work that
+  need no plan file. Only trivial edits (small documentation tweaks, typo or
+  comment fixes, and isolated minor unit-test edits) skip independent review.
+- **Pre-implementation design review:** Before substantive implementation or
+  architectural changes, have an independent design reviewer challenge the
+  approach, verify component ownership and guarantees against the code and
+  pinned revisions, identify removable responsibilities, and test whether a
+  simpler design suffices. Resolve material design findings before building on
+  that decision.
+- **Fresh, non-author isolation:** Every independent review or audit must run in
+  a newly spawned subagent with a fresh conversation and no prior turns or
+  inherited history. Give the subagent the parent's full tool, Git, MCP, and
+  network capabilities (rather than a stripped-down subagent type that blocks
+  Git history or MCP tools), and instruct it in its brief to perform a read-only
+  review without modifying files or repository state. Never reuse the
+  implementation agent or a prior review conversation, and never have a reviewer
+  review any changes they suggest.
+- **Self-contained coordinator brief:** Supply intent, constraints, baseline,
+  exact reviewed commit SHA or snapshot (including new files), owning guides,
+  validation evidence, known gaps, and prior findings. Give the reviewer access
+  to the checkout and Git history.
+
+### Review method and findings
+
+- **Independent assessment:** Record an initial assessment before consulting
+  the author's rationale or prior findings, then reconcile it with prior
+  findings and fixes. Trace surrounding consumers, complete call chains,
+  failure paths, unchanged high-risk boundaries, and test coverage. Verify any
+  assumptions about upstream contracts, behavior, and component interactions
+  against `reference_repos/` (checking that each checkout matches the pinned
+  revision).
+- **Simplification and complexity challenge:** Look for simpler alternate
+  designs, especially ones that can rely on upstream components, sub-components,
+  or built-in behavior rather than new patches, services, or stack code. Flag
+  over-engineering, double enforcement, collapsible behaviors, parallel state,
+  fragile ownership, speculative machinery, or other awkward, overly complex
+  behaviors that can be simplified or removed. Suggest simpler alternate designs
+  and evaluate concrete simplifications against the contracts they must preserve.
+- **Pattern-sweep prior findings across the branch:** When follow-up fixes or
+  multiple commits accumulate, each subsequent review pass and the final
+  combined review must trace **all prior findings and fixes** through the
+  surrounding code for recurring causes, shared invalid assumptions,
+  excessively complicated or fragile design patterns that could be simplified
+  or removed, and coverage gaps elsewhere in the branch. Per-commit or
+  per-phase approval does not replace a final combined review of the
+  complete change.
+- **Documentation review:** Review substantive documentation changes (standalone
+  or paired with code) for [writing style](#writing-style) compliance, factual
+  accuracy against the implementation, Dockerfiles, Compose files, and pinned
+  `reference_repos/` revisions, and preservation of current operational
+  procedures, error conditions, security boundaries, and qualification limits.
+  Check structure, complexity, scope, single ownership, valid local links and
+  anchors, and audience fit (operator `README.md` vs. maintainer guides).
+- **Verification discipline:** Reviewers verify from the snapshot, source
+  inspection, and recorded evidence; they must not re-run already-run tests or
+  lifecycle suites unless explicitly asked or to confirm a suspected finding
+  with the smallest focused check needed (stating what was not re-run).
+- **Resolving findings and honest reporting:** Treat reviewer suggestions as
+  proposals rather than automatic scope expansion. Fix material defects before
+  dependent work, evaluate compelling simplifications on merit, explain rejected
+  or deferred items, and re-review when fixes invalidate earlier evidence.
+  Report implemented, validated, and independently reviewed work separately, and
+  disclose unavailable reviews rather than claiming completion.
+
+### Planning
+
+- Use a committed plan under `docs/plans/` only when the user requests one, when
+  continuing an existing plan, or when staged work genuinely spans multiple
+  dependent phases with distinct design decisions and acceptance gates. Routine
+  single-commit or multi-step fixes use the independent review workflow above
+  without creating a plan file.
+- Before creating, revising, executing, or completing a plan, follow
+  [docs/planning-workflow.md](docs/planning-workflow.md). It owns plan
+  structure, phase gates, evidence tracking, and removing completed plans after
+  final review acceptance (unless retained as a reference at the user's
+  request).
 
 ## Validation and authority
 
-- Choose checks that demonstrate the changed behavior. Documentation-only work
-  needs inspection, local-link checks, and `git diff --check`, not a runtime
-  suite. Avoid prose snapshots and tests that merely mirror implementation
-  details.
+### Checks and qualification
+
+| Command or check | When to run | Scope and limits |
+| --- | --- | --- |
+| `make check` | Default fast baseline for code, script, and Compose changes | Unit tests (`tests/test_*.py`), all four Compose models, and Python compilation. Does not prove runtime engine behavior. |
+| Local link check and `git diff --check` | Documentation-only edits | Verifies links, anchors, and whitespace without running container suites. |
+| Targeted `make *-test` or `tests/*_smoke.py` | Runtime, Compose, security, ingress, or component changes | Demonstrates changed runtime behavior on isolated fixtures; see [development and qualification](docs/development.md). |
+
 - Compose changes require effective-model validation and runtime checks.
   Security changes need allowed-path and forbidden-path evidence, including
   dependency failure and restart behavior; static inspection is insufficient.
-- Qualify runtime behavior on both supported engines using shared fixtures.
-  Compose-model and unit checks do not prove runtime engine behavior. Reuse
-  unchanged evidence across unrelated work, and repeat or broaden checks only
-  for new changes, failures, or unresolved concerns.
+- Qualify runtime behavior on both Docker and rootless Podman using shared
+  fixtures. Reuse unchanged evidence across unrelated work, and repeat or
+  broaden checks only for new changes, failures, or unresolved concerns.
 - Reuse the repository's focused checks and isolated test projects. Serialize
   tests sharing fixed networks or runtime state. Keep real financial secrets out
-  of fixtures, and qualify filesystem and locking behavior on the target
-  platform.
+  of fixtures, qualify filesystem and locking behavior on the target platform,
+  and avoid prose snapshots or tests that merely mirror implementation details.
 - Record engine, provider, and platform limits, omitted checks, and missing
   coverage. Controlled fixtures do not prove live public ingress, settlement,
   provider attestation, or support for untested platforms.
+
+### Authority limits
+
 - Local development commits do not authorize pushing, merging, publishing, live
   Funnel enrollment, payments, funded wallet operations, or destructive changes
   to private state. Perform these only when task authorization is provided; a
-  plan or review recommendation alone grants none of these actions. Never
-  shell-source private environment files or print private values unnecessarily.
+  plan or review recommendation alone grants none of these actions.
+- Never shell-source private environment files or print private values
+  unnecessarily.
 
-At handoff, report what changed, the validation and reviews performed, the
-committed revision or remaining uncommitted work, and material limitations or
-next steps.
+## Git and commits
+
+- **Development commits:** Commit coherent work during development and at plan
+  phase boundaries, including completed changes. This is standing authorization
+  for local commits; do not wait for a separate request. Never commit failing
+  intermediate work as a completed phase.
+- **Commit format:** Follow
+  [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for
+  subjects (for example, `fix(ssh): preserve workspace sync`) and wrap prose in
+  subjects and bodies to 80 columns (long URLs, paths, or hashes do not need
+  artificial line breaks). For changes that fix a substantial bug or limitation,
+  use two body paragraphs: describe the prior problem in past tense, then
+  describe the fix in present tense (see [Writing style](#writing-style)). The
+  two-paragraph body is optional for routine documentation cleanup or plan
+  updates.
+- **Worktree and staging hygiene:** Preserve unrelated tracked, untracked, and
+  ignored files. Stage only named intended files; never use `git add .` or
+  `git add -A`, and do not rewrite git history without authorization. If an
+  unrelated file has unexpected local edits, leave them untouched and ask the
+  user if they collide with your task. Keep reference checkouts, secrets, wallet
+  data, runtime state, and generated private evidence out of commits.
+- **Handoff:** Report what changed, the validation and reviews performed, the
+  committed revision or remaining uncommitted work, and material limitations or
+  next steps.
+
+## Documentation and writing style
+
+### Maintain current documentation
+
+- Maintained guides, component READMEs, and examples describe current behavior,
+  support boundaries, and durable limits. Update the owning section in place and
+  remove superseded claims. Place each rule, caveat, and detail once in its
+  owning section, integrated into the surrounding structure, and link from
+  elsewhere (a brief safety reminder linking to the owning section is fine at
+  the point of action). Do not bolt unrelated caveats onto the end of a nearby
+  paragraph, and keep test notes in verification sections rather than operator
+  setup sections.
+- Keep [README.md](README.md) user-facing only: explain the stack, its
+  components, the problems they solve, setup, everyday operation, and practical
+  limits. Put implementation details, development procedures, and qualification
+  evidence under `docs/` and link to them.
+- Keep development journals, changelogs, dated probe narratives, review logs,
+  "initially", "later", and "retested" histories, and retired plan phase or gate
+  codes out of permanent docs (and do not relocate them into archive or handoff
+  files). Execution chronology belongs in active plans; Git history preserves
+  completed work. Keep active and deferred work and next actions clear;
+  completed plans retained at the user's request stay marked as references.
+- Preserve concise, attributable qualification status (version or source pin,
+  platform, checks establishing the contract, missing coverage, and limits), and
+  keep raw logs and reports in ignored private storage. Runtime sequencing,
+  recovery procedures, version pins, upgrade steps, and submission provenance
+  remain valid when they explain a current fact.
+- When revising documentation, preserve current procedures, recovery steps,
+  error conditions, security boundaries, and qualification limits while removing
+  superseded or redundant detail. Verify factual claims against the
+  implementation, Dockerfiles, Compose files, and pinned `reference_repos/`
+  revisions. Cross-check and update all inbound links when renaming, moving, or
+  removing headings.
+- Keep the user-facing name `x402_treazury`, not an endpoint-specific nickname.
+
+### Writing style
+
+These rules apply to all prose: documentation, plans, commit messages, PR and
+issue drafts, code comments, and handoff notes.
+
+- Write directly in plain English for human readers, and be concrete at the
+  reader's level of detail. State the behavior, setting, command, or failure
+  mode directly rather than using vague shorthand or invented jargon (for
+  example, "the affected operation", "captured policy eligibility", or
+  "historical completion authority"). Use file paths, function names, and
+  implementation details in commit bodies, code comments, and maintainer docs
+  where they clarify the change, without turning prose into pseudocode.
+- State what a feature does rather than piling up defensive negative disclaimers
+  about what it does not do or does not prove. Only use caveats that prevent a
+  real misunderstanding or safety mistake.
+- Keep internal process terms (qualification runs, replay branches, cleanup
+  passes, or plan phases) out of user-facing docs, commit messages, and
+  upstream PR and issue drafts.
+- Omit filler qualifiers such as "selected", "ordinary", "applicable",
+  "configured", "disposable", "harmless", "affected", "actual", "native",
+  "existing", "matching", "deliberate", "explicit", "saved", "current", or
+  "relevant" unless the adjective distinguishes two real cases in context.
+- Do not stack nouns or modifiers into dense noun-chains (such as "shared-
+  namespace owner recovery qualification check" or "managed startup policy
+  enforcement"); break them into clear subject-verb clauses.
+- Do not pack multiple concepts into slash-joined compounds (such as
+  "identity/mount/profile/cwd restoration", "policy/credential/storage
+  validation", or "host/VM", "auth/consent", "outage/recovery"). Spell out
+  separate items with commas and conjunctions, or split them into bullets.
+  Reserve slashes for file paths, URLs, `owner/repo` names, and standard
+  protocol or identifier forms such as `HTTP(S)`, `UID/GID`, or `IPv4/IPv6`.
+- Keep paragraphs short (generally 1-4 sentences, one idea per paragraph). Break
+  multi-part details, options, and edge cases into headings, tables, or
+  bulleted lists with clear lead-ins rather than dense walls of text.
+- Always use the Oxford (serial) comma (`a, b, and c`).
+- Use plain ASCII punctuation and symbols instead of Unicode special characters.
+  Avoid curly quotes, em and en dashes, ellipses, arrows, multiplication signs,
+  box-drawing characters, and decorative symbols; use ASCII equivalents such as
+  `"`, `'`, `-`, `--`, `...`, `->`, `x`, and ASCII diagrams instead. Exceptions
+  are non-English text, English loanwords that keep their diacritics (such as
+  "protégé"), and verbatim quotes of external text or UI literals.
+- Enforce clear tense boundaries:
+  - Maintained docs, READMEs, and code comments describe **current** behavior
+    in present tense. Do not narrate prior code states, how the code evolved, or
+    investigation chronology (concrete upgrade or migration steps and factual
+    provenance such as version pins or submission dates remain valid where they
+    help readers).
+  - Commit messages and PR descriptions state the prior bug or limitation in
+    **past tense** and the new behavior or fix in **present tense**. Never
+    describe both the old broken state and the new state in present tense.
+
+### Target writing style examples
+
+- Avoid: "Explicit configuration of the selected ingress/inference settings
+  does not invalidate existing saved wallet credentials or rerun native
+  startup/bootstrap validation."
+  Prefer: "Changing ingress or inference settings preserves wallet credentials
+  and skips setup."
+- Avoid: "Process-local inert values satisfy unused ingress/inference
+  interpolation without mutating actual operator files or running the affected
+  operation."
+  Prefer: "Maintenance commands substitute placeholder values for unused ingress
+  and inference variables in memory, leaving `.env` and running containers
+  unchanged."
+- Avoid: "Ordinary serving schedules independent refill opportunities per group;
+  explicit bootstrap retains prompt allocation of its captured claims."
+  Prefer: "During normal operation, each wallet group schedules refills
+  independently, while bootstrap funds its initial wallet immediately."
