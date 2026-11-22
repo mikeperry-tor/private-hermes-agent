@@ -1,179 +1,136 @@
 # x402_treazury MCP integration
 
-x402_treazury provides paid information APIs as research tools, reducing reliance
-on browsing websites that challenge or ban Tor traffic. It funds rotating Base
-USDC payment wallets from a shielded Zcash treasury and ties Tor circuit
-isolation to each payer identity. Changing wallets changes the Tor isolation
-identity, reducing wallet and network linkability across API usage. The configured
-wallet groups below separate categories of research under upstream policy.
+`x402_treazury` gives Hermes paid research APIs as an alternative to browsing
+websites that block or CAPTCHA Tor traffic. It funds rotating Base USDC payment
+wallets from a shielded Zcash treasury and binds Tor circuit isolation to each
+payer identity, reducing wallet and network linkability across API calls.
 
-For catalog and metadata downloads, the default policy makes one origin attempt
-and two retries on fresh Tor circuit isolation identities, then falls back to
-up to two paid relay downloads for GET requests. Source discovery and provider
-metadata relay fallback are enabled; relay fallback for actual API requests is
-disabled by default.
+- **Catalog and metadata downloads:** By default, each download makes one origin
+  attempt and two retries on fresh Tor circuits, then falls back to up to two
+  paid relay GET requests. Relay fallback is enabled for source discovery and
+  provider metadata, and disabled for API requests themselves.
+- **Funding privacy:** Funding swaps run over isolated Tor circuits using Zcash
+  with a unique shielded refund address per swap. The main remaining funding
+  linkability is correlation by timing and amount against overall Near Intents
+  ZEC-to-Base USDC swap volume; closely spaced swaps are easier to correlate.
+  Deferred first-use funding spreads initial swaps out, though calls made before
+  a group's first funding share the `general` payer and later separation cannot
+  undo earlier links.
+- **Key isolation:** Wallet keys stay inside the `x402_treazury` container;
+  Hermes receives authenticated MCP tool access only.
 
-Funding swaps use Zcash on isolated Tor circuits with a unique shielded refund
-address for each swap. The main remaining funding linkability is correlation of
-swap timing and amounts against the overall volume of ZEC-to-Base USDC swaps.
-Closely spaced initial swaps are easier to correlate. First-use deferred funding
-can spread those swaps out, but initial API calls share a payer and delayed funding
-does not erase earlier links. Later swaps occur independently with rotation.
-Wallet keys stay with x402_treazury; Hermes receives tool access rather
-than those keys.
+## Architecture, endpoints, and wallet groups
 
-The main `compose.yaml` includes one x402_treazury serving process in
-its own container, sharing `agent-net`'s network namespace with Hermes. Its twelve
-HTTP MCP listeners stay on `127.0.0.1:3010–3021`; no ports are published and no
-forwarding service or firewall grants are needed. Listeners are configured for
-loopback access without a source patch. Serving and Hermes MCP registration
-begin after staged preparation; the local Hermes webapp works before a wallet
-is created or funded.
+`compose.yaml` runs one `x402_treazury` container sharing `agent-net`'s network
+namespace with Hermes. Its twelve HTTP MCP listeners bind to
+`127.0.0.1:3010–3021` with no published host ports, forwarding proxies, or
+extra firewall grants. Serving and Hermes MCP registration activate only after
+staged wallet preparation; Hermes and its WebApp work normally beforehand.
 
-| Hermes MCP name | Local port | Intended wallet group |
+| Hermes MCP name | Local port | Wallet group (after funding) |
 | --- | --- | --- |
-| x402_treazury_toolbox | 3010 | general |
-| x402_treazury_web | 3011 | general |
-| x402_treazury_science | 3012 | general |
-| x402_treazury_shopping | 3013 | general |
-| x402_treazury_world | 3014 | general |
-| x402_treazury_social | 3015 | personal |
-| x402_treazury_property | 3016 | personal |
-| x402_treazury_travel | 3017 | personal |
-| x402_treazury_health | 3018 | health |
-| x402_treazury_business | 3019 | financial |
-| x402_treazury_finance | 3020 | financial |
-| x402_treazury_security | 3021 | financial |
+| `x402_treazury_toolbox` | 3010 | `general` |
+| `x402_treazury_web` | 3011 | `general` |
+| `x402_treazury_science` | 3012 | `general` |
+| `x402_treazury_shopping` | 3013 | `general` |
+| `x402_treazury_world` | 3014 | `general` |
+| `x402_treazury_social` | 3015 | `personal` |
+| `x402_treazury_property` | 3016 | `personal` |
+| `x402_treazury_travel` | 3017 | `personal` |
+| `x402_treazury_health` | 3018 | `health` |
+| `x402_treazury_business` | 3019 | `financial` |
+| `x402_treazury_finance` | 3020 | `financial` |
+| `x402_treazury_security` | 3021 | `financial` |
 
-Wallet pools group requests by potential payer linkability: general research,
-personal context, health context, and financial interests. They are upstream
-payment policies, not separate MCP access-control identities. New defaults initially
-route all groups through `general`; the table describes each group after its first
-positive credit. Paid metadata relays retain `general` throughout.
+Wallet groups separate payment linkability across broad topics (`general`,
+`personal`, `health`, and `financial`). They are upstream payment policies, not
+separate MCP access-control roles.
 
-New Hermes profiles expose enabled tools directly with Hermes Tool Search off.
-The packaged treasury policy keeps `discover_on_demand = true` on all endpoints
-except web: those endpoints advertise discovery/call wrappers, while web
-advertises its selected API definitions. Endpoint search descriptions include
-category keywords to help the model choose where to search. See
-[tool discovery configuration](configuration.md#tool-discovery-default) for
-existing profiles and the additional built-in/plugin tool context this entails.
+New Hermes profiles disable Hermes Tool Search while keeping
+`discover_on_demand = true` on every `x402_treazury` endpoint except `web`
+(which advertises its API tools directly). See
+[tool discovery default](configuration.md#tool-discovery-default) for details.
+
+### Upstream pin and deferred funding policy
+
+The image builds unmodified upstream commit
+`ee92a067655d8d34d5cbc490ddbeb938635d0144` (Rust 1.99.1, locked dependencies).
+The wrapper overrides only the Tor SOCKS socket path, persistent state path, and
+HTTP `Host` allowlists; wallet groups, rotation, funding, payment caps, and tool
+lists follow upstream policy
+([upstream wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-rotation.md)).
+
+The packaged `research_desk.toml` sets `[wallet_bootstrap]` with
+`bootstrap_group = "general"` and
+`deferred_groups = ["personal", "health", "financial"]`:
+
+- **Initial funding:** `make x402_treazury-prepare` funds only `general`'s
+  initial $2–3 reserve (plus swap and bridge fees). Funding all four groups over
+  time needs $8–12 nominal, plus ongoing relay and refill capital.
+- **Deferred group activation:** Until a deferred group receives its first
+  positive credit, its API calls use `general`'s payer and $1 cap (including
+  `health` calls). The first validated API call in a deferred group (even a free
+  response or cache hit) triggers funding, with its first refill opportunity
+  scheduled after an independent 30–120-second wait. Once funded, future calls
+  permanently use that group's own payer and cap (`$0.50` for `health`), even if
+  later depleted.
+- **Metadata relays:** Paid metadata relays for catalogs, pricing, help, and
+  discovery always pay from `general` under this policy (overriding
+  `relay_fallback.wallet`) and do not trigger deferred group funding.
+- **Customizing bootstrap behavior:** Existing saved `research_desk.toml` files
+  are preserved across updates. To fund every group separately from the start,
+  remove the `[wallet_bootstrap]` table. Omitted reserve bounds use upstream's
+  $2–3 default.
+
+Inspect the packaged default policy offline before funding (no private mounts):
+
+```sh
+# Docker
+docker run --rm --network none private-hermes-x402_treazury:local config show
+
+# Rootless Podman
+podman --remote=false run --rm --network none private-hermes-x402_treazury:local config show
+```
 
 ## Start Hermes first
 
 ```sh
 make init
-# Set NEARAI_API_KEY in .env for the recommended default inference model.
+# Set NEARAI_API_KEY in .env (or configure local inference).
 make up
 ```
 
-Log in at `http://127.0.0.1:9120` with the credentials described in
-[webapp setup](webapp.md). No research treasury or MCP token is
-needed for this first startup. x402_treazury remains built into the main Compose
-file; the deployment workflow activates its profile after preparation. There is
-no additional overlay or enablement variable.
-Startup runs cached image builds, including treasury, before setup or service
-changes. Use `make build` separately to build ahead of startup if desired.
-
-The image builds unmodified upstream commit
-`ee92a067655d8d34d5cbc490ddbeb938635d0144` using its Rust 1.99.1 toolchain and
-locked dependencies. The renderer changes only the Tor SOCKS endpoint, persistent
-state path, and HTTP Host allowlists. Wallet groups, rotation, funding, payment
-caps, source selection, and tool selection retain upstream policy. Provider
-definitions supply optional advertised pricing hints for initial payer
-selection; live observed offers take precedence, and missing hints do not block
-tools. External pricing discovery follows the catalog Tor/relay policy. Ordinary
-serving schedules independent refill opportunities per group, nominally every
-30–120 seconds, and can rotate low active payers into funded reserves. Restart
-redraws that wait; downtime or pending work can extend it. Explicit bootstrap
-retains prompt allocation of its captured claims. See the pinned upstream
-[wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-rotation.md)
-for selection and rotation details.
-
-New packaged policy has `[wallet_bootstrap]` with `bootstrap_group = "general"`
-and `deferred_groups = ["personal", "health", "financial"]`. Preparation funds
-only general's initial $2–3 small reserve, plus fees and bridge costs. Eventual
-initial inventory across four groups is $8–12 nominal; ongoing relay costs and
-replacement funding need additional capital. These are allocation ranges, not a
-ZEC deposit guarantee or live funding qualification.
-
-Until a deferred group has any positive initial credit, its API calls use general's
-payer and $1 cap, including health calls. A validated API invocation, even a free
-response or cache hit, activates that group's funding without waiting for swaps;
-its first allocation opportunity follows an independent 30–120-second wait.
-After first positive credit, future API calls permanently use its own payer/cap
-(health: $0.50); depletion does not restore general routing. Paid metadata relays
-for catalogs, pricing, help and discovery always use general under this policy,
-overriding `relay_fallback.wallet`, and do not activate deferred funding. This
-shared payer links those payments; separate groups cannot undo earlier links or
-hide sensitive request content from providers.
-
-Saved TOML is preserved. Without `[wallet_bootstrap]`, explicit preparation still
-captures every declared managed group. Omitted small reserve bounds use the
-native $2–3 default even in saved policies; explicit bounds remain unchanged.
-To keep separate API groups from the outset, omit the entire table. When reducing
-or renaming groups, update its group references along with wallet/source/listener
-references. These edits neither move funds nor erase preparation history.
-
-Inspect the packaged default policy offline before funding, using the selected
-engine. These image-only commands mount no private state:
-
-```sh
-docker run --rm --network none private-hermes-x402_treazury:local config show
-```
-
-For rootless Podman:
-
-```sh
-podman --remote=false run --rm --network none private-hermes-x402_treazury:local config show
-```
+Log in at `http://127.0.0.1:9120` (see [webapp setup](webapp.md)). No wallet or
+MCP token is needed yet. `make up` runs cached builds (including the treasury
+image so default policy is available) and automatically activates
+`x402_treazury` on later startups once preparation is complete.
 
 ## Edit the research configuration
 
-After building, explicitly seed the policy without creating a wallet:
+Seed `config/x402_treazury/research_desk.toml` from the built image at any time
+without creating a wallet:
 
 ```sh
 make x402_treazury-config
 ```
 
-The policy is then available at `config/x402_treazury/research_desk.toml`.
-Managed startup and new-wallet creation also seed it if missing from the built image.
-Image builds themselves do not write operator configuration. `make init` alone does
-not create this file before the image exists. Initialization never replaces an
-existing file; image updates also leave your edits intact. Compare new packaged
-defaults with your saved policy when upgrading.
-
-`make up` and `make x402_treazury-prepare` display a unified diff after building
-the treasury image and seeding any missing policy, before setup or activation.
-The diff runs from the image's rendered default to your saved configuration,
-so deployment path adjustments are already accounted for. It includes intentional
-customization as well as differences introduced by pin updates; it is not a
-comparison against your previous image. Differences are advisory and never
-replace your policy or require preparation to be repeated. If automatic comparison
-fails, the command reports that failure and continues with normal validation.
-
-To inspect separately:
+`make up` and `make x402_treazury-init` also seed the file if missing, never
+overwriting an existing file. Both `make up` and `make x402_treazury-prepare`
+print an advisory unified diff between the image's rendered default and your
+saved policy so you can review upstream changes without losing local edits. To
+view that diff standalone:
 
 ```sh
 make x402_treazury-config-diff
 ```
 
-This command uses the currently built local image; run `make build` first to
-compare against a changed source pin. It does not build, seed configuration,
-start services, or mount wallet data. Differences return success; missing
-configuration or an unavailable image fails visibly. The output contains saved
-configuration values, so review it before sharing logs.
+Run `make build` first if comparing against a new source pin. The diff prints
+saved configuration values, so inspect it before sharing logs.
 
-The directory is bind-mounted read-only into serving and the policy-aware admin
-and initialization/preparation jobs. The saved-wallet inspection job has no policy
-bind mount. You can edit the host file before wallet initialization or later.
-Relative `../../providers/` paths continue to refer to the image's packaged
-provider definitions. Additional provider files can be placed in this directory
-and referenced relative to the TOML. Keep the directory traversable and files
-readable by container UID 10003; the initial directory/file modes are 0755/0644.
-Include this directory in configuration backups.
+### Applying edits
 
-For later edits, gracefully stop first, then edit and start again:
+There is no hot reload. Stop the stack, edit
+`config/x402_treazury/research_desk.toml`, validate it offline, and restart:
 
 ```sh
 make down
@@ -182,46 +139,40 @@ python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/
 make up
 ```
 
-There is no hot reload. Native configuration inspection above uses the mounted
-file in an offline job, without funding wallets or downloading catalogs.
-Managed startup checks the fixed deployment fields: Tor mode, private SOCKS socket with extended Tor
-authentication, treasury state/key paths, and the twelve authenticated loopback
-listeners with their Host checks and token variable. Keep those fields intact;
-wallet policy, payment caps, source/tool selections and instructions are editable.
-Malformed or unsupported configuration blocks networked initialization, preparation
-and serving without selecting defaults. Offline wallet inspection remains available
-using the fixed wallet volume paths, even when the serving TOML is missing or invalid.
-
-Policy edits do not erase initial preparation eligibility. Native `serve` applies
-the new policy, can fund newly declared groups when automatic funding is enabled
-and sufficient ZEC is available, and downloads new catalogs under the configured
-Tor/relay policy. These later starts can spend funds and take time. Initial
-explicit preparation is still required; a saved completion record is historical
-evidence, not proof that every newly configured group is funded or catalog cached.
+- Relative `../../providers/` paths resolve against the image's bundled provider
+  definitions. You can also place custom provider files in
+  `config/x402_treazury/` and reference them relative to the TOML. Keep the
+  directory and files readable by container UID 10003 (`0755`/`0644`), and
+  include `config/x402_treazury/` in backups.
+- Keep the fixed deployment fields intact: Tor mode, private SOCKS socket with
+  extended auth, treasury state/key paths, and the twelve loopback listeners
+  with their `Host` checks and token variable. Wallet pools, payment caps,
+  sources, tools, and instructions are editable.
+- Invalid configuration blocks networked init, preparation, and serving without
+  falling back to defaults, while offline wallet inspection stays usable.
+- Editing policy does not invalidate prior preparation. On restart, `serve`
+  applies the new policy and may fund newly added groups or download new
+  catalogs if ZEC and automatic funding are available.
 
 ### Rename a wallet group without replacing it
 
-Back up the treasury using the native backup procedure below. Stop serving and
-rename the saved group **before starting with the new name**, then update every
-wallet declaration and source/listener reference in the TOML:
+Back up the treasury first, stop the stack, rename the group offline **before**
+starting with the new name, and update every reference in `research_desk.toml`:
 
 ```sh
 make down
 python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/x402_treazury x402_treazury-admin wallet rename general research
-# Rename [wallets.general] to [wallets.research] and update source/listener
-# references plus wallet_bootstrap.bootstrap_group/deferred_groups as applicable.
+# Update [wallets.general] -> [wallets.research], source/listener references,
+# and wallet_bootstrap entries in config/x402_treazury/research_desk.toml.
 python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/x402_treazury x402_treazury-admin wallet preview --json
 make up
 ```
 
-The offline rename uses the same mounted configuration, UID and wallet volume.
-It preserves the group's UUID, payer keys, funds, history and pending work; it
-changes neither the TOML nor funding authority. The destination must be unused,
-including by an empty group created during an earlier startup. Simply changing
-a name in TOML creates a different group on startup; the old group and its funds
-remain saved but are no longer selected by the renamed references. Renaming a
-group also preserves its historical payer correlation. See the pinned upstream
-[wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md#rename-a-managed-wallet-group).
+Renaming preserves the group's UUID, payer keys, funds, history, and pending
+work (as well as its historical payer correlation). The destination name must be
+unused. Changing the name only in TOML creates a brand-new empty group on
+startup and leaves the old group's funds unused. See the
+[upstream wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md#rename-a-managed-wallet-group).
 
 ## Create the wallet and deposit when ready
 
@@ -229,246 +180,165 @@ group also preserves its historical payer correlation. See the pinned upstream
 make x402_treazury-init
 ```
 
-This uses Tor for new-wallet birthday discovery, prints the shielded ZEC receive
-address, and exits. If the wallet already exists, it displays its saved status
-and address instead. Unreadable, incomplete, or incompatible state is an error;
-it is never treated as permission to create a replacement wallet. It does not
-start funding, serving, or Hermes MCP connections. For new wallet creation the
-command reuses existing Tor and agent network containers and starts them if needed.
-Apply pending network grants or recover a failed namespace with `make down`
-followed by `make up`. Repeated init
-uses offline inspection, even while the stack is down or another process owns
-the wallet; it does not start services or require preparation. Saved-wallet status and repeated init do not initialize host configuration or
-storage. Only new-wallet creation prepares the Tor/network host paths and research
-policy; it does not initialize executor/Tailscale paths or webapp credentials.
+On first run, this connects through Tor for wallet birthday discovery, prints
+the shielded ZEC receive address, and exits without funding, serving, or
+registering MCP endpoints. It starts `tor` and `agent-net` if needed (reusing
+running containers). On subsequent runs, it inspects saved state offline and
+prints the existing status and address without starting services or touching
+unrelated host config. Unreadable or corrupted wallet state always raises an
+error and never triggers replacement wallet creation.
 
-Back up the wallet before depositing ZEC. Native wallet commands use the same
-configured treasury, `x402_treazury-data` named volume, and UID as serving:
+Back up the wallet before depositing ZEC:
 
 ```sh
 python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/x402_treazury x402_treazury-inspect wallet backup --help
 ```
 
-Choose a backup destination with an appropriate private mount; the container's
-root filesystem is read-only. Never save recovery material in the Hermes or
-executor workspace. No wallet creation or funding is part of `make init`.
+Mount a private host destination for the backup (the container root filesystem
+is read-only), and never write recovery material into the Hermes or executor
+workspace.
 
-Retrieve the address, saved balances, and preparation/activation state at any time:
+Check the receive address, saved balances, and preparation/activation state at
+any time, even while serving or while WebApp/serving config is invalid:
 
 ```sh
 make x402_treazury-status
 ```
 
-Status runs without networking or exclusive wallet ownership. It reads saved
-observations, not live proof of spendability, and can run while serving or
-preparing. Offline inspection uses private temporary snapshot files in the
-admin container's writable `/tmp`; the root filesystem and mounted configuration
-remain read-only. A missing wallet gives an initialization instruction; unreadable
-state reports an error without creating a replacement. Invalid webapp/Funnel
-settings and serving policy do not block saved-wallet inspection. Treasury commands
-use base Compose with process-local inert ingress/inference interpolation
-values because Compose parses unused services too; they do not start those
-services or change `.env`. Deposit ZEC at a time of
-your choosing; Hermes remains usable.
-
-To compare the packaged deployment's wallet policy with initialized saved groups
-without changing them, use the native offline preview:
+Status runs offline without exclusive wallet ownership, reading saved
+observations (not live spendability) via temporary snapshot files in the admin
+container's `/tmp`. To compare saved wallet groups against your policy offline:
 
 ```sh
 python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/x402_treazury x402_treazury-admin wallet preview --json
 ```
 
-Preview reports saved metadata and requested policy differences, not live
-balances or cryptographic verification. The upstream `wallet rename` command is
-also available for deliberate offline administration; it requires exclusive store
-ownership and a backup first. This update does not rename groups automatically.
-See the [pinned upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md)
-for its constraints. Deployment policy remains packaged in the image; renaming a
-saved group alone does not change the configured wallet references.
+See the
+[upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md)
+for `wallet preview` and `wallet rename` constraints.
 
 ## Prepare and connect research tools
 
-Run while Hermes is up. x402_treazury uses its built-in Base RPC endpoints
-through Tor; there is no operator RPC endpoint setting:
+After depositing ZEC and ensuring Hermes is up, run:
 
 ```sh
 make x402_treazury-prepare
 ```
 
-The command first runs a cached build of the treasury image before reading
-preparation history, disconnecting services or doing wallet work. It may need
-Internet access; a build failure stops preparation without disturbing existing
-research services. It does not rebuild or restart the running Hermes image.
+`x402_treazury` uses its built-in Base RPC endpoints over Tor (no RPC URL
+setting is needed). The command first runs a cached build of the treasury image
+without restarting Hermes; a build failure stops before changing any running
+services.
 
-If matching preparation already completed, this command retries serving and
-Hermes activation directly. Otherwise it runs, in order:
+If matching preparation already succeeded, the command skips straight to step 4
+(serving and Hermes activation). Otherwise, it runs five steps in order:
 
-1. Disconnect the managed Hermes research MCP clients and gracefully stop an
-   existing serving owner, if any.
-2. Run `wallet bootstrap --json`, waiting for ZEC receipt/spendability and the
-   native managed funding claims: only `bootstrap_group` when `[wallet_bootstrap]`
-   is present, otherwise every declared managed group. This can spend ZEC under
-   the configured policy; existing accepted jobs retain their native ownership.
-3. Run `catalog warm` over Tor. Configured paid relay fallback can spend USDC.
-   Zero exit establishes completed attempts, including degraded coverage or
-   every remote source being unavailable. Native stdout and stderr are displayed;
-   the wrapper does not parse the summary or require a source/tool count, all-ready
-   statuses or fresh cache storage. Degradation does not repeat bootstrap or
-   authorize another paid attempt.
-4. Start `serve`, then initialize and list tools on all twelve authenticated MCP
-   endpoints without making research calls.
-5. Register the managed MCP entries and call Hermes's native `reload.mcp` RPC.
-   No gateway or network-namespace restart is needed. Unrelated MCP entries and
-   sessions are preserved; active sessions follow Hermes's native reload policy.
+1. Disconnect managed Hermes research MCP clients and stop any running
+   `x402_treazury` serving container gracefully.
+2. Run `wallet bootstrap --json`, waiting for ZEC confirmation and funding
+   `bootstrap_group` (or every group if `[wallet_bootstrap]` is absent). This
+   spends ZEC according to your policy.
+3. Run `catalog warm` over Tor (never `--direct`; paid relay fallback can spend
+   USDC). Cached entries are saved under `http-cache/` in `x402_treazury-data`.
+   A zero exit completes this step even if some remote sources are degraded or
+   unavailable, so partial degradation never replays bootstrap or repeats paid
+   swaps.
+4. Start `serve` and run authenticated MCP `initialize` and `tools/list` checks
+   on all twelve endpoints (without making paid research calls).
+5. Install the bearer token and twelve MCP entries into Hermes and invoke
+   Hermes's `reload.mcp` RPC so tools appear without restarting Hermes or its
+   network namespace. Unrelated MCP entries are preserved.
 
-Activation requires all twelve endpoints; a subset is not registered. While they
-start, the command displays x402_treazury's current-startup diagnostics and repeats
-a waiting message every 30 seconds. There is no whole-startup deadline or attempt
-cutoff. Existing protocol transport timeouts cause another readiness probe where
-appropriate; they do not establish that native startup has failed.
+### Readiness diagnostics, cancellation, and retries
 
-A native terminal catalog-startup or endpoint-tool-selection error fails activation
-with its diagnostic visible, even if the process and other endpoints remain up.
-Retryable native errors, such as SOCKS reachability checks with recovery remaining,
-do not become terminal endpoint failures merely because their log level is ERROR.
-Missing selections, unsupported operations and empty inventories also report
-reduced coverage without failing activation when initialize/list succeeds.
-The packaged remote sources opt into `allow_catalog_failure = true`, retaining
-available sibling tools through acquisition failures. Existing operator TOML is
-preserved: compare the new defaults and deliberately apply that policy where
-desired. Required sources retain their stricter startup behavior. Keep
-`wait_for_catalogs = true` for endpoints that should publish settled inventories.
-Service exit/restart/replacement or loss of the diagnostic observer also fails
-activation visibly. Research remains disconnected, Hermes remains available, and
-preparation history is preserved. Correct the cause and retry activation with
-`make x402_treazury-prepare`; an already completed preparation is not repeated.
-Ctrl-C cancels the read-only readiness probe and local log observer, without
-stopping the serving treasury or replaying any accepted financial work.
+All twelve endpoints must become ready before Hermes registration occurs. While
+waiting, the command streams `x402_treazury` startup logs and prints a status
+line every 30 seconds with no artificial startup deadline:
 
-Each phase streams native output. A failure stops the sequence, reports the
-native exit status and recent redacted output, and leaves Hermes available.
-Default INFO diagnostics on stderr show catalog warming start, per-source
-results and the final `ok` or `degraded` outcome after native cleanup. Stdout
-remains the native JSON summary. The wrapper neither parses warming output nor
-matches wallet-sync progress messages to determine completion. Warming's message
-that new funding is disabled applies only to that command; it does not change
-the saved deployment policy.
-The private preparation record retains the failed phase and recent output.
-Retry the same command to resume through native wallet journals and cache policy;
-never delete the state directory to retry. Bootstrap and paid warming require
-exclusive ownership and must not run beside `serve` or another wallet operation.
+- **Terminal vs. retryable errors:** Native terminal catalog-startup or
+  endpoint-tool-selection errors fail activation visibly even if other endpoints
+  stay up. Retryable native errors (such as temporary SOCKS checks with retries
+  remaining) do not fail activation. Packaged remote sources set
+  `allow_catalog_failure = true` so unavailable sources degrade gracefully;
+  required sources keep strict startup failure.
+- **Process loss:** Container exit, restart, or loss of the log observer fails
+  activation while keeping Hermes running and preserving preparation history.
+  Inspect logs (`python3 scripts/stack.py compose logs -f x402_treazury`), fix
+  the cause, and rerun `make x402_treazury-prepare`.
+- **Financial safety on failure or Ctrl-C:** Cancellation, disconnect, or a
+  missing status message never proves a financial action did nothing. Signed
+  transactions and pending swaps stay owned by `x402_treazury`'s native
+  journals. Inspect `make x402_treazury-status` before retrying, and never
+  delete `x402_treazury-data` or manually repeat deposits to force recovery.
+- **Graceful stop and orphaned one-shot containers:** Ctrl-C waits for graceful
+  cleanup with no force-kill timeout. One-shot jobs have no auto-restart policy.
+  If a host crash leaves a `*-x402-onboarding` container running, stop it
+  gracefully before retrying:
 
-Cancellation, a disconnected caller, missing command output or a failed local
-acknowledgment does not prove that a financial operation did nothing. Accepted
-work, signed transactions and possible payment liabilities remain owned by
-x402_treazury across cancellation/restart. Inspect native status and use native
-recovery against that same state before considering a retry; do not manually
-repeat deposits or paid calls because their result is missing. The wrapper adds
-no parallel financial journal, but must preserve the component's necessary native
-journals and must not interpret a timeout or cleared cache as replay authority.
+  ```sh
+  # Docker
+  docker stop --timeout -1 CONTAINER
 
-Ctrl-C requests graceful termination and waits for native cleanup. These commands
-and serving shutdown do not introduce a force-kill timeout. If a host/controller
-crash leaves a one-shot container running, its name ends in `-x402-onboarding`.
-Inspect it with the selected engine and stop it before retrying: use
-`docker stop --timeout -1 CONTAINER` on Docker or
-`podman --remote=false stop --timeout -1 CONTAINER` on rootless Podman. Both wait
-for native cleanup. The workflow refuses to overwrite a retained container or
-competing owner.
-Do not use an auto-restarting serving container for one-shot financial commands.
+  # Rootless Podman
+  podman --remote=false stop --timeout -1 CONTAINER
+  ```
 
-Completion is recorded atomically under `/var/lib/x402/onboarding/` in the
-`x402_treazury-data` named volume, bound to the treasury identity and successful
-bootstrap/catalog phases. Source, build and ordinary configuration changes do not
-invalidate that historical completion. Actual deployment policy is checked before
-preparing, activating or serving; a policy failure does not invalidate the wallet
-or its preparation history. The record contains no full deployment configuration.
-Only successful bootstrap and completed Tor catalog warming authorize serving;
-catalog completion does not certify coverage, cache persistence or working APIs.
-The entrypoint checks this even when the serving profile is started manually.
+### Completion record and offline jobs
 
-Serving and MCP activation are tracked separately. If preparation succeeds but
-activation fails, diagnose the serving logs and rerun preparation. A matching
-successful preparation record retries only serving and Hermes activation:
+Preparation completion is saved atomically under `/var/lib/x402/onboarding/` in
+`x402_treazury-data`, tied to the wallet identity and successful bootstrap and
+catalog warming. Code rebuilds and routine policy edits do not invalidate it.
+On subsequent `make up` runs, a prepared stack automatically starts
+`x402_treazury` and connects Hermes; invalid runtime policy blocks activation
+with an explanation without erasing preparation history.
 
-```sh
-python3 scripts/stack.py compose logs -f x402_treazury
-make x402_treazury-prepare
-```
+Helper containers keep minimal privileges and mounts:
 
-Subsequent `make up` automatically starts and connects a prepared deployment.
-Missing or incomplete preparation, a different treasury identity, or invalid
-runtime policy leaves research disconnected and prints the reason. Correcting
-runtime policy restores eligibility without repeating completed preparation.
-A completion record is historical evidence: balances can change, catalogs can
-expire or be refreshed, and serving continues native synchronization,
-replacement funding, and discovery under its policy. Startup does not rerun
-explicit bootstrap/warming.
-
-`catalog warm` attempts to re-download selected catalogs and configured
-pricing documents, storing accepted cache data under the configured treasury's
-`http-cache/` directory in the same persistent directory. It never uses `--direct`.
-Normal startup and offline catalog inspection can reuse a fresh entry, but entries
-remain subject to native provenance and revalidation rules and the packaged
-indefinite catalog lifetime. Warming is not a promise that future help, dynamic
-discovery or API calls are offline.
-
-`mcp-config` provides networkless token/registration publication with the Hermes
-profile, bind-data parent for its auth directory, and read-only public helper code.
-It examines only that auth directory and mounts no webapp credentials or wallet. Disconnection runs as UID 10000 with only the profile
-and public helper code, so missing auth storage cannot block removal. Trusted setup
-also prepares storage and has wallet-volume access for ownership/lock checks, but
-does not run native wallet commands. Only activation copies the serving token into Hermes and installs its twelve MCP entries.
-Disconnecting removes only managed entries and that token from the profile, preserving unrelated
-configuration. `x402_treazury-inspect` has only the native wallet volume and image
-for saved-state inspection and activation-record updates, so invalid policy paths
-cannot block access or bookkeeping. Policy-aware `x402_treazury-admin` handles
-configuration administration;
-networked init/preparation uses `x402_treazury-setup` one-shot containers in the
-agent namespace. Jobs have no automatic restart policy, so a failed financial
-command cannot be repeated by the engine; retries are explicit operator actions.
+- `x402_treazury-inspect`: mounts only `x402_treazury-data` for offline status
+  and activation bookkeeping.
+- `x402_treazury-admin`: adds read-only `config/x402_treazury/` for offline
+  config and wallet administration.
+- `x402_treazury-setup`: one-shot container in `agent-net` (no restart policy)
+  for Tor-routed wallet init and preparation.
+- `mcp-config`: networkless job mounting `hermes-data` and
+  `data/x402_treazury-auth/` (never the wallet or WebApp credentials) to install
+  the bearer token and twelve MCP registrations. Disconnection runs as UID 10000
+  with only `hermes-data`, so missing auth files cannot block removal.
 
 ## Secrets and execution boundary
 
-- x402_treazury runs as UID 10003 with a separate PID namespace and mount
-  namespace, no capabilities, a read-only root, and a private `x402_treazury-data`
-  named volume. Hermes has neither that directory nor the server's private token mount.
-- Tor exposes a group-restricted Unix SOCKS socket only in the x402_treazury
-  container. Its control socket/cookie remains private to Tor. x402_treazury's
-  native Tor policy and SOCKS authentication remain enabled. Its shared agent
-  namespace also has the existing transparent Tor route and host/VM blocks.
-- The SSH executor remains in its separate namespace. It cannot connect to the
-  localhost MCP listeners, mount the wallet or agent config, or obtain the MCP
-  bearer token from its environment. SSH TCP forwarding and tunnels are disabled.
-- All twelve endpoints use one bearer token. Hermes holds authority to call
-  all twelve; client tool filters do not create independent server credentials.
-  Native Hermes subagents share the agent's authority. The current pinned
-  Hermes `execute_code` tool RPC allowlist excludes dynamic MCP tools; changing
-  that allowlist or copying secrets into the executor changes this boundary.
-- Sharing a network namespace allows Hermes and x402_treazury to reach each other's
-  local listeners and share permitted local network paths. It does not isolate
-  their network activity from each other. Container filesystem/PID isolation
-  protects wallet files from ordinary agent code; container-engine/kernel compromise and
-  application vulnerabilities in the authorized MCP API remain outside that
-  protection.
+- **Process and filesystem isolation:** `x402_treazury` runs as UID 10003 with
+  its own PID and mount namespaces, empty capability sets, read-only root
+  filesystem, and private `x402_treazury-data` volume. Hermes mounts neither the
+  wallet volume nor `data/x402_treazury-auth/`.
+- **Tor SOCKS isolation:** Tor exposes a group-restricted Unix SOCKS socket only
+  to `x402_treazury` (keeping Tor's control socket and cookie private to Tor).
+  `x402_treazury`'s Tor policy and SOCKS auth stay enabled, and the shared
+  `agent-net` namespace retains transparent Tor routing and private-network
+  denials.
+- **Executor boundary:** The SSH executor runs in a separate network namespace
+  with no access to `127.0.0.1:3010–3021`, no wallet or agent mounts, no MCP
+  bearer token, and SSH forwarding disabled. Hermes's `execute_code` RPC
+  allowlist excludes dynamic MCP tools; widening that allowlist or copying
+  secrets into the executor changes this boundary.
+- **Shared namespace and token scope:** All twelve MCP endpoints share one
+  bearer token, so Hermes (and its subagents) hold authority over all twelve;
+  client-side tool filters do not create separate server credentials. Sharing
+  `agent-net` lets Hermes and `x402_treazury` reach each other's loopback
+  listeners. Container isolation protects wallet files from normal agent code,
+  not from kernel/engine compromise or vulnerabilities in the MCP API itself.
 
-## Stop and test
+## Shutdown and testing
 
-Use `make down` to stop the deployment while retaining state.
-Use the deployment workflow for graceful financial shutdown; `make down` waits
-for native cleanup. `x402_treazury-data` contains wallet data and `data/x402_treazury-auth/`
-contains the persistent MCP token. Managed shutdown preserves this volume and
-token directory on both engines. Compose `down -v` deletes the wallet volume; do
-not use it for routine shutdown. Back up wallet/recovery material using the
-upstream wallet guidance and protect backups as secrets.
-The default `wallet.key` is stored alongside encrypted wallet state; obtaining
-that directory gives access to both state and its decryption key. The native
-`wallet backup` command includes the encryption key. A full private-directory backup
-also preserves the deployment preparation record and catalog cache. A missing
-preparation record requires explicit preparation again; it never authorizes
-creation of a replacement wallet.
+Run `make down` to stop the stack gracefully while preserving
+`x402_treazury-data` and `data/x402_treazury-auth/` (never use `down -v` on a
+deployment whose wallet you need). Because `wallet.key` sits alongside the
+encrypted wallet in `x402_treazury-data` (and is included in `wallet backup`),
+treat both full volume backups and native wallet backups as secrets. A missing
+onboarding record requires rerunning `make x402_treazury-prepare` and never
+triggers wallet replacement.
 
-With all normal deployments stopped, run:
+With normal deployments stopped, run the test suites:
 
 ```sh
 make check
@@ -478,90 +348,51 @@ python3 tests/research_config_smoke.py
 make test
 ```
 
-The focused endpoint-startup check uses networkless containers, local catalogs,
-a refused HTTPS loopback connection and ephemeral unfunded static keys. The
-required-acquisition failure case uses direct mode inside that networkless
-fixture; it does not qualify Tor transport. It checks delayed readiness, a real native terminal
-endpoint error while a peer remains available, corrected restart without replaying
-old errors, empty-inventory activation despite coverage ERROR diagnostics, and
-remote probe cleanup. It performs no research or payment calls and
-mounts no wallet state. Unit tests exercise prolonged waiting/reporting with a fake
-clock, transient versus terminal outcomes, cancellation and helper failure.
-
-The offline research configuration check uses the real image with a disposable,
-unfunded treasury and controlled historical completion marker. It covers mounted
-policy loading, atomic host edits and restart visibility, read-only writes,
-forbidden/malformed/missing configuration, preview and the missing-source rename
-error path. Offline status remains available under those configuration failures,
-while networked preparation and serving are refused. Completed history survives
-a harmless coordinator edit and container restart. Actual Make commands also run
-against invalid ingress settings and credentials in an isolated public-code copy. It also reproduces snapshot inspection failure without writable
-`/tmp`, then verifies the actual offline Compose admin service and repeated host
-initialization display the same address without starting services or requiring
-preparation. It does not run funding, warming or successful rename of a saved group.
-
-`make x402_treazury-test` builds the pinned treasury image before its fixture runs.
-The test uses a disposable project and the real Rust server, twelve
-local MCP listeners, an ephemeral unfunded static key, local catalog fixtures,
-and a free Tor-check API. It checks bearer enforcement, actual authenticated
-MCP initialization/listing, a Rust HTTPS call through the Unix SOCKS socket,
-executor secret/network isolation, code RPC denial, disabled SSH forwarding,
-and Tor failure without direct fallback. It does not initialize a treasury or
-make paid research calls. The main test uses the same unfunded x402_treazury fixture
-and checks host/VM isolation and normal SSH, inference, and transparent Tor
-behavior separately.
+- **`tests/endpoint_readiness_smoke.py`:** Networkless fixture with ephemeral
+  unfunded keys covering delayed readiness, terminal endpoint errors alongside
+  healthy siblings, restart without stale-error replay, empty-inventory
+  activation, and probe cleanup.
+- **`tests/research_config_smoke.py`:** Offline policy tests using the built
+  image and a temporary unfunded wallet covering policy loading, atomic edits,
+  invalid/missing TOML refusal, offline status availability under broken policy
+  or ingress config, `wallet preview`, and `wallet rename` error paths.
+- **`make x402_treazury-test`:** Builds the treasury image and tests bearer-token
+  auth, MCP `initialize`/`tools/list` on all twelve endpoints, HTTPS through
+  Tor's Unix SOCKS socket against a free Tor-check API, executor isolation, RPC
+  denial, disabled SSH forwarding, and Tor failure without direct fallback. No
+  paid calls or wallet funding occur.
 
 ### Current qualification
 
-The packaged treasury pin is `ee92a067655d8d34d5cbc490ddbeb938635d0144`.
-Qualification covers Linux ARM64 images on Docker 29.9.3 / Compose 5.7.0 and
-Debian 13 ARM64 rootless Podman 5.4.2 / Compose 5.7.1. Source checks include 178
-unit tests, four effective models and compilation; native treasury builds,
-endpoint readiness, offline configuration and unfunded smoke fixtures pass on
-both engines.
+Commit `ee92a067655d8d34d5cbc490ddbeb938635d0144` is qualified on Linux ARM64
+under Docker Desktop 29.9.3 / Compose 5.7.0 and Debian 13 ARM64 rootless Podman
+5.4.2 / Compose 5.7.1 (unit tests, effective Compose models, native treasury
+builds, endpoint readiness, offline configuration, degraded warming during Tor
+outage, and unfunded smoke fixtures).
 
-Native process exit status owns preparation completion. Endpoint activation
-recognizes only the pinned native terminal MCP endpoint diagnostics; it does not
-parse wallet-sync/warming messages into completion authority. Controlled checks
-cover empty endpoint inventory, delayed readiness, terminal endpoint errors,
-restart without stale-error replay, catalog persistence, degraded warming during
-Tor outage, retained accepted cache and executor isolation. Offline status remains
-available when unrelated serving policy is invalid.
-
-The Podman treasury build is native. Its Teep dependency uses an imported ARM64
-image with health metadata matching the unchanged Dockerfile; this evidence does
-not qualify a new native Podman Teep build or provider attestation. Unfunded free
-API/MCP checks establish neither live wallet sync nor funded bootstrap, paid relay
-work or settlement. Current live financial limits and required operator actions
-are listed below.
+On Podman, the treasury build is native while Teep in the test run used an
+imported ARM64 image matching the unchanged Dockerfile (not a fresh native
+Podman Teep build). Unfunded fixtures do not test live wallet sync, funded
+bootstrap, paid relay downloads, or settlement.
 
 ## Pending live qualification
 
-The staged onboarding implementation is complete and has passed local fixture
-qualification. Live wallet birthday discovery, ZEC receipt, managed USDC funding
-and funded catalog preparation have not been qualified. The local checks above
-do not establish those financial outcomes.
+Staged onboarding passes all local fixture checks, but live wallet birthday
+discovery, ZEC deposit receipt, managed USDC swaps, and funded catalog warming
+remain untested. When conducting live financial qualification:
 
-The prerequisite webapp privacy work is complete; see its
-[qualification and limits](webapp.md#qualification). Live financial
-qualification remains pending. When undertaking it, follow this guide:
-
-1. Confirm Hermes is usable before treasury creation or funding.
-2. Run `make x402_treazury-init`, verify that it displays the receive address,
-   and back up the wallet before depositing ZEC. Repeated initialization must
-   preserve the wallet identity.
-3. Deposit when ready, then run `make x402_treazury-prepare`. Confirm successful
-   native bootstrap and catalog warming, followed by authenticated readiness of
-   all twelve MCP endpoints and Hermes registration without a gateway restart.
-4. Check saved status and normal prepared-stack restart/reconnection. If a phase
-   fails, use the documented diagnosis and retry path against the same wallet;
-   do not discard state or repeat payments manually to force success.
-5. Record the tested revision and observed outcomes privately, without including
-   seeds, keys, bearer tokens or financial identifiers in repository evidence.
-   MCP initialization/listing alone does not qualify paid research calls; record
-   any separately authorized paid-call testing distinctly.
-
-Live financial qualification requires deliberate, explicitly authorized wallet
-and funding actions. Local fixtures do not perform or authorize them.
+1. Confirm Hermes works normally before initializing or funding a treasury.
+2. Run `make x402_treazury-init`, record the shielded ZEC address, back up the
+   wallet before depositing, and verify that rerunning `make x402_treazury-init`
+   preserves the wallet identity.
+3. Deposit ZEC, run `make x402_treazury-prepare`, and confirm bootstrap, catalog
+   warming, authenticated readiness on all twelve MCP endpoints, and live Hermes
+   registration without restarting the gateway.
+4. Verify `make x402_treazury-status` and automatic reconnection after
+   `make down` and `make up`. If a step fails, diagnose and retry against the
+   same wallet without discarding state or repeating payments manually.
+5. Record the tested revision and results privately without committing seeds,
+   keys, bearer tokens, or financial identifiers. Test paid research calls
+   separately from MCP listing.
 
 Upstream: [x402_treazury](https://github.com/mikeperry-tor/x402_treazury).
