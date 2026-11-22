@@ -45,11 +45,11 @@ or unrelated services.
   Distinguish them from the sequence in which an agent discovered or changed
   that fact.
 - Do not append development journals, changelogs, dated test or probe narratives,
-  review-acceptance logs, cleanup reports, or "initially/later/retested"
-  histories outside plans. Do not carry retired plan phase or gate codes into
-  permanent docs. Keep execution chronology and phase evidence in the plan; Git
-  history preserves completed development history. Do not create an archive or
-  another handoff document to relocate the journal.
+  review-acceptance logs, cleanup reports, or "initially", "later", and
+  "retested" histories outside plans. Do not carry retired plan phase or gate
+  codes into permanent docs. Keep execution chronology and phase evidence in the
+  plan; Git history preserves completed development history. Do not create an
+  archive or another handoff document to relocate the journal.
 - Preserve concise, attributable qualification status: version or source pin,
   platform, checks that establish the contract, missing coverage, and practical
   limits. Keep detailed logs and generated reports in ignored private evidence
@@ -117,37 +117,38 @@ issue drafts, code comments, and handoff notes.
 
 ## Prefer the least machinery that meets the requirement
 
-- Start with native component capabilities and straightforward code. Preserve
-  useful Python setup/lifecycle helpers and the documented Make workflow; neither
-  a language ban nor moving code into containers makes a design simpler.
+- Start with each component's built-in capabilities and straightforward code.
+  Preserve useful Python setup and lifecycle helpers and the documented Make
+  workflow; neither a language ban nor moving code into containers makes a
+  design simpler.
 - Before adding a service, persistent record, configuration option, or
   abstraction, identify its concrete responsibility and why an existing
   component cannot reasonably own it. Prefer fewer responsibilities and state
   transitions, not merely fewer files or containers. Separate images are
   appropriate for genuinely separate components; avoid merged setup images just
   to reduce service counts.
-- Before adding enforcement, check the owning component's existing guarantees.
-  Add a wrapper check only for a concrete invariant those guarantees do not
-  cover; do not mirror native budgets, accounting, readiness, or recovery state.
-  Existing limits are not evidence that retaining or adding another limit is
-  necessary.
-- Do not build generic orchestration, adapter registries, lifecycle/recovery
+- Before adding enforcement, check the owning component's own guarantees. Add a
+  wrapper check only for a concrete invariant those guarantees do not cover; do
+  not mirror its budgets, accounting, readiness, or recovery state. An existing
+  limit is not a reason to keep it or add another.
+- Do not build generic orchestration, adapter registries, lifecycle or recovery
   engines, configuration frameworks, or provenance systems for speculative
-  needs. Use native Compose behavior where suitable and small explicit helpers
-  where native behavior does not meet a demonstrated requirement.
-- Support Docker and rootless Podman through the existing engine selector and
-  Make/Compose workflow. Prefer shared service behavior and explicit grants;
-  justify engine-specific overlays with demonstrated native differences. Consult
+  needs. Use Compose behavior directly where suitable, and small focused helpers
+  where Compose does not meet a demonstrated requirement.
+- Support Docker and rootless Podman through the engine selector and the Make
+  and Compose workflow. Prefer shared service behavior and explicit grants;
+  justify engine-specific overlays with demonstrated engine differences. Consult
   the maintained engine guidance rather than adding a compatibility framework.
 - Fail visibly with useful reasons, without secret values. Do not mask failures
   with broad exception handling, silent fallback, or unconditional success.
 - Do not introduce arbitrary container resource limits, storage quotas, or work
   deadlines. Base safeguards on component requirements and observed failure
   modes. Allow for Tor latency and distinguish slow progress from failure.
-  Connection establishment, response inactivity, polling/reporting cadence,
-  signed expiry, and test deadlines protect different contracts. Progress must
-  not extend financial authority, and a reporting cadence must not become a
-  failure deadline. Let valid work continue while it makes progress.
+- Keep timeout contracts distinct: connection establishment, response
+  inactivity, polling and reporting cadences, signed expiry, and test deadlines
+  protect different boundaries. Progress must not extend financial authority,
+  and a reporting cadence must not become a failure deadline. Let valid work
+  continue while it makes progress.
 
 ## Compatibility for deployed stacks
 
@@ -159,10 +160,10 @@ issue drafts, code comments, and handoff notes.
 - The supported end-user upgrade is the in-place workflow in
   [Updates and Backups](README.md#updates-and-backups). Users run `make down`,
   take the [pre-upgrade backup](docs/configuration.md#backup-scope), then run
-  `git pull` and `make up`. They keep their existing checkout, container engine,
-  Compose project, bind mounts, and named volumes. `make up` builds the images
-  and runs offline setup against existing state. Upgrades outside this workflow
-  are unsupported.
+  `git pull` and `make up`. They keep their checkout, container engine, Compose
+  project, bind mounts, and named volumes. `make up` builds the images and runs
+  offline setup against that state. Upgrades outside this workflow are
+  unsupported.
 - Private Hermes owns its deployment contract: supported root `.env` settings
   and their defaults and precedence, wrapper-owned files under `config/`,
   documented `make` entrypoints, and the storage and identity layout. The layout
@@ -170,13 +171,13 @@ issue drafts, code comments, and handoff notes.
   inputs needed to back up and restore a deployment. Preserve the meaning of
   retained settings, especially those governing exposure, authentication, and
   spending. Options may be retired if the recommended upgrade workflow leaves
-  existing deployments operational and preserves saved state.
-- Hermes and the other components own their native formats, schema migrations,
-  and downgrade limits. Keep their saved state attached to upgraded services
-  with the required ownership and mounts, and let the components read and
-  migrate it. Private Hermes still owns state written by its setup helpers and
-  downstream features, including saved WebApp credentials and private image
-  consent, even when those files live beside component-owned state.
+  existing deployments operational and preserves state.
+- Hermes and the other components own their own formats, schema migrations, and
+  downgrade limits. Keep their state attached to upgraded services with the
+  required ownership and mounts, and let the components read and migrate it.
+  Private Hermes still owns state written by its setup helpers and downstream
+  features, including WebApp credentials and private image consent, even when
+  those files live beside component-owned state.
 - Preserve supported deployments across updates. When a wrapper-owned change
   requires operator action, document the affected releases, the smallest safe
   upgrade step, and backup and recovery requirements. Use a focused
@@ -193,32 +194,32 @@ issue drafts, code comments, and handoff notes.
 
 - Each blocking check must protect a concrete requirement of the operation being
   attempted. Keep inspection, backup, repair, and shutdown available when
-  unrelated services or deployment settings are invalid. Validate
-  network/serving policy before those capabilities are used, without making it a
-  prerequisite for reading saved local state.
+  unrelated services or deployment settings are invalid. Validate network and
+  serving policy before those capabilities are used, without making it a
+  prerequisite for reading local state.
 - Preserve valid persistent state and completed setup across unrelated source,
   build, and configuration changes. Do not use whole-file hashes, build
   identities, timestamps, or arbitrary versions as reasons to revoke access,
   discard completion, or repeat setup. Require invalidation only for a
   demonstrated incompatibility, explaining the requirement, practical
   consequence, and recovery.
-- Keep historical completion, current readiness, and access to saved data
-  distinct. A dependency or policy failure may block that operation; it does not
-  make an existing wallet invalid or authorize initialization, rotation,
-  payments, or destructive recovery. Prefer checking runtime requirements over
-  adding another persisted eligibility marker.
+- Keep prior completion, current readiness, and access to stored data distinct.
+  A dependency or policy failure may block that operation; it does not
+  invalidate an existing wallet or authorize initialization, rotation, payments,
+  or destructive recovery. Prefer checking runtime requirements over adding
+  another persisted eligibility marker.
 - Distinguish authoritative state from advisory estimates, reporting
   projections, and disposable caches. Missing optional corroboration or stale
   derived data must not veto an established outcome or reopen completed work.
   Repair derived data through its owning component instead of adding agreement
   checks, certificates, or parallel accounting. Conflicting required facts still
   need scoped diagnosis.
-- Make initialization retry-safe with native persistence and small explicit
+- Make initialization retry-safe with direct file persistence and small, focused
   code: atomically publish individual files, save recoverable inputs before
   derived outputs, and reconstruct missing derived files from intact
   authoritative state. Preserve keys, credentials, and operator choices. If
-  recovery is impossible, report the specific missing material and deliberate
-  recovery command.
+  recovery is impossible, report the specific missing material and the recovery
+  command the operator must run.
 - Do not turn partial-initialization handling into startup journals, recovery
   frameworks, or speculative state machines. Test interruption and retry paths,
   including identity preservation, and stop at the simplest behavior that meets
@@ -227,21 +228,21 @@ issue drafts, code comments, and handoff notes.
 ## Preserve the accepted boundaries
 
 - Hermes and its SSH executor have separate mounts, processes, and network
-  namespaces. Model/subagent code runs in the executor without agent state,
+  namespaces. Model and subagent code runs in the executor without agent state,
   provider credentials, or wallet mounts. This is not per-task or tenant
   isolation.
 - Public TCP from both namespaces goes through the transparent Tor gateway;
   DNS follows the Tor policy. Preserve denial of direct Internet, unsupported
   UDP, non-loopback IPv6, unintended peers, and private destinations by default.
   Operators may grant the Hermes identity exact engine-host TCP ports and
-  RFC1918 address/port pairs through the existing gateway. Preserve executor
-  denial, Tor-only public egress, and separation from inter-service grants.
+  RFC1918 address and port pairs through the gateway. Preserve executor denial,
+  Tor-only public egress, and separation from inter-service grants.
   Configuration flags alone do not establish these boundaries.
 - Preserve exact internal grants for SSH, Teep, and enabled MCP services. The
   executor cannot directly access agent APIs, inference, or MCP endpoints.
   Authorized Hermes tool RPC is a separate capability, not permission to widen
   the executor's network access.
-- Teep has its own direct uplink and explicitly approved host-loopback port.
+- Teep has its own direct uplink and an explicitly approved host-loopback port.
   Provider keys belong there. Preserve its verification behavior; a health check
   is not evidence of successful attestation. Do not add direct-provider
   fallbacks around the Teep inference route. Use managed `make up` and
@@ -254,8 +255,8 @@ issue drafts, code comments, and handoff notes.
 - Keep ingress separate from egress. HAProxy has a fixed Hermes backend and
   restricted outbound access. Optional Funnel provides public HTTPS, not tailnet
   authorization. Neither component may give the agent host, tailnet, or direct
-  Internet connectivity. Preserve authentication, exact-host/origin checks, and
-  credential handling for local and Funnel access.
+  Internet connectivity. Preserve authentication, exact host and origin checks,
+  and credential handling for local, Funnel, and onion access.
 - An authenticated webapp operator has administrative agent authority. Its
   interactive terminal is distinct from the model's SSH execution backend.
   Document that distinction instead of claiming all browser actions are confined
@@ -282,31 +283,32 @@ issue drafts, code comments, and handoff notes.
   qualification code and test fixtures under `tests/`.
 - Root `.env` is the unified operator input. Add settings to `.env.example` and
   explicit service mappings together. Do not load the entire file into services
-  or place image/source versions there. Pins live in Compose and Dockerfiles.
+  or place image or source versions there. Pins live in Compose and Dockerfiles.
 - `config/` holds private editable configuration; `data/` holds persistent bind
-  data. Hermes and wallet state use native named volumes because the qualified
-  Docker Desktop bind filesystem fails database/lock requirements. Do not move
+  data. Hermes and wallet state use named volumes because the qualified Docker
+  Desktop bind filesystem fails database and locking requirements. Do not move
   them to binds without requalifying those requirements. `make down` and Compose
   down without `-v` must preserve persistent data; backups must cover binds and
   named volumes.
-- Prefer native configuration before patching upstream. Necessary source patches
-  must be narrow, explicit, tied to the packaged revision, and reproducibly
-  built. Document purpose, validation, and removal conditions. Do not edit
-  compiled bundles or patch at startup to conceal an unreproducible build.
-- Preserve intentional native plugin installation, prepared environments, and
-  persistent storage. Distinguish operator-requested plugin management from
-  automatically installing dependencies to repair a broken image at startup.
-  Keep core stack updates image-managed and version checks separate from
-  applying updates. Disabled telemetry and optional notifications are separate
-  decisions.
+- Prefer upstream configuration before patching upstream source. Necessary
+  source patches must be narrow, clearly documented, tied to the packaged
+  revision, and reproducibly built. Document purpose, validation, and removal
+  conditions. Do not edit compiled bundles or patch at startup to conceal an
+  unreproducible build.
+- Preserve intentional plugin installation through Hermes's plugin CLI, prepared
+  environments, and persistent storage. Distinguish operator-requested plugin
+  management from automatically installing dependencies to repair a broken image
+  at startup. Keep core stack updates image-managed and version checks separate
+  from applying updates. Disabled telemetry and optional notifications are
+  separate decisions.
 
 ## Plans, review, and development commits
 
-- Use a plan when requested or when substantial staged work needs explicit
-  design decisions and acceptance criteria. Small changes need no ceremonial
-  plan, extra subsystem guide, or independent review.
+- Use a plan when requested or when substantial staged work needs clear design
+  decisions and acceptance criteria. Small changes need no ceremonial plan,
+  extra subsystem guide, or independent review.
 - State current and intended behavior, preserved boundaries, the simplest
-  proposed approach, unresolved assumptions, and explicit deferrals. Include
+  proposed approach, unresolved assumptions, and named deferrals. Include
   consumers, focused validation, and permanent documentation in coherent
   implementation phases. Reconcile other plans affected by shared changes.
 - Commit coherent work during development and at plan phase boundaries,
@@ -323,22 +325,24 @@ issue drafts, code comments, and handoff notes.
   [Writing style](#writing-style)). The two-paragraph body is optional for
   routine documentation cleanup or plan updates.
 - Preserve unrelated tracked, untracked, and ignored files. Stage only named
-  intended files; never use `git add .` or `git add -A`. Do not rewrite existing
+  intended files; never use `git add .` or `git add -A`. Do not rewrite git
   history without authorization. Keep reference checkouts, secrets, wallet data,
   runtime state, and generated private evidence out of commits.
-- Use independent read-only reviewers for substantive design/security changes,
-  meaningful phase commits, named plan gates, and the completed combined change.
-  Scale review to the change; no fixed reviewer count or repeated review of an
-  unchanged snapshot is required. Small documentation edits can use self-review.
-- An independent audit/review means a newly spawned subagent with a fresh
+- Use independent read-only reviewers for substantive design or security
+  changes, meaningful phase commits, named plan gates, and the completed
+  combined change. Scale review to the change; no fixed reviewer count or
+  repeated review of an unchanged snapshot is required. Small documentation
+  edits can use self-review.
+- An independent review or audit means a newly spawned subagent with a fresh
   conversation and no prior turns or inherited conversation history. Use
-  `fork_turns="none"` when supported. Do not reuse an implementation agent or an
-  existing review conversation for a new independent review. Supply context in
-  the review brief; the reviewer's own fresh inspection supplies the assessment.
+  `fork_turns="none"` when supported. Do not reuse an implementation agent or a
+  prior review conversation for a new independent review. Supply context in the
+  review brief; the reviewer's own fresh inspection supplies the assessment.
 - Give reviewers self-contained briefs with intent, constraints, exact SHA or
-  identified snapshot including new files, relevant guides, and evidence. Ask
-  them to trace consumers and failure paths and challenge unnecessary
-  complexity. Reviewers must not author the changes they independently review.
+  identified snapshot including new files, the guides for the changed area, and
+  evidence. Ask them to trace consumers and failure paths and challenge
+  unnecessary complexity. Reviewers must not author the changes they
+  independently review.
 - Reviewers must not re-run already-run tests, suites, or lifecycle
   qualification as part of a review unless the user specifically asks them to,
   or unless a new focused check is needed to confirm a suspected finding. Verify
@@ -369,9 +373,9 @@ issue drafts, code comments, and handoff notes.
   Security changes need allowed-path and forbidden-path evidence, including
   dependency failure and restart behavior; static inspection is insufficient.
 - Qualify runtime behavior on both supported engines using shared fixtures.
-  Model/unit checks do not prove native engine behavior. Reuse unchanged
-  evidence across unrelated work, and repeat or broaden checks only for new
-  changes, failures, or unresolved concerns.
+  Compose-model and unit checks do not prove runtime engine behavior. Reuse
+  unchanged evidence across unrelated work, and repeat or broaden checks only
+  for new changes, failures, or unresolved concerns.
 - Reuse the repository's focused checks and isolated test projects. Serialize
   tests sharing fixed networks or runtime state. Keep real financial secrets out
   of fixtures, and qualify filesystem and locking behavior on the target
@@ -381,9 +385,10 @@ issue drafts, code comments, and handoff notes.
   provider attestation, or support for untested platforms.
 - Local development commits do not authorize pushing, merging, publishing, live
   Funnel enrollment, payments, funded wallet operations, or destructive changes
-  to private state. Use existing task authorization where provided; a plan or
-  review recommendation alone grants none of these actions. Never shell-source
-  private environment files or print private values unnecessarily.
+  to private state. Perform these only when task authorization is provided; a
+  plan or review recommendation alone grants none of these actions. Never
+  shell-source private environment files or print private values unnecessarily.
 
-At handoff, report what changed, relevant validation and review, the committed
-revision or remaining uncommitted work, and material limitations or next steps.
+At handoff, report what changed, the validation and reviews performed, the
+committed revision or remaining uncommitted work, and material limitations or
+next steps.
