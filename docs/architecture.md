@@ -36,22 +36,22 @@ inside an application container cannot grant a direct uplink.
 - **Per-namespace firewall rules:** Both `agent-net` and `executor-net` install
   default-deny firewalls.
   - Hermes can reach executor SSH at `10.203.82.3:2222`, Teep at
-    `10.203.83.3:8337`, allowed MCP IP/port pairs, and DNS on its Tor router.
-    Operators can also grant the Hermes UID specific host TCP ports and RFC1918
-    `address:port` pairs through the gateway.
+    `10.203.83.3:8337`, allowed MCP IP and port pairs, and DNS on its Tor
+    router. Operators can also grant the Hermes UID specific host TCP ports and
+    RFC1918 `address:port` pairs through the gateway.
   - The executor can reach only Tor DNS, public TCP through Tor, and replies to
     agent-initiated SSH connections.
 - **Blocked destinations:** Private, shared-address, loopback (outside a
   container's own namespace), link-local, multicast, reserved, and
-  connected-network targets are denied by default. This blocks Docker VM/host
-  gateways, RPC port 111, cloud metadata addresses, and DNS answers pointing
+  connected-network targets are denied by default. This blocks Docker host and
+  VM gateways, RPC port 111, cloud metadata addresses, and DNS answers pointing
   into private space. Docker's embedded DNS at `127.0.0.11` is blocked before
   DNAT.
 - **Protocol restrictions:** Non-loopback IPv6 and unsupported UDP (including
   QUIC) are blocked. Tor DNS handles A, AAAA, and PTR queries over UDP and is
   not a general DNS server. Public TCP is routed through Tor rather than
   destination-allowlisted.
-- **Scope of network controls:** These rules cover the host/VM's private and
+- **Scope of network controls:** These rules cover the host and VM private and
   connected address space. A service exposed on a public Internet IP is still a
   public target; add an explicit deny rule if it must be excluded. A host
   administrator or compromised container engine is outside this boundary.
@@ -65,9 +65,9 @@ Desktop VM; they do not encrypt traffic or cross the Internet.
 
 Only `agent-net`, `executor-net`, and `tor` create GRE interfaces. Linux GRE
 support is required, and startup fails if it is unavailable. The GRE MTU is
-1,400 bytes for both the Tor path and the internal leg of host/LAN forwarding.
-Tor opens separate outbound sockets on its uplink, where the uplink route sets
-the MTU.
+1,400 bytes for both the Tor path and the internal leg of host and LAN
+forwarding. Tor opens separate outbound sockets on its uplink, where the uplink
+route sets the MTU.
 
 The `tor` router starts with IPv4 forwarding disabled and installs a
 default-drop forwarding policy before enabling host or LAN exceptions:
@@ -240,7 +240,7 @@ networks. This covers `make up`, offline setup and treasury jobs, and
   commands and `watch` recreation are refused.
 - `make down` and `stack.py compose down` include all profiles so stopped
   treasury containers sharing `agent-net` are removed before their namespace
-  owner; named volumes are preserved unless explicitly removed. Use `stop` to
+  owner; named volumes are preserved unless removed with `-v`. Use `stop` to
   halt individual services.
 - Bare Compose bypasses the bind check. The check catches missing host paths
   before launch, though it cannot prevent concurrent host deletion afterward
@@ -286,11 +286,11 @@ on a non-isolated network.
 ## Component images and runtime isolation
 
 - **Tor:** `dockurr/tor:0.4.9.17`, pinned by digest in
-  `components/network/Dockerfile`. The derived image adds route/firewall setup
-  and a local authenticated bootstrap health check. After initialization, Tor
-  runs as UID 101 with empty capability sets and exposes no TCP control API, TCP
-  SOCKS port, or HTTP proxy. Only `x402_treazury` mounts its private SOCKS Unix
-  socket.
+  `components/network/Dockerfile`. The derived image adds route and firewall
+  setup and a local authenticated bootstrap health check. After initialization,
+  Tor runs as UID 101 with empty capability sets and exposes no TCP control API,
+  TCP SOCKS port, or HTTP proxy. Only `x402_treazury` mounts its private SOCKS
+  Unix socket.
 - **Hermes:** derived from official Hermes v0.23.3, with base digest and source
   verification in `components/hermes/`. Runtime and offline maintenance share
   this image; see
@@ -303,7 +303,7 @@ on a non-isolated network.
 - **Executor:** a lean Alpine image by default, or a pinned Debian desktop image
   when `COMPUTER_USE_ENABLED=true`. Both include Python, Node, Git, SSH, and
   `curl`, with a read-only root filesystem and writable `/home/runner` and
-  `/workspace` mounts. The desktop image adds Xvnc/Xfce, Chromium, `cua-driver`,
+  `/workspace` mounts. The desktop image adds Xvnc, Xfce, Chromium, `cua-driver`,
   and an isolated browser harness with no GUI-specific container capabilities.
   Base tags and OS packages can change on rebuild; review them when qualifying
   upgrades.
@@ -315,8 +315,9 @@ connection stops both the remote program and the daemon via Hermes's
 owner-death supervisor. Program output is treated as untrusted data, and
 screenshots are copied into gateway cache files via bounded transfers; no model
 program, workspace helper, or printed path is imported or opened directly by the
-gateway. Remote Python connects to the executor-local CDP endpoint rather than
-any published port or new internal grant.
+gateway. Session bookkeeping may keep a gateway-loopback CDP forward, while
+remote Python connects to the executor-local CDP endpoint rather than any
+published port or new internal grant.
 
 ### Executor capability requirements
 
@@ -325,7 +326,7 @@ The root SSH listener keeps four capabilities in both executor variants, plus
 OpenSSH requirements for privilege separation, not privileges granted to model
 commands.
 
-| Capability | Responsibility / failure without it |
+| Capability | Responsibility and failure without it |
 | --- | --- |
 | `CHOWN` | Sets runner ownership on `/dev/pts`; PTY allocation fails without it. |
 | `SETUID` | Drops to the unprivileged SSH account and starts runner sessions (`setresuid` fails without it). |

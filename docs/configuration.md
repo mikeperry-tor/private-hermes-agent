@@ -26,7 +26,7 @@ Compose passes each setting only to the services that need it:
 | `TEEP_HOST_PORT` | Compose loopback port publication for `teep` |
 | `TEEP_SERVE_ARGS` | Compose command arguments for `teep serve` |
 | `HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS`, `HERMES_INTEGRATIONS_LAN_ENDPOINTS` (default `none`) | Direct IPv4 TCP socket grants for Hermes |
-| `COMPUTER_USE_ENABLED` | Executor image/seccomp selection and Hermes desktop/browser tool policy |
+| `COMPUTER_USE_ENABLED` | Executor image and seccomp selection, and Hermes desktop and browser tool policy |
 | `TS_AUTHKEY` | Optional `tailscale` container |
 | `WEBAPP_TERMINAL_ENVIRONMENT` | Deployment validation and `hermes` |
 | `WEBAPP_EXTERNAL_CONTENT` | Deployment validation, `hermes`, offline `setup`, and `webapp-proxy` |
@@ -61,11 +61,11 @@ Offline maintenance jobs use minimal mounts and have no network access (except
 
 | Job | Purpose and mounts |
 | --- | --- |
-| `setup` | Full stack provisioning. Shares `private-hermes-agent:local` with read-only root, no network, and `CHOWN`, `FOWNER`, `DAC_OVERRIDE`. Mounts persistent directories, `hermes-data`, and `x402_treazury-data` for ownership/lock checks, without running the wallet CLI. |
+| `setup` | Full stack provisioning. Shares `private-hermes-agent:local` with read-only root, no network, and `CHOWN`, `FOWNER`, `DAC_OVERRIDE`. Mounts persistent directories, `hermes-data`, and `x402_treazury-data` for ownership and lock checks, without running the wallet CLI. |
 | `hermes-config` | Runs the Hermes configuration CLI as UID/GID 10000 with only `hermes-data` mounted and no startup validation. Repairs incompatible settings without touching webapp credentials, executor paths, or wallet state. |
-| `setup-storage` | Prepares the full storage layout and runs native-volume filesystem lock probes. |
+| `setup-storage` | Prepares the full storage layout and runs named-volume filesystem lock probes. |
 | `mcp-config` | Publishes the MCP bearer token and Hermes registrations using `hermes-data` and `data/x402_treazury-auth/` (no webapp credentials or wallet mounts). Disconnection runs as UID 10000 via `hermes-config` so missing auth paths never block removal. |
-| `x402_treazury-inspect` | Reads saved wallet state using only `x402_treazury-data` (no serving policy bind mount). |
+| `x402_treazury-inspect` | Reads wallet state using only `x402_treazury-data` (no serving policy bind mount). |
 | `x402_treazury-admin` | Runs offline, policy-aware treasury administration (`config show`, `wallet preview`, `wallet rename`). |
 | `x402_treazury-setup` | Runs Tor-routed wallet initialization and preparation in `agent-net`. |
 
@@ -128,10 +128,10 @@ placeholder values for unused ingress or inference variables without modifying
 New Hermes profiles disable Hermes Tool Search
 (`tools.tool_search.enabled: "off"`), exposing enabled built-in and plugin tools
 directly in the model's tool list. `x402_treazury` keeps its own endpoint-level
-discovery settings, so most research endpoints expose search/call wrappers while
-the web endpoint advertises its API tools directly. This avoids nesting treasury
-discovery inside Hermes Tool Search; note that enabling extra tools or plugins
-increases tool prompt context.
+discovery settings, so most research endpoints expose search and call wrappers
+while the web endpoint advertises its API tools directly. This avoids nesting
+treasury discovery inside Hermes Tool Search; note that enabling extra tools or
+plugins increases tool prompt context.
 
 Existing profiles keep their saved setting. To update an existing profile, stop
 the stack and edit it offline:
@@ -161,7 +161,7 @@ list). Individual profiles can still disable either tool. `browser_cdp`,
 `browser_dialog`, and `browser_vault` stay disabled in all modes.
 
 Both executor variants share the same Compose service, Tor namespace, runner
-UID/GID 10000, SSH keys, and home/workspace mounts. Neither adds sudo, a
+UID/GID 10000, SSH keys, and home and workspace mounts. Neither adds sudo, a
 writable root filesystem, or extra container capabilities:
 
 - **Seccomp:** Docker applies a pinned Moby-derived seccomp profile that allows
@@ -180,11 +180,12 @@ writable root filesystem, or extra container capabilities:
   the executor.
 - **Tabs, scratch files, and downloads:** Each named session opens a fresh tab
   on first run and after a harness restart, then keeps that tab (including
-  explicit tab switches); failed tab setup aborts before model code runs.
+  tab switches); failed tab setup aborts before model code runs.
   Scratch files are keyed per profile and task, while browser cookies, logins,
-  and `/workspace/browser-use/downloads` are shared across tabs. Python
-  variables do not persist between calls, and a cancelled or dropped call can
-  still leave an already-sent browser action completed.
+  and `/workspace/browser-use/downloads` are shared across tabs. Files under
+  `/workspace/browser-use/` persist across calls, whereas Python variables do
+  not, and a cancelled or dropped call can still leave an already-sent browser
+  action completed.
 
 ### Switching variants and limits
 
@@ -276,8 +277,8 @@ OpenAI-compatible clients can use `http://127.0.0.1:8337/v1`. Changing
   executor cannot reach Teep, and neither isolated namespace gains host access
   through this port publication.
 - **Local trust:** Any process on the host can call `127.0.0.1:${TEEP_HOST_PORT}`
-  using Teep's configured provider keys; the endpoint has no client login and is
-  never published through Funnel.
+  using Teep's provider keys; the endpoint has no client login and is never
+  published through Funnel.
 
 The stack requires Docker Engine 28+, which implements loopback-only port
 publishing as documented in
@@ -329,7 +330,8 @@ mcp_servers:
 - **Host mapping:** The gateway uses the engine's IPv4 host mapping. On Docker
   Desktop, it reaches listeners bound to host loopback. On native rootless
   Podman with pasta, bind the host server to a reachable host interface address
-  (loopback-only listeners are unreachable).
+  (loopback-only listeners are unreachable). Re-run `make down` and `make up`
+  if the daemon's host mapping changes.
 - **LAN grants:** Literal LAN grants work on Docker Desktop and rootless Podman;
   on native Linux Docker, LAN grants remain closed. If the host mapping is
   unavailable, host grants stay closed while literal LAN grants remain usable.
@@ -412,7 +414,7 @@ files live in bind directories under `data/` and `config/`.
 | `hermes-data` (named volume) | Hermes profile, configuration, credentials, conversations, memory, skills, plugins, uploads, and `webapp-image-consent.sqlite3` |
 | `x402_treazury-data` (named volume) | Treasury home: encrypted wallet state, decryption key, financial journals, catalog cache, and onboarding record |
 | `data/executor/workspace/` | Agent-created repositories, documents, and scripts (durable, not cleared automatically) |
-| `data/executor/home/` | Executor home directory, shell/tool config, browser profile, and caches |
+| `data/executor/home/` | Executor home directory, shell and tool config, browser profile, and caches |
 | `data/ssh/agent/` | Hermes SSH client key and pinned executor host key |
 | `data/ssh/executor/` | Executor SSH host key and authorized client key |
 | `data/x402_treazury-auth/` | Persistent MCP bearer token, kept separate from wallet state |
@@ -485,9 +487,10 @@ A complete backup covers:
 
 Protect all of these artifacts as secrets: `.env` holds provider API keys and
 optional Tailscale keys, `data/tor/onion-service/` holds the onion identity
-private key, `hermes-data` holds the MCP token and Hermes profile `.env`, and
-`x402_treazury-data` stores `wallet.key` alongside the encrypted wallet (the
-native `wallet backup` command also includes that key).
+private key, `hermes-data` holds the MCP token and Hermes's own profile `.env`
+(distinct from the root deployment `.env`), and `x402_treazury-data` stores
+`wallet.key` alongside the encrypted wallet (the `wallet backup` command also
+includes that key).
 
 ### Consistent backup and restore rules
 
@@ -514,8 +517,10 @@ native `wallet backup` command also includes that key).
   `.operation.lock` concurrency lock file do not need backup.
 - **Onion identity recovery:** Restore `data/tor/onion-service/` with UID 101 /
   GID 102 and its private permissions. After `make down`, `make onion-address`
-  can rebuild a missing `hostname` and public key from an intact secret key; a
-  missing or damaged secret key requires restoring from backup. See
+  can rebuild a missing `hostname` and public key from an intact secret key (if
+  only the public key is missing, `make onion-address` still prints the address
+  and enabled Tor regenerates the public key on startup); a missing or damaged
+  secret key requires restoring from backup. See
   [optional onion ingress](webapp.md#optional-onion-ingress).
 
 `x402_treazury-data` also contains onboarding records and the catalog cache,
@@ -541,7 +546,7 @@ Remembered Tor-image origin grants are stored in
 the executor). Grants apply only to private image retrieval and are scoped to
 the exact browser origin, shared across sessions for that origin, and preserved
 across logout and restart until revoked. Backing up `hermes-data` includes this
-file. Load-once approvals persist nothing, and policy/image responses use
+file. Load-once approvals persist nothing, and policy and image responses use
 `no-store` with no server-side image cache.
 
 ## Adding other HTTP MCP servers
@@ -596,7 +601,9 @@ open in their parent directory). Missing or inaccessible paths, control
 characters, and invalid UTF-8 are rejected, while spaces, Unicode, and shell
 metacharacters are treated safely as path data. SSH errors never fall back to an
 Agent shell: fix the executor or SSH keys and open a fresh terminal without
-regenerating keys unnecessarily.
+regenerating keys unnecessarily. Upgrading from the pre-v0.23.3 wrapper also
+clears previously saved local terminal tabs (saved gateway tabs and executor
+files survive).
 
 The profile's `terminal.cwd` setting applies to model execution and Agent
 shells. Workspace file APIs always read the executor, so their files can differ
