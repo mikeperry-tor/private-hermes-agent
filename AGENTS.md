@@ -3,25 +3,28 @@
 This repository is a small deployment wrapper for Hermes Agent, not a general
 agent platform. It combines SSH-isolated code execution, transparent Tor egress,
 Teep inference, x402_treazury research tools, and an authenticated webapp with
-optional Tailscale Funnel. Do not add framework selection or unrelated services.
+optional Tailscale Funnel and Tor onion ingress. Do not add framework selection
+or unrelated services.
 
 ## Read the project before changing it
 
 - Read [README.md](README.md) for the user-facing overview and operator commands.
   Read [architecture and isolation](docs/architecture.md) and
   [development and qualification](docs/development.md) for implementation and checks.
-  Consult the relevant maintained guides:
+  Consult the maintained guides for the area you are changing:
   [configuration and backups](docs/configuration.md),
-  [webapp](docs/webapp.md), [x402_treazury](docs/x402_treazury.md), and
-  [updates, plugins, and privacy](docs/updates-and-plugins.md).
-- Read relevant plans under `docs/plans/` and inspect the implementation before
-  changing a shared interface. Plans describe intended work; their existence
-  does not make a proposed feature implemented or independently authorize it.
+  [webapp](docs/webapp.md), [x402_treazury](docs/x402_treazury.md),
+  [updates, plugins, and privacy](docs/updates-and-plugins.md), and
+  [Hermes update workflow](docs/update-workflow.md).
+- Read plans under `docs/plans/` that touch the area you are changing and
+  inspect the implementation before changing a shared interface. Plans describe
+  intended work; their existence does not make a proposed feature implemented or
+  independently authorize it.
 - Read the [planning workflow](docs/planning-workflow.md) before creating,
   executing, materially revising, or completing an implementation plan.
 - `reference_repos/` contains read-only reference checkouts. Do not edit them or
-  put build/runtime state there. Check exact revisions: a reference checkout can
-  differ from the pinned image or source used by the stack.
+  put build or runtime state there. Check exact revisions: a reference checkout
+  can differ from the pinned image or source used by the stack.
 - Documents supplied from other projects are reference material, not governing
   instructions unless explicitly adopted. Preserve this project's accepted
   design rather than importing their topology, restrictions, or tooling.
@@ -41,20 +44,20 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   submission provenance remain valid when they explain a current fact.
   Distinguish them from the sequence in which an agent discovered or changed
   that fact.
-- Do not append development journals, changelogs, dated test/probe narratives,
+- Do not append development journals, changelogs, dated test or probe narratives,
   review-acceptance logs, cleanup reports, or "initially/later/retested"
-  histories outside plans. Do not carry retired plan phase/gate codes into
+  histories outside plans. Do not carry retired plan phase or gate codes into
   permanent docs. Keep execution chronology and phase evidence in the plan; Git
   history preserves completed development history. Do not create an archive or
   another handoff document to relocate the journal.
 - Preserve concise, attributable qualification status: version or source pin,
-  platform, checks that establish the current contract, missing coverage, and
-  practical limits. Keep detailed logs and generated reports in ignored/private
-  evidence storage. A source pin or evidence identifier may support a current
-  claim; it must not become a chronology of approvals or failed attempts.
-- Keep active/deferred work and concrete next actions explicit. A completed plan
-  retained at the user's request stays marked as a reference, without exporting
-  its historical phase/status updates into maintained guides.
+  platform, checks that establish the contract, missing coverage, and practical
+  limits. Keep detailed logs and generated reports in ignored private evidence
+  storage. A source pin or evidence identifier may support a factual claim; it
+  must not become a chronology of approvals or failed attempts.
+- Keep active and deferred work and concrete next actions clear. A completed
+  plan retained at the user's request stays marked as a reference, without
+  exporting its historical phase or status updates into maintained guides.
 - Keep the user-facing name `x402_treazury`, not an endpoint-specific nickname.
 
 ## Writing style
@@ -74,7 +77,7 @@ issue drafts, code comments, and handoff notes.
   real misunderstanding or safety mistake.
 - Keep internal process terms (qualification runs, replay branches, cleanup
   passes, or plan phases) out of user-facing docs, commit messages, and
-  upstream PR/issue drafts.
+  upstream PR and issue drafts.
 - Omit filler qualifiers such as "selected", "ordinary", "applicable",
   "configured", "disposable", "harmless", "affected", "actual", "native",
   "existing", "matching", "deliberate", "explicit", "saved", "current", or
@@ -84,9 +87,11 @@ issue drafts, code comments, and handoff notes.
   namespace owner recovery qualification check" or "managed startup policy
   enforcement"); break them into clear subject-verb clauses.
 - Do not pack multiple concepts into slash-joined compounds (such as
-  "identity/mount/profile/cwd restoration" or "policy/credential/storage
-  validation"). Spell out separate items with commas and conjunctions, or split
-  them into bullets.
+  "identity/mount/profile/cwd restoration", "policy/credential/storage
+  validation", or "host/VM", "auth/consent", "outage/recovery"). Spell out
+  separate items with commas and conjunctions, or split them into bullets.
+  Reserve slashes for file paths, URLs, `owner/repo` names, and standard
+  protocol or identifier forms such as `HTTP(S)`, `UID/GID`, or `IPv4/IPv6`.
 - Keep paragraphs short (2–4 sentences, one idea per paragraph). Break
   multi-part details, options, and edge cases into headings, tables, or
   bulleted lists with clear lead-ins rather than dense walls of text.
@@ -104,6 +109,11 @@ issue drafts, code comments, and handoff notes.
   - Commit messages and PR descriptions state the prior bug or limitation in
     **past tense** and the new behavior or fix in **present tense**. Never
     describe both the old broken state and the new state in present tense.
+- When revising or tightening documentation, preserve every operational detail,
+  recovery procedure, error condition, security boundary, qualification limit,
+  and inbound heading anchor. Verify factual claims against the repository's
+  implementation, Dockerfiles, and Compose files (and exact pinned revisions in
+  `reference_repos/`), and verify local links and anchors after editing.
 
 ## Prefer the least machinery that meets the requirement
 
