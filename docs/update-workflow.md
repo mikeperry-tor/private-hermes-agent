@@ -14,7 +14,7 @@ Hermes Agent release.
    paths.
 2. **Verify the official image contents:** Resolve the official image digest and
    inspect its source stamp, renderer receipt, and computed source hash. Check
-   copied helpers, omitted test fixtures, and executor Python/browser pins
+   copied helpers, omitted test fixtures, and executor Python and browser pins
    against that same revision. Keep `reference_repos/` read-only; a checkout tag
    alone does not prove what shipped in the container image.
 3. **Update user-facing version links:** Update the Hermes version in `README.md`
@@ -29,7 +29,7 @@ Hermes Agent release.
    boundaries: SSH execution placement and firewall denials, Teep routing, early
    deployment-policy capture, tool registration and stale-tool dispatch, HTTP
    and WebSocket authentication, browser content headers, and configuration
-   loading/migration. Check upstream's own guarantees before adding wrapper
+   loading and migration. Check upstream's own guarantees before adding wrapper
    enforcement.
 6. **Map hazards to focused tests:** Reuse existing test suites and add small
    behavioral fixtures for any uncovered route. Testing unrelated upstream
@@ -47,8 +47,9 @@ branches advance. The local working clone is `upstream_work/hermes-agent/`; see
 When a new Hermes release still needs candidate patches:
 
 1. Start a temporary replay branch from the exact source commit shipped in the
-   new official image. Compare the previous release replay against the
-   `upstream-pr/*` branches to identify which fixes belong on the new base.
+   new official image. Compare the previous release replay against the active
+   submission branches (`fix/*` and `feat/*` in `upstream_work/hermes-agent/`)
+   to identify which fixes belong on the new base.
 2. Replay only the topic commits the new release still lacks, including the
    shared managed-configuration prerequisite (PR1) once and resolving overlaps.
    For any feature upstream has adopted, verify it with upstream's tests and our
@@ -64,7 +65,7 @@ When a new Hermes release still needs candidate patches:
    packaged source.
 4. Record the carried topics, overlap resolutions, and test results in the
    upgrade plan. Push the combined replay to `stack-patches/<release>/combined`
-   and keep `upstream-pr/*` branches intact for open PRs.
+   and keep the active submission branches intact for open PRs.
 
 ## Qualification and regression checklist
 
@@ -75,31 +76,32 @@ When a new Hermes release still needs candidate patches:
   missing-binary warning is advisory), while dependency or build errors must
   fail the build. Qualify Python plugin environment setup separately from
   frontend tooling.
-- Audit saved-gateway HTTP/WebSocket relays, inline `browser_vault` dispatch,
-  peer routes, and backup-transfer routes in addition to patched files. Verify
-  authentication, exact-host/origin checks, response headers, and refusal of
-  unauthorized or invalid requests without state mutation. Test
+- Audit saved-gateway HTTP and WebSocket relays, inline `browser_vault`
+  dispatch, peer routes, and backup-transfer routes in addition to patched
+  files. Verify authentication, exact host and origin checks, response headers,
+  and refusal of unauthorized or invalid requests without state mutation. Test
   unconfigured-provider refusal directly rather than enabling a provider or
   widening grants to exercise a route.
 - Preserve ARM64 Chromium discovery, no-follow named-tab marker writes, and
   upstream's restricted-client CDN consumer. Per-hop CDN redirect checks do not
-  replace bounded raster retrieval, IP pinning, TLS/credential isolation, or
+  replace bounded raster retrieval, IP pinning, TLS and credential isolation, or
   origin consent.
 
 ### Images, SSH files, and state migrations
 
 - **Image Save and Copy:** Test menu dispatch, cancellation, one-time `ask`
   approval, `off` refusal, original and extensionless filenames, saved-gateway
-  behavior, and proxy failure without direct browser fallback, plus native
-  CORS/size behavior in `browser_native`. (A controlled clipboard sink verifies
-  bytes and request placement, not OS clipboard permissions or Electron.)
-- **SSH file error classification:** Verify `ENOENT`/404 for missing files and
-  missing parent directories alongside regular files, directories, symlinks, and
-  sensitive paths. GNU `realpath` can succeed on a missing final path component,
-  so check the exact status code rather than accepting any error.
+  behavior, and proxy failure without direct browser fallback, plus CORS and
+  size behavior in `browser_native`. (A controlled clipboard sink verifies bytes
+  and request placement, not OS clipboard permissions or Electron.)
+- **SSH file error classification:** Verify `ENOENT` and HTTP 404 for missing
+  files and missing parent directories alongside regular files, directories,
+  symlinks, and sensitive paths. GNU `realpath` can succeed on a missing final
+  path component, so check the exact status code rather than accepting any
+  error.
 - **Populated profile upgrades:** Upgrade a populated profile from the prior
   official Hermes release (not just an empty profile) and load it twice. Verify
-  settings, transcripts, identities, and saved `.env`/auth/plugin files survive
+  settings, transcripts, identities, and `.env`, auth, and plugin files survive
   schema migration. Check upstream defaults (such as `agent.clarify_timeout` in
   [tool discovery default](configuration.md#tool-discovery-default)) against
   documented configuration behavior rather than assuming prior defaults held.

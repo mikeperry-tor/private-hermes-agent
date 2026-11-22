@@ -107,7 +107,7 @@ Validate behavior with focused tests and controlled fixtures:
 Record phase results, review findings, dispositions, and open work inside the
 plan, keeping raw logs and private reports out of Git. Update maintained guides
 in place with current contracts, qualification status, and limits—never append
-phase/gate codes, approval logs, or dated investigation narratives to them.
+phase or gate codes, approval logs, or dated investigation narratives to them.
 
 ## Resolve findings and finish
 

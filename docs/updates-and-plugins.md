@@ -142,13 +142,13 @@ for upgrade steps.
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop/browser transport, Code/Agent terminals, configurable URL context, and managed tool denial (PR1–PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop and browser transport, Code and Agent terminals, configurable URL context, and managed tool denial (PR1–PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
 | `0002-managed-policy` | Generates root-owned `/etc/hermes/config.yaml` and `/etc/hermes/.env` at container startup before Hermes loads profiles. | Verify effective settings under conflicting profile input, reloads, and offline jobs. |
-| `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code/Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
+| `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code and Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
 | `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |
 | `0008-private-image-routes` | Authenticated Tor image proxy and origin-consent APIs with bounded public IPv4 raster retrieval. | Verify with image endpoint, CDN consumer, and outage checks. |
 | `0009-browser-response-policy` | Response CSP, trusted bootstrap headers, exact-origin WebSockets, and inert private previews. | Verify with browser response, WebSocket, and active-file checks. |
-| `0010-browser-content` | Shared content rendering, image consent UI, and image Save/Copy through the Tor proxy. | Verify with renderer unit tests and cross-browser tests across all four content modes. |
+| `0010-browser-content` | Shared content rendering, image consent UI, and image Save and Copy through the Tor proxy. | Verify with renderer unit tests and cross-browser tests across all four content modes. |
 | `0011-mcp-probe-redirects` | Leaves HTTP redirects to the MCP SDK and treats redirected `initialize` responses in Hermes's separate diagnostic probe as inconclusive. | Verify `HEAD`, `GET`, and `initialize` redirects in `tests/local_integration_smoke.py`; remove once upstream's diagnostic respects the SDK's redirect boundary. |
 
 ### Managed container config and executor packaging
@@ -187,9 +187,11 @@ engines after modifying patches or base pins.
 ### Local preparation package dispositions
 
 Upstream submission drafts for PR1–PR6 live under `upstream_work/submissions/`
-and use `upstream-pr/*` branches in `upstream_work/hermes-agent/`, pushed to
-the `fork` remote ([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
-alongside the `stack-patches/v0.23.3/*` release refs. Submissions target
+and use the `fix/*` and `feat/*` submission branches in
+`upstream_work/hermes-agent/`, pushed to the `fork` remote
+([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
+alongside the `stack-patches/v0.23.3/*` release refs and the original
+`upstream-pr/*` qualification refs. Submissions target
 `NousResearch/hermes-agent` (`origin`) under author identity
 `Mike Perry <mikeperry-git@untrusted.systems>`. Follow the branch heads and
 merge order in the
@@ -199,20 +201,20 @@ merge order in the
 | Package | Scope in Private Hermes |
 | --- | --- |
 | PR1 | Strict managed config reads, dotenv bootstrap and reload precedence, and profile-specific interpolation. |
-| PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT`/404 classification, and pinned SSH client options (required by PR3). |
-| PR3 | Executor-only desktop/browser placement, SSH transport, and Chromium sandboxing. |
-| PR4 | Native executor/gateway terminal selection backing the stack's Code and Agent modes (builds on PR1). |
+| PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT` and 404 classification, and pinned SSH client options (required by PR3). |
+| PR3 | Executor-only desktop and browser placement, SSH transport, and Chromium sandboxing. |
+| PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes (builds on PR1). |
 | PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on PR1). |
 | PR6 | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on PR1). |
 | PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`–`0010`). |
 
-PR7 is not submission-ready: it still needs decisions on shared Ask/Always
-renderer ownership and authenticated consent storage/API while preserving
-upstream's CDN consumer and IPv6 support (private audio/video streaming and
+PR7 is not submission-ready: it still needs decisions on shared Ask and Always
+renderer ownership and authenticated consent storage and API while preserving
+upstream's CDN consumer and IPv6 support (private audio and video streaming and
 interactive frames stay out of scope).
 
 Related upstream issues and PRs tracked for conflict checks include `#156336`,
-`#130878`, `#130946` (renderer/consent), `#130023` (provenance), `#156728`
+`#130878`, `#130946` (renderer and consent), `#130023` (provenance), `#156728`
 (managed-policy readers), `#95247` (profile tool approvals), `#156598` (browser
 module move), `#156368` (Chromium cleanup), `#128539` (CDN consumer), and
 `#102667` (large gateway-local rasters). Recheck their status on GitHub before

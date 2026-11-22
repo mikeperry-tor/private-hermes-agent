@@ -90,7 +90,7 @@ project volumes and temporary bind directories, never operator data.
   networks while valid, overridden, and unrelated offline jobs still run. Run on
   each engine before core and browser suites.
 - **`python3 tests/launch_smoke.py`:** After building Hermes, verifies cold
-  passthrough runs, dependency/owner network creation, truly offline runs,
+  passthrough runs, dependency and owner network creation, truly offline runs,
   rejected maintenance overrides, `--dry-run` handling, Podman `isolate=strict`
   inspection, and network cleanup. Serialize with fixed-subnet tests.
 - **`make podman-paths-test`:** On Podman only, verifies allowed and forbidden
@@ -133,8 +133,8 @@ Compose providers.
 
 | Qualified target | Engine and Compose provider | Filesystem and browser matrix |
 | --- | --- | --- |
-| macOS 26.7.1 ARM64, Linux `7.0.14-linuxkit` VM | Docker Desktop 29.9.3 / Compose 5.7.0 | Named volumes for Hermes/wallet DBs; Playwright 1.64.1 (Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2) |
-| Debian 13 ARM64, kernel `6.12.116+deb13-arm64` | Rootless Podman 5.4.2 (netavark/overlay) / official Docker Compose 5.7.1 | ext4 binds and named volumes; same Playwright browser matrix |
+| macOS 26.7.1 ARM64, Linux `7.0.14-linuxkit` VM | Docker Desktop 29.9.3 and Compose 5.7.0 | Named volumes for Hermes and wallet databases; Playwright 1.64.1 (Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2) |
+| Debian 13 ARM64, kernel `6.12.116+deb13-arm64` | Rootless Podman 5.4.2 (netavark, overlay) and official Docker Compose 5.7.1 | ext4 binds and named volumes; same Playwright browser matrix |
 
 ### Native Linux Docker checks
 
@@ -156,8 +156,8 @@ On Debian 13 ARM64:
 
 Outside this qualification: live Tailscale Funnel enrollment, live provider
 attestation, paid inference or research calls, funded wallet settlement,
-Electron browser privacy, and untested platforms/architectures. Building Tor or
-Teep images does not verify live provider compatibility or attestation. For
+Electron browser privacy, and untested platforms and architectures. Building Tor
+or Teep images does not verify live provider compatibility or attestation. For
 treasury financial gaps, see
 [pending live qualification](x402_treazury.md#pending-live-qualification).
 
@@ -189,20 +189,21 @@ Qualified coverage on Docker Desktop 4.99.0 (Engine 29.9.3 / Compose 5.7.0) and
 Debian 13 ARM64 rootless Podman 5.4.2 (Compose 5.7.1) includes:
 
 - Original TLS SNI and HTTP `Host` preservation, independent positive controls,
-  exact port/UID checks, executor denial, and denial of retained connections
+  exact port and UID checks, executor denial, and denial of retained connections
   after grant removal.
-- Clearing inherited and profile `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` across
-  profile reload, model discovery, streamed inference, MCP `initialize`/`list`/`call`,
-  and redirected `HEAD`/`GET`/`POST` diagnostic boundaries.
+- Clearing inherited and profile `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`
+  across profile reload, model discovery, streamed inference, MCP `initialize`,
+  `list`, and `call`, and redirected `HEAD`, `GET`, and `POST` diagnostic
+  boundaries.
 - IPv4 path-MTU feedback for 64 KiB bidirectional transfers through a 630-byte
   bottleneck, LAN-only startup without a host mapping, gateway health when
   forwarding enablement is denied, local forwarding while Tor is suspended
   (Docker Desktop), and authenticated WebApp switching between Teep and a local
   provider (plus blank-`TEEP_INSTALL_MODEL` discovery in **Settings → Model**).
 - Lifecycle checks for `TEEP_ENABLED=false` (including malformed unused Teep
-  settings and an occupied Teep uplink subnet), port/subnet conflict rejection
-  when Teep is enabled, and preserving running containers during treasury init
-  with a pending grant edit.
+  settings and an occupied Teep uplink subnet), port and subnet conflict
+  rejection when Teep is enabled, and preserving running containers during
+  treasury init with a pending grant edit.
 
 ## Packaged Hermes qualification
 
@@ -216,31 +217,31 @@ and writes patched renderer receipt hash
 [downstream responsibility inventory](updates-and-plugins.md#downstream-responsibility-inventory)
 for the applied patches.
 
-| Check / contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
+| Check or contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
 | --- | --- | --- |
 | 197 wrapper unit checks, 4 Compose models, and compilation | Passed | Passed |
 | Image build, source verification, and renderer receipt | Passed | Passed |
 | Renderer TypeScript check and 218 targeted renderer tests | Passed | Passed |
 | Managed URL-context and tool-denial matrix (including dotenv reload) | Passed | Passed |
 | Populated official v0.23.2 profile loaded twice by v0.23.3 (schema 53 → 54) | Passed | Passed |
-| Full lean WebApp (Code/Agent terminals, auth, cross-browser content, MCP) | Passed | Passed |
+| Full lean WebApp (Code and Agent terminals, auth, cross-browser content, MCP) | Passed | Passed |
 | Desktop Code and Agent terminals over local and simulated HTTPS | Passed | Passed |
 | Networkless desktop startup and Chromium lock-file cleanup | Passed | Passed |
 | Executor browser, named tabs, ownership, cancellation, harness recovery | Passed | Passed |
 | CUA display, takeover leases, sandbox, dependency loss, variant switching | Passed | Passed |
 | Dependency-bearing user plugin install, update, and persistence | Passed | Passed |
-| Authenticated image proxy and destination/DNS controls | Passed | Passed |
+| Authenticated image proxy, destination checks, and DNS controls | Passed | Passed |
 | Repeated setup, offline CLI edits, SSH key repair, named-volume persistence | Passed | Passed |
-| Live SSH execution, Teep/MCP grants, forbidden paths, Tor outage/recovery | Passed | Passed |
+| Live SSH execution, Teep and MCP grants, forbidden paths, Tor outage and recovery | Passed | Passed |
 | Cold launch, maintenance scope, and namespace cleanup | Passed | Passed |
-| Dedicated cross-browser image Save/Copy and desktop viewer/download | Passed | Prior v0.23.2 evidence |
+| Dedicated cross-browser image Save and Copy, and desktop viewer and download | Passed | Prior v0.23.2 evidence |
 
-The v0.23.2 → v0.23.3 migration check verifies preserved model/terminal
-settings, preferences, transcript, and `.env`/auth/plugin files in a temporary
-named volume. Clipboard checks use a test sink, authenticated HTTPS checks use
-simulated TLS, and Tor routing is verified separately. Live public ingress,
-provider attestation, funded treasury actions, and AMD64 runtimes are outside
-this table.
+The v0.23.2 → v0.23.3 migration check verifies preserved model and terminal
+settings, preferences, transcript, and `.env`, auth, and plugin files in a
+temporary named volume. Clipboard checks use a test sink, authenticated HTTPS
+checks use simulated TLS, and Tor routing is verified separately. Live public
+ingress, provider attestation, funded treasury actions, and AMD64 runtimes are
+outside this table.
 
 ## Onion ingress qualification
 
@@ -261,8 +262,10 @@ this table.
   Chromium consent checks supply Fetch Metadata explicitly for the fixture's
   HTTP onion origin. Local Tor Browser 15.0.26 (Gecko 140.17.0) checks against
   Docker cover native private-cookie partitioning and Fetch Metadata using
-  explicit `TOR_BROWSER_PYTHON`, `TOR_BROWSER_BINARY`, and `GECKODRIVER` (no
-  Selenium Manager auto-download).
+  explicit `TOR_BROWSER_PYTHON` (with Selenium), `TOR_BROWSER_BINARY`, and
+  `GECKODRIVER` (no Selenium Manager auto-download; the test profile disables
+  the bundled Tor launcher and inspects only cookie flags, never session
+  values).
 
 ## Executor desktop qualification
 
@@ -285,7 +288,8 @@ image to be built already; `make *-test` targets build first:
   a networkless read-only container with the SSH bounding set to verify
   non-recursive removal of stale Chromium lock files (`SingletonLock`,
   `SingletonSocket`, `SingletonCookie`, `DevToolsActivePort`), preservation of
-  cookies/identities and symlink targets, and refusal on unexpected directories.
+  cookies, identities, and symlink targets, and refusal on unexpected
+  directories.
 
 ### Docker seccomp baseline
 
@@ -322,7 +326,7 @@ recovery.
   `/workspace`, cookies, and `localStorage` on both engines.
 - Coverage is limited to one default-profile screen and programmatic display
   transport; concurrent profile screens, interactive noVNC pane testing, and
-  `browser_cdp`/`browser_dialog`/`browser_vault` are unsupported.
+  `browser_cdp`, `browser_dialog`, and `browser_vault` are unsupported.
 
 ## Native Podman desktop support
 
@@ -365,10 +369,10 @@ CONTAINER_ENGINE=podman COMPUTER_USE_ENABLED=true WEBAPP_BROWSER_PYTHON=/path/to
   mode-specific tab restoration, exact `cwd` persistence, session tests, and
   TypeScript checks.
 - **`make webapp-test`** tests Code → Agent → Code across local and simulated
-  HTTPS on lean and desktop executors: placement parity, mount separation,
-  `cwd`/file-parent validation (including Unicode, quotes, shell metacharacters,
-  and trailing spaces), replay/reattach, resize, Ctrl-C, explicit close,
-  mid-handshake tab close reaping the local SSH process, SSH key/host-key
+  HTTPS on lean and desktop executors: placement parity, mount separation, `cwd`
+  and file-parent validation (including Unicode, quotes, shell metacharacters,
+  and trailing spaces), replay and reattach, resize, Ctrl-C, explicit close,
+  mid-handshake tab close reaping the local SSH process, SSH key and host-key
   failures, executor outage, and fresh-shell recovery.
 - For targeted terminal reruns, use
   `python3 tests/webapp_smoke.py --terminal-only` (lean executor) or with
@@ -412,33 +416,35 @@ probes immediately with no extra startup deadline.
 ## Local upstream candidate qualification
 
 The `fork` remote ([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
-hosts the `stack-patches/v0.23.3/*` release refs and the `upstream-pr/*`
-submission branches. See
+hosts the `stack-patches/v0.23.3/*` release refs, the original `upstream-pr/*`
+qualification refs, and the active `fix/*` and `feat/*` submission branches. See
 [local preparation package dispositions](updates-and-plugins.md#local-preparation-package-dispositions)
 and [hermes-upstream-prep.md](plans/hermes-upstream-prep.md).
 
 Candidate tests run inside temporary Docker Desktop Linux ARM64 containers
 with isolated homes, `--init`, no engine socket, and no private mounts (using
-`scripts/check` and containerized Python/Node toolchains). The release replay
-targets Hermes v0.23.3 (`caafe5389ae585ef77387a962aee05b1bcf17029`), while the
-submission branches target `main` (`25a1302eacb563c59eb3b7454c1a53f8c89f274c`).
+`scripts/check` and containerized Python and Node toolchains). The release
+replay targets Hermes v0.23.3 (`caafe5389ae585ef77387a962aee05b1bcf17029`), while
+the active submission branches target `main`
+(`88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5`, with the earlier `25a1302eacb563c59eb3b7454c1a53f8c89f274c`
+base preserved for PR7).
 
 | Candidate | Recorded passing checks | Scope |
 | --- | --- | --- |
-| PR1: managed configuration | Config/profile unit tests and Docker/Podman managed-policy image fixtures | Strict reads, dotenv bootstrap/reload precedence, routed interpolation, secret ownership |
-| PR2a: SSH workspace fixes | Sync/workspace tests and packaged shell/HTTP checks | Browser-profile sync exclusion and missing-file `ENOENT`/404 |
-| PR2b: explicit SSH client config | SSH environment/config tests and packaged shell checks | Pinned SSH client options across terminal, workspace, streams, and Doctor |
-| PR3: executor desktop/browser | 224 Python tests, 6 desktop renderer tests, browser/SSH suites, live SSH Chromium checks | Cold executor discovery, viewer identity, warm CUA driver, named-profile RFB, raw CDP refusal, vault lease, scratch, screenshots, sandboxing |
-| PR4: operator terminals and exact `cwd` | 80 Python tests, 95 terminal renderer tests, live SSH checks | Placement pinning, rollback refusal, Bash/`cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |
+| PR1: managed configuration | Config and profile unit tests, and Docker and Podman managed-policy image fixtures | Strict reads, dotenv bootstrap and reload precedence, routed interpolation, secret ownership |
+| PR2a: SSH workspace fixes | Sync and workspace tests, and packaged shell and HTTP checks | Browser-profile sync exclusion and missing-file `ENOENT` and 404 |
+| PR2b: explicit SSH client config | SSH environment and config tests, and packaged shell checks | Pinned SSH client options across terminal, workspace, streams, and Doctor |
+| PR3: executor desktop and browser | 224 Python tests, 6 desktop renderer tests, browser and SSH suites, live SSH Chromium checks | Cold executor discovery, viewer identity, warm CUA driver, named-profile RFB, raw CDP refusal, vault lease, scratch, screenshots, sandboxing |
+| PR4: operator terminals and exact `cwd` | 80 Python tests, 95 terminal renderer tests, live SSH checks | Placement pinning, rollback refusal, Bash and `cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |
 | PR5: selectable URL context | 74 reference, gateway-turn, and config tests | Managed no-fetch in normal and bypass sessions, validated snapshots, malformed config handling |
-| PR6: managed tool denial | 87 policy, MCP, and discovery tests plus prompt/worker persistence tests | CLI readiness, catalogs, prompt guidance, connectors, background review, direct/deferred schemas, dispatch enforcement |
-| PR7: WebApp content privacy | Design review only | Shared renderer ownership and authenticated consent storage/API remain open |
+| PR6: managed tool denial | 87 policy, MCP, and discovery tests plus prompt and worker persistence tests | CLI readiness, catalogs, prompt guidance, connectors, background review, direct and deferred schemas, dispatch enforcement |
+| PR7: WebApp content privacy | Design review only | Shared renderer ownership and authenticated consent storage and API remain open |
 
 ### Limits and test ownership
 
 - Native upstream suites cover duplicate dependency checks, browser ownership
   internals, and queued-action, lease, and cancellation regressions. Private
-  Hermes keeps packaged stack checks for real SSH file `ENOENT`/404, allowed
+  Hermes keeps packaged stack checks for real SSH file `ENOENT` and 404, allowed
   and forbidden actions, takeover denial, HTTP file delivery, sandboxing,
   startup cleanup, terminal deployment modes, auth, and pinned keys, gateway
   URL no-fetch, the `desktop_tools_smoke.py` matrix, and all private raster and
@@ -451,7 +457,8 @@ submission branches target `main` (`25a1302eacb563c59eb3b7454c1a53f8c89f274c`).
   supplies the fixture omitted from the runtime image (clearing inherited
   frontend output first avoids overlay `EXDEV` rename errors).
 - PR4 Windows encoding tests do not qualify native Windows shell behavior.
-  Native macOS/Windows runtimes, live providers, public ingress, OS clipboard
-  integration, and financial operations are outside candidate evidence.
+  Native macOS and Windows runtimes, live providers, public ingress, OS
+  clipboard integration, and financial operations are outside candidate
+  evidence.
 - Detailed follow-up logs and commit translations are stored locally in ignored
   `upstream_work/follow-up-review/`.
