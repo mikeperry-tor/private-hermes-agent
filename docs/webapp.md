@@ -1,9 +1,9 @@
 # Authenticated webapp and optional remote ingress
 
 The base Compose stack always includes the local Hermes WebApp, bound to host
-loopback and protected by Hermes username/password login. You can optionally add
-public HTTPS access through Tailscale Funnel, Tor Browser access through a Tor
-onion service, or both.
+loopback and protected by Hermes username and password login. You can optionally
+add public HTTPS access through Tailscale Funnel, Tor Browser access through a
+Tor onion service, or both.
 
 Tailscale Funnel does not require visitors to have a Tailscale account; all
 remote visitors authenticate with Hermes credentials. Because upstream designed
@@ -161,9 +161,13 @@ never builds or pulls images implicitly).
   restarting containers. Printing an already-saved address works while the stack
   is running and even when unrelated serving settings are invalid.
 - Enable onion ingress by setting `TOR_ONION_ENABLED=true` in `.env`, then
-  running `make down` and `make up`. Open the printed URL in Tor Browser.
+  running `make down` and `make up`. Open the printed URL in Tor Browser. If
+  enabling before `make init`, create the identity with `make onion-address`
+  first, because rendering the enabled proxy configuration requires a saved
+  address.
 - Disable onion ingress with `TOR_ONION_ENABLED=false` followed by `make down`
-  and `make up`. Keys persist across shutdown and disable/re-enable.
+  and `make up`. Keys persist across shutdown and across disabling and
+  re-enabling ingress.
 - When onion ingress is enabled, `WEBAPP_PORT` cannot be `8080` (just as `8443`
   is reserved when Funnel is enabled).
 
@@ -179,6 +183,9 @@ private permissions intact:
   enabled Tor regenerates the public key on startup.)
 - Missing or malformed secret keys require restoring from backup; neither
   `make onion-address` nor runtime startup silently generates a new identity.
+  (Reading a hostname still works without complete key files, but reports the
+  stored address rather than serving readiness; a malformed hostname is rejected
+  before rendering HAProxy configuration.)
 - Tor and HAProxy share an isolated network (`10.203.86.0/24`). Only Tor
   (`10.203.86.2`) can reach HAProxy's onion frontend (`10.203.86.3:8080`), which
   accepts only the saved onion hostname (with optional `:80`), strips forwarded
@@ -223,7 +230,7 @@ bounding capability sets:
   only from Tailscale to port `8443`, and onion connections only from Tor to
   port `8080`.
 - **Outbound:** Initiates connections only to Hermes at `10.203.85.2:9120` plus
-  established replies. Connections to the host/VM, LAN, Internet, DNS, or other
+  established replies. Connections to the host, VM, LAN, Internet, DNS, or other
   services are blocked, and IP forwarding is off.
 - **Headers and origins:** Enforces exact `Host` headers separately on local,
   Funnel, and onion frontends, strips incoming `Forwarded` and `X-Forwarded-*`
@@ -324,7 +331,7 @@ placeholders.
   thumbnail, connector, and pet image renderers all pass through the private
   image gate. Browser-hosted link-title fetching is disabled, and favicon
   discovery stays desktop-only.
-- **Audio, video, and social players:** In private modes, external audio/video,
+- **Audio, video, and social players:** In private modes, external audio, video,
   posters, subtitles, manifests, and social embeds stay as placeholders with
   external links, overriding saved social preferences. Browser-native
   interactive opt-in and streaming remain deferred (see
@@ -347,10 +354,12 @@ placeholders.
   same-origin connections and the executor SSH stream; it does not make your
   browser contact the websites shown on the desktop and does not require
   `browser_native`. Takeover leases fence computer-use tools and viewer input
-  only, not arbitrary code running as `runner`. If desktop dependency inspection
-  fails, status reports a connection diagnostic without claiming dependencies
-  are present; restore the executor connection and refresh status or click
-  **Start**.
+  only, not arbitrary code running as `runner`; a second viewer's takeover
+  revokes the previous viewer's input, though it does not guarantee immediate
+  closure of the previous watch connection across processes. If desktop
+  dependency inspection fails, status reports a connection diagnostic without
+  claiming dependencies are present; restore the executor connection and refresh
+  status or click **Start** (refreshing status does not start a desktop).
 - **Scope of browser controls:** Main-app responses keep bootstrap script hashes
   and restrict private modes to same-origin APIs, exact-origin WebSockets, no
   referrers, and disabled DNS prefetch. Clicking an external link or opening a
@@ -380,10 +389,10 @@ setting. Saved gateway terminals keep their separate remote-Hermes path.
 - **Lifecycle and cancellation:** Page refresh reattaches to a surviving shell
   and replays buffered output. Closing a Code tab during startup cancels the
   pending SSH probe, and closing an open tab terminates the shell and foreground
-  children via remote hangup (intentionally detached jobs and executor restarts
-  are not guaranteed cleanup/survival). If the executor is unreachable or SSH
-  keys fail, the terminal returns an error without falling back to an Agent
-  shell.
+  children via remote hangup (intentionally detached jobs may remain running,
+  and shells do not survive backend or executor restarts). If the executor is
+  unreachable or SSH keys fail, the terminal returns an error without falling
+  back to an Agent shell.
 - **Mode switches and stale tabs:** Switching between Code and Agent clears
   saved local tabs, working directories, and scrollback on reload while keeping
   saved gateway tabs. Stale pages must reload before opening new terminals. Each
@@ -420,21 +429,22 @@ Current per-engine test results are recorded in the
 [packaged Hermes qualification table](development.md#packaged-hermes-qualification).
 Interactive opt-in and streaming media remain deferred.
 
-- **`make images-test`:** Uses isolated HTTP/TLS canaries with no uplink or
+- **`make images-test`:** Uses isolated HTTP and TLS canaries with no uplink or
   published ports to verify socket destination pinning, DNS rebinding checks,
-  raster/size limits, and auth/consent rules. (Does not itself prove Tor
-  routing.)
+  raster and size limits, and authentication and consent rules. (Does not itself
+  prove Tor routing.)
 - **`make webapp-test`:** Runs against production images with seeded history,
-  local media, TCP/TLS canaries, and simulated HTTPS on ports `19120` and
+  local media, TCP and TLS canaries, and simulated HTTPS on ports `19120` and
   `10000`. All four content modes run on Chromium 156.0.8078.4, Firefox 157.0,
   and WebKit 27.2 on ARM64; Chromium additionally runs `ask` consent over HTTPS
   plus ingress auth, cookies, origin checks, terminals, and a live WebSocket
-  chat turn (Firefox and WebKit run focused HTTPS auth/navigation checks).
-  Direct DNS/preconnect NetLog observation is Chromium-only. Although routine
-  tests avoid external image fetches, they still wait for Tor bootstrap.
+  chat turn (Firefox and WebKit run focused HTTPS auth and navigation checks).
+  Direct DNS and preconnect NetLog observation is Chromium-only. Although
+  routine tests avoid external image fetches, they still wait for Tor bootstrap.
 - **`make webapp-live-test`:** Verifies real authenticated Tor image fetches,
-  Tor exit-node controls, transparent-route counters, and Tor outage/recovery.
-  Run both `make webapp-test` and `make webapp-live-test` for full coverage.
+  Tor exit-node controls, transparent-route counters, and Tor outage and
+  recovery. Run both `make webapp-test` and `make webapp-live-test` for full
+  coverage.
 
 ### Pending live Funnel qualification
 
@@ -447,8 +457,8 @@ against a live tailnet or public Funnel relay. When ready to enable live Funnel:
    Hermes login, authenticated chat streaming and WebSockets work, and
    `localhost` stays usable independently.
 3. Disable Funnel via `TAILSCALE_FUNNEL_ENABLED=false` and `make up`, confirm
-   public access stops while `localhost` remains up, and verify `make down` /
-   re-enablement preserves both Tailscale and Hermes state.
+   public access stops while `localhost` remains up, and verify `make down` and
+   re-enablement preserve both Tailscale and Hermes state.
 
 Record tested revisions and results privately without committing credentials or
 node identifiers.

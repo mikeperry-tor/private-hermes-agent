@@ -145,7 +145,7 @@ make up
   directory and files readable by container UID 10003 (`0755`/`0644`), and
   include `config/x402_treazury/` in backups.
 - Keep the fixed deployment fields intact: Tor mode, private SOCKS socket with
-  extended auth, treasury state/key paths, and the twelve loopback listeners
+  extended auth, treasury state and key paths, and the twelve loopback listeners
   with their `Host` checks and token variable. Wallet pools, payment caps,
   sources, tools, and instructions are editable.
 - Invalid configuration blocks networked init, preparation, and serving without
@@ -198,8 +198,8 @@ Mount a private host destination for the backup (the container root filesystem
 is read-only), and never write recovery material into the Hermes or executor
 workspace.
 
-Check the receive address, saved balances, and preparation/activation state at
-any time, even while serving or while WebApp/serving config is invalid:
+Check the receive address, saved balances, and preparation and activation state
+at any time, even while serving or while WebApp or serving config is invalid:
 
 ```sh
 make x402_treazury-status
@@ -239,10 +239,11 @@ If matching preparation already succeeded, the command skips straight to step 4
    `bootstrap_group` (or every group if `[wallet_bootstrap]` is absent). This
    spends ZEC according to your policy.
 3. Run `catalog warm` over Tor (never `--direct`; paid relay fallback can spend
-   USDC). Cached entries are saved under `http-cache/` in `x402_treazury-data`.
-   A zero exit completes this step even if some remote sources are degraded or
-   unavailable, so partial degradation never replays bootstrap or repeats paid
-   swaps.
+   USDC). Cached entries are saved under `http-cache/` in `x402_treazury-data`
+   (subject to upstream cache lifetime and revalidation rules; warming does not
+   guarantee later discovery or API calls stay offline). A zero exit completes
+   this step even if some remote sources are degraded or unavailable, so partial
+   degradation never replays bootstrap or repeats paid swaps.
 4. Start `serve` and run authenticated MCP `initialize` and `tools/list` checks
    on all twelve endpoints (without making paid research calls).
 5. Install the bearer token and twelve MCP entries into Hermes and invoke
@@ -257,14 +258,20 @@ line every 30 seconds with no artificial startup deadline:
 
 - **Terminal vs. retryable errors:** Native terminal catalog-startup or
   endpoint-tool-selection errors fail activation visibly even if other endpoints
-  stay up. Retryable native errors (such as temporary SOCKS checks with retries
-  remaining) do not fail activation. Packaged remote sources set
+  stay up. Retryable errors (such as temporary SOCKS checks with retries
+  remaining) do not fail activation. Missing selections, unsupported operations,
+  and empty inventories report reduced coverage without failing activation when
+  `initialize` and `tools/list` succeed. Packaged remote sources set
   `allow_catalog_failure = true` so unavailable sources degrade gracefully;
-  required sources keep strict startup failure.
-- **Process loss:** Container exit, restart, or loss of the log observer fails
-  activation while keeping Hermes running and preserving preparation history.
-  Inspect logs (`python3 scripts/stack.py compose logs -f x402_treazury`), fix
-  the cause, and rerun `make x402_treazury-prepare`.
+  required sources keep strict startup failure. Keep `wait_for_catalogs = true`
+  for endpoints that should publish settled inventories.
+- **Process loss and cancellation:** Container exit, restart, or loss of the log
+  observer fails activation while keeping Hermes running and preserving
+  preparation history. Inspect logs
+  (`python3 scripts/stack.py compose logs -f x402_treazury`), fix the cause, and
+  rerun `make x402_treazury-prepare`. Pressing Ctrl-C during activation cancels
+  only the readiness probe and log observer without stopping the serving
+  treasury or replaying financial work.
 - **Financial safety on failure or Ctrl-C:** Cancellation, disconnect, or a
   missing status message never proves a financial action did nothing. Signed
   transactions and pending swaps stay owned by `x402_treazury`'s native
@@ -326,7 +333,8 @@ Helper containers keep minimal privileges and mounts:
   client-side tool filters do not create separate server credentials. Sharing
   `agent-net` lets Hermes and `x402_treazury` reach each other's loopback
   listeners. Container isolation protects wallet files from normal agent code,
-  not from kernel/engine compromise or vulnerabilities in the MCP API itself.
+  not from kernel or container-engine compromise or vulnerabilities in the MCP
+  API itself.
 
 ## Shutdown and testing
 
@@ -354,10 +362,10 @@ make test
   activation, and probe cleanup.
 - **`tests/research_config_smoke.py`:** Offline policy tests using the built
   image and a temporary unfunded wallet covering policy loading, atomic edits,
-  invalid/missing TOML refusal, offline status availability under broken policy
-  or ingress config, `wallet preview`, and `wallet rename` error paths.
+  invalid or missing TOML refusal, offline status availability under broken
+  policy or ingress config, `wallet preview`, and `wallet rename` error paths.
 - **`make x402_treazury-test`:** Builds the treasury image and tests bearer-token
-  auth, MCP `initialize`/`tools/list` on all twelve endpoints, HTTPS through
+  auth, MCP `initialize` and `tools/list` on all twelve endpoints, HTTPS through
   Tor's Unix SOCKS socket against a free Tor-check API, executor isolation, RPC
   denial, disabled SSH forwarding, and Tor failure without direct fallback. No
   paid calls or wallet funding occur.
