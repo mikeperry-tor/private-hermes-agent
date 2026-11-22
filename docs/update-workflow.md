@@ -10,7 +10,7 @@ Hermes Agent release.
 1. **Inspect the full revision range:** Record the wrapper's starting commit and
    the upstream commit range. Review the full upstream diff, including new HTTP
    routes, WebSocket handlers, and tool dispatch paths outside existing patch
-   targets—a clean patch apply does not guarantee policy coverage for new code
+   targets; a clean patch apply does not guarantee policy coverage for new code
    paths.
 2. **Verify the official image contents:** Resolve the official image digest and
    inspect its source stamp, renderer receipt, and computed source hash. Check
@@ -117,7 +117,7 @@ When a new Hermes release still needs candidate patches:
   failures distinct.
 - Serialize tests that share fixed subnets or host ports, using isolated test
   projects and dummy credentials. Test both allowed and forbidden paths, plus
-  dependency outage and recovery—source inspection alone does not qualify
+  dependency outage and recovery; source inspection alone does not qualify
   isolation.
 - When reusing passed evidence across partial reruns, preserve fixture
   prerequisites (for example, screenshot and download checks depend on artifacts

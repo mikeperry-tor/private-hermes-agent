@@ -92,7 +92,7 @@ the wrapper never adds consent, scan-bypass, or force flags automatically.
   image, with standalone add-ons disabled by default (`plugins.enabled: []`). A
   user plugin with the same name can override a bundled plugin, so keep
   overrides deliberate rather than shadowing bundled code unintentionally.
-- **Authority:** Plugins run inside Hermes with full agent privileges—outside
+- **Authority:** Plugins run inside Hermes with full agent privileges, outside
   the SSH executor sandbox, though without access to the `x402_treazury` wallet
   volume.
 
@@ -142,7 +142,7 @@ for upgrade steps.
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop and browser transport, Code and Agent terminals, configurable URL context, and managed tool denial (PR1–PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop and browser transport, Code and Agent terminals, configurable URL context, and managed tool denial (PR1-PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
 | `0002-managed-policy` | Generates root-owned `/etc/hermes/config.yaml` and `/etc/hermes/.env` at container startup before Hermes loads profiles. | Verify effective settings under conflicting profile input, reloads, and offline jobs. |
 | `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code and Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
 | `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |
@@ -186,7 +186,7 @@ engines after modifying patches or base pins.
 
 ### Local preparation package dispositions
 
-Upstream submission drafts for PR1–PR6 live under `upstream_work/submissions/`
+Upstream submission drafts for PR1-PR6 live under `upstream_work/submissions/`
 and use the `fix/*` and `feat/*` submission branches in
 `upstream_work/hermes-agent/`, pushed to the `fork` remote
 ([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
@@ -206,7 +206,7 @@ merge order in the
 | PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes (builds on PR1). |
 | PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on PR1). |
 | PR6 | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on PR1). |
-| PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`–`0010`). |
+| PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`-`0010`). |
 
 PR7 is not submission-ready: it still needs decisions on shared Ask and Always
 renderer ownership and authenticated consent storage and API while preserving

@@ -58,7 +58,7 @@ resources.
 Every network subnet is pinned in `compose.yaml` (and `compose.funnel.yaml` for
 Funnel), and preflight rejects networks that omit a subnet. If a subnet overlaps
 another stack or an existing network has a mismatched subnet, preflight exits
-with instructions—including configuring Docker's `default-address-pools`
+with instructions, including configuring Docker's `default-address-pools`
 (`~/.docker/daemon.json` or Docker Desktop Engine settings) or Podman's
 `default_subnet_pools` (`containers.conf`) when the overlap came from automatic
 allocation.
@@ -94,8 +94,8 @@ project volumes and temporary bind directories, never operator data.
   rejected maintenance overrides, `--dry-run` handling, Podman `isolate=strict`
   inspection, and network cleanup. Serialize with fixed-subnet tests.
 - **`make podman-paths-test`:** On Podman only, verifies allowed and forbidden
-  paths of a running stack—including isolation from a client on a non-isolated
-  Podman network—with positive controls for DNS, TCP, and host loopback.
+  paths of a running stack, including isolation from a client on a non-isolated
+  Podman network, with positive controls for DNS, TCP, and host loopback.
 - **`tests/capability_bootstrap.py`:** Networkless Hermes privilege probe in a
   temporary volume testing s6 supervision, profile registration, warm permission
   repair, CLI, and clean stop. Supports `--omit GRANT`, `--probe-path`,
@@ -199,7 +199,7 @@ Debian 13 ARM64 rootless Podman 5.4.2 (Compose 5.7.1) includes:
   bottleneck, LAN-only startup without a host mapping, gateway health when
   forwarding enablement is denied, local forwarding while Tor is suspended
   (Docker Desktop), and authenticated WebApp switching between Teep and a local
-  provider (plus blank-`TEEP_INSTALL_MODEL` discovery in **Settings → Model**).
+  provider (plus blank-`TEEP_INSTALL_MODEL` discovery in **Settings -> Model**).
 - Lifecycle checks for `TEEP_ENABLED=false` (including malformed unused Teep
   settings and an occupied Teep uplink subnet), port and subnet conflict
   rejection when Teep is enabled, and preserving running containers during
@@ -223,7 +223,7 @@ for the applied patches.
 | Image build, source verification, and renderer receipt | Passed | Passed |
 | Renderer TypeScript check and 218 targeted renderer tests | Passed | Passed |
 | Managed URL-context and tool-denial matrix (including dotenv reload) | Passed | Passed |
-| Populated official v0.23.2 profile loaded twice by v0.23.3 (schema 53 → 54) | Passed | Passed |
+| Populated official v0.23.2 profile loaded twice by v0.23.3 (schema 53 -> 54) | Passed | Passed |
 | Full lean WebApp (Code and Agent terminals, auth, cross-browser content, MCP) | Passed | Passed |
 | Desktop Code and Agent terminals over local and simulated HTTPS | Passed | Passed |
 | Networkless desktop startup and Chromium lock-file cleanup | Passed | Passed |
@@ -236,7 +236,7 @@ for the applied patches.
 | Cold launch, maintenance scope, and namespace cleanup | Passed | Passed |
 | Dedicated cross-browser image Save and Copy, and desktop viewer and download | Passed | Prior v0.23.2 evidence |
 
-The v0.23.2 → v0.23.3 migration check verifies preserved model and terminal
+The v0.23.2 -> v0.23.3 migration check verifies preserved model and terminal
 settings, preferences, transcript, and `.env`, auth, and plugin files in a
 temporary named volume. Clipboard checks use a test sink, authenticated HTTPS
 checks use simulated TLS, and Tor routing is verified separately. Live public
@@ -280,7 +280,7 @@ so both coexist cleanly. Direct `tests/*_smoke.py` scripts expect the matching
 image to be built already; `make *-test` targets build first:
 
 - `python3 tests/desktop_tools_smoke.py`: checks the `WEBAPP_EXTERNAL_CONTENT`
-  × `COMPUTER_USE_ENABLED` tool-denial matrix.
+  x `COMPUTER_USE_ENABLED` tool-denial matrix.
 - `make computer-use-test`: builds selected images and verifies desktop actions
   over SSH alongside Tor and forbidden-path checks (`tests/computer_use_smoke.py --desktop-only`
   isolates GUI checks while debugging).
@@ -368,7 +368,7 @@ CONTAINER_ENGINE=podman COMPUTER_USE_ENABLED=true WEBAPP_BROWSER_PYTHON=/path/to
 - **`make hermes-ui-test`** runs terminal transport, saved-gateway,
   mode-specific tab restoration, exact `cwd` persistence, session tests, and
   TypeScript checks.
-- **`make webapp-test`** tests Code → Agent → Code across local and simulated
+- **`make webapp-test`** tests Code -> Agent -> Code across local and simulated
   HTTPS on lean and desktop executors: placement parity, mount separation, `cwd`
   and file-parent validation (including Unicode, quotes, shell metacharacters,
   and trailing spaces), replay and reattach, resize, Ctrl-C, explicit close,

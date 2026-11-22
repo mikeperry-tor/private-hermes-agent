@@ -23,7 +23,7 @@ payer identity, reducing wallet and network linkability across API calls.
 
 `compose.yaml` runs one `x402_treazury` container sharing `agent-net`'s network
 namespace with Hermes. Its twelve HTTP MCP listeners bind to
-`127.0.0.1:3010–3021` with no published host ports, forwarding proxies, or
+`127.0.0.1:3010-3021` with no published host ports, forwarding proxies, or
 extra firewall grants. Serving and Hermes MCP registration activate only after
 staged wallet preparation; Hermes and its WebApp work normally beforehand.
 
@@ -65,13 +65,13 @@ The packaged `research_desk.toml` sets `[wallet_bootstrap]` with
 `deferred_groups = ["personal", "health", "financial"]`:
 
 - **Initial funding:** `make x402_treazury-prepare` funds only `general`'s
-  initial $2–3 reserve (plus swap and bridge fees). Funding all four groups over
-  time needs $8–12 nominal, plus ongoing relay and refill capital.
+  initial $2-3 reserve (plus swap and bridge fees). Funding all four groups over
+  time needs $8-12 nominal, plus ongoing relay and refill capital.
 - **Deferred group activation:** Until a deferred group receives its first
   positive credit, its API calls use `general`'s payer and $1 cap (including
   `health` calls). The first validated API call in a deferred group (even a free
   response or cache hit) triggers funding, with its first refill opportunity
-  scheduled after an independent 30–120-second wait. Once funded, future calls
+  scheduled after an independent 30-120-second wait. Once funded, future calls
   permanently use that group's own payer and cap (`$0.50` for `health`), even if
   later depleted.
 - **Metadata relays:** Paid metadata relays for catalogs, pricing, help, and
@@ -80,7 +80,7 @@ The packaged `research_desk.toml` sets `[wallet_bootstrap]` with
 - **Customizing bootstrap behavior:** Existing saved `research_desk.toml` files
   are preserved across updates. To fund every group separately from the start,
   remove the `[wallet_bootstrap]` table. Omitted reserve bounds use upstream's
-  $2–3 default.
+  $2-3 default.
 
 Inspect the packaged default policy offline before funding (no private mounts):
 
@@ -324,7 +324,7 @@ Helper containers keep minimal privileges and mounts:
   `agent-net` namespace retains transparent Tor routing and private-network
   denials.
 - **Executor boundary:** The SSH executor runs in a separate network namespace
-  with no access to `127.0.0.1:3010–3021`, no wallet or agent mounts, no MCP
+  with no access to `127.0.0.1:3010-3021`, no wallet or agent mounts, no MCP
   bearer token, and SSH forwarding disabled. Hermes's `execute_code` RPC
   allowlist excludes dynamic MCP tools; widening that allowlist or copying
   secrets into the executor changes this boundary.

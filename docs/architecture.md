@@ -10,12 +10,12 @@ through an independent Tor gateway, and DNS resolves through Tor. Only Teep has
 a direct Internet uplink for confidential-computing inference providers.
 
 ```text
-Hermes agent ── private SSH ── executor (/workspace, no agent volume or keys)
-      │                           │
-      ├── internal inference      └── executor route ─┐
-      │      └── teep ── direct internet              │
-      ├── allowed MCP IP:port grants                  ▼
-      └── agent route ──────────────────────── transparent Tor ── internet
+Hermes agent -- private SSH -- executor (/workspace, no agent volume or keys)
+      |                           |
+      +-- internal inference      +-- executor route -+
+      |      +-- teep -- direct internet              |
+      +-- allowed MCP IP:port grants                  v
+      +-- agent route ------------------------ transparent Tor -- internet
 ```
 
 No application container receives a container-engine socket, host networking,

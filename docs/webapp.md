@@ -74,7 +74,7 @@ settings. Persistent state remains intact.
 Scope Funnel access to a tag in your tailnet policy so only this node receives
 public Funnel permission:
 
-1. In the Tailscale admin console, open **Access controls → JSON editor** and
+1. In the Tailscale admin console, open **Access controls -> JSON editor** and
    merge `tagOwners` and top-level `nodeAttrs` into your policy (do not nest
    `nodeAttrs` inside `acls` or `grants`):
 
@@ -93,7 +93,7 @@ public Funnel permission:
    `tagOwners` only authorizes who may assign the tag; the auth key below
    applies it at enrollment. (Note: `"autogroup:member"` matches only untagged
    user-owned nodes, not tagged nodes.)
-2. Open **Settings → Keys → Auth keys → Generate auth key**, enable **Tags**,
+2. Open **Settings -> Keys -> Auth keys -> Generate auth key**, enable **Tags**,
    select `tag:private-hermes`, and copy the key into `TS_AUTHKEY`.
 
 Because the stack writes the Funnel serve config directly without triggering the
@@ -126,7 +126,7 @@ dig @1.1.1.1 +short A private-hermes.your-tailnet.ts.net
 
 ### Funnel lifecycle and isolation
 
-- Tailscale runs with userspace networking—no host networking, TUN device,
+- Tailscale runs with userspace networking: no host networking, TUN device,
   network capabilities, or engine socket.
 - Startup begins with an empty forwarding config, waits for an authenticated
   node, checks that its assigned DNS name matches `TAILSCALE_FUNNEL_HOST`, and
@@ -152,7 +152,7 @@ make onion-address
 ```
 
 This runs Tor offline in a networkless maintenance container and prints the
-`http://…onion` URL without publishing a descriptor or starting the stack. On
+  `http://...onion` URL without publishing a descriptor or starting the stack. On
 a fresh checkout after `make init`, run `make build` first (`make onion-address`
 never builds or pulls images implicitly).
 
@@ -296,8 +296,8 @@ address, not the fetch itself. Proxy errors show a reason without falling back
 to a direct browser request, and SVG or other unsupported types stay as
 placeholders.
 
-- **Revoking consent:** Manage remembered origins in **Settings → Appearance →
-  Chat display → Image permissions**. Grants cover Tor image retrieval only and
+- **Revoking consent:** Manage remembered origins in **Settings -> Appearance ->
+  Chat display -> Image permissions**. Grants cover Tor image retrieval only and
   are scoped to exact browser and remote origins (`localhost`, `127.0.0.1`,
   Funnel, and onion have separate scopes). Grants persist across logout and
   restart until revoked; load-once creates no grant.

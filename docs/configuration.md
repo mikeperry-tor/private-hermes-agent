@@ -228,7 +228,7 @@ NearAI entries:
 
 If `TEEP_INSTALL_MODEL` is blank or unset, setup still registers the Teep
 provider with live model discovery and leaves the initial model unselected; pick
-one later in **Settings → Model** or in `make chat`.
+  one later in **Settings -> Model** or in `make chat`.
 
 To list live Teep models or open the terminal picker:
 

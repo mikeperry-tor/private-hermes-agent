@@ -106,7 +106,7 @@ Validate behavior with focused tests and controlled fixtures:
 
 Record phase results, review findings, dispositions, and open work inside the
 plan, keeping raw logs and private reports out of Git. Update maintained guides
-in place with current contracts, qualification status, and limits—never append
+in place with current contracts, qualification status, and limits; never append
 phase or gate codes, approval logs, or dated investigation narratives to them.
 
 ## Resolve findings and finish
@@ -132,7 +132,7 @@ user asks to retain it as a reference):
    qualification status, and limitations without execution chronology or
    retired phase codes.
 2. Update inbound links and dependent plans to point to those guides.
-3. Delete the plan file—Git history preserves it, so do not create an archive
+3. Delete the plan file. Git history preserves it, so do not create an archive
    copy.
 
 Keep genuinely active and deferred plans explicit with a concrete next action,
