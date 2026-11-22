@@ -55,6 +55,39 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   retained at the user's request stays marked as a reference, without exporting
   its historical phase/status updates into maintained guides.
 
+## Writing style
+
+These rules apply to all prose: documentation, plans, commit messages, PR and
+issue drafts, code comments, and handoff notes.
+
+- Write directly in plain English for human readers. Omit filler qualifiers
+  such as "selected", "ordinary", "applicable", "configured", "disposable",
+  "harmless", "affected", or "actual" unless the adjective distinguishes two
+  real cases.
+- Be concrete at the reader's level of detail. Avoid vague shorthand and
+  invented jargon (for example, "the affected operation" or "captured policy
+  eligibility"); state the behavior, setting, command, or failure mode
+  directly. Keep file paths, function names, and implementation details in
+  commit bodies, code comments, and maintainer docs where they clarify the
+  change, without turning prose into pseudocode.
+- Always use the Oxford (serial) comma (`a, b, and c`).
+- Keep paragraphs short (2–4 sentences, one idea per paragraph). Break
+  multi-part details, options, and edge cases into headings or bulleted lists
+  with clear lead-ins rather than dense walls of text.
+- Place new information in the section that owns it and integrate it into the
+  surrounding structure. Do not bolt unrelated caveats onto the end of a
+  nearby paragraph.
+- Enforce clear tense boundaries:
+  - Maintained docs, READMEs, and code comments describe **current** behavior
+    in present tense. Never narrate prior code states, how the code evolved, or
+    lab-note investigation chronology.
+  - Commit messages and PR descriptions state the prior bug or limitation in
+    **past tense** and the new behavior or fix in **present tense**. Never
+    describe both the old broken state and the new state in present tense.
+- Keep internal process terms (qualification runs, replay branches, cleanup
+  passes, or plan phases) out of user-facing docs, commit messages, and
+  upstream PR/issue drafts.
+
 ## Prefer the least machinery that meets the requirement
 
 - Start with native component capabilities and straightforward code. Preserve
