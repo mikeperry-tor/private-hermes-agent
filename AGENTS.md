@@ -55,6 +55,7 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
 - Keep active/deferred work and concrete next actions explicit. A completed plan
   retained at the user's request stays marked as a reference, without exporting
   its historical phase/status updates into maintained guides.
+- Keep the user-facing name `x402_treazury`, not an endpoint-specific nickname.
 
 ## Writing style
 
@@ -113,13 +114,8 @@ issue drafts, code comments, and handoff notes.
   engines, configuration frameworks, or provenance systems for speculative
   needs. Use native Compose behavior where suitable and small explicit helpers
   where native behavior does not meet a demonstrated requirement.
-- Do not add hardening against a hypothetical threat by silently revising an
-  accepted trust boundary. Explain the threat and reconcile it with documented
-  trust decisions. Trusted offline setup may handle both Hermes and wallet
-  storage; the untrusted SSH executor must not gain that authority.
-- Reviewer suggestions are proposals, not automatic scope additions. Address
-  material defects, consider simpler solutions, and explain rejected or deferred
-  recommendations. Keep unrelated improvements separate.
+- Fail visibly with useful reasons, without secret values. Do not mask failures
+  with broad exception handling, silent fallback, or unconditional success.
 - Do not introduce arbitrary container resource limits, storage quotas, or work
   deadlines. Base safeguards on component requirements and observed failure
   modes. Allow for Tor latency and distinguish slow progress from failure.
@@ -249,6 +245,10 @@ issue drafts, code comments, and handoff notes.
   containers, container-engine socket mounts, broad private-network grants, or
   direct egress. Dependency failure must not silently select a weaker transport
   or policy.
+- Do not add hardening against a hypothetical threat by silently revising an
+  accepted trust boundary. Explain the threat and reconcile it with documented
+  trust decisions. Trusted offline setup may handle both Hermes and wallet
+  storage; the untrusted SSH executor must not gain that authority.
 
 ## Repository, configuration, and persistence
 
@@ -264,7 +264,6 @@ issue drafts, code comments, and handoff notes.
   them to binds without requalifying those requirements. `make down` and Compose
   down without `-v` must preserve persistent data; backups must cover binds and
   named volumes.
-- Keep the user-facing name `x402_treazury`, not an endpoint-specific nickname.
 - Prefer native configuration before patching upstream. Necessary source patches
   must be narrow, explicit, tied to the packaged revision, and reproducibly
   built. Document purpose, validation, and removal conditions. Do not edit
@@ -295,8 +294,13 @@ issue drafts, code comments, and handoff notes.
   `fix(ssh): preserve workspace sync`) and keep subjects and bodies within 80
   columns. In addition to that standard, use two body paragraphs for changes
   that fix a substantial bug or limitation: describe the prior problem in past
-  tense, then describe the fix in present tense. The two-paragraph body is
-  optional for routine documentation cleanup or plan updates.
+  tense, then describe the fix in present tense (see
+  [Writing style](#writing-style)). The two-paragraph body is optional for
+  routine documentation cleanup or plan updates.
+- Preserve unrelated tracked, untracked, and ignored files. Stage only named
+  intended files; never use `git add .` or `git add -A`. Do not rewrite existing
+  history without authorization. Keep reference checkouts, secrets, wallet data,
+  runtime state, and generated private evidence out of commits.
 - Use independent read-only reviewers for substantive design/security changes,
   meaningful phase commits, named plan gates, and the completed combined change.
   Scale review to the change; no fixed reviewer count or repeated review of an
@@ -316,6 +320,9 @@ issue drafts, code comments, and handoff notes.
   from the supplied snapshot, source inspection, and recorded evidence, state
   what was not re-run, and if confirmation is required run only the smallest
   check needed.
+- Reviewer suggestions are proposals, not automatic scope additions. Address
+  material defects, consider simpler solutions, and explain rejected or deferred
+  recommendations. Keep unrelated improvements separate.
 - Resolve material findings before dependent work. Commit focused corrections;
   re-review and rerun checks when changes invalidate earlier evidence. Do not
   require a separate review ceremony for every trivial fixup. Phase reviews do
@@ -337,28 +344,21 @@ issue drafts, code comments, and handoff notes.
   Security changes need allowed-path and forbidden-path evidence, including
   dependency failure and restart behavior; static inspection is insufficient.
 - Qualify runtime behavior on both supported engines using shared fixtures.
-  Model/unit checks do not prove native engine behavior. Record engine,
-  provider, and platform limits and missing coverage; reuse unchanged evidence
-  and keep documentation-only work scoped to documentation checks.
+  Model/unit checks do not prove native engine behavior. Reuse unchanged
+  evidence across unrelated work, and repeat or broaden checks only for new
+  changes, failures, or unresolved concerns.
 - Reuse the repository's focused checks and isolated test projects. Serialize
   tests sharing fixed networks or runtime state. Keep real financial secrets out
   of fixtures, and qualify filesystem and locking behavior on the target
   platform.
-- Once relevant checks pass, repeat or broaden them only for new changes,
-  failures, or unresolved concerns. Report omitted checks and practical limits.
-  Controlled fixtures do not prove live public ingress, settlement, provider
-  attestation, or support for untested platforms.
-- Fail visibly with useful reasons, without secret values. Do not mask failures
-  with broad exception handling, silent fallback, or unconditional success.
+- Record engine, provider, and platform limits, omitted checks, and missing
+  coverage. Controlled fixtures do not prove live public ingress, settlement,
+  provider attestation, or support for untested platforms.
 - Local development commits do not authorize pushing, merging, publishing, live
   Funnel enrollment, payments, funded wallet operations, or destructive changes
   to private state. Use existing task authorization where provided; a plan or
-  review recommendation alone grants none of these actions.
-- Preserve unrelated tracked, untracked, and ignored files. Stage only named
-  intended files; never use `git add .` or `git add -A`. Do not rewrite existing
-  history without authorization. Keep reference checkouts, secrets, wallet data,
-  runtime state, and generated private evidence out of commits. Never
-  shell-source private environment files or print private values unnecessarily.
+  review recommendation alone grants none of these actions. Never shell-source
+  private environment files or print private values unnecessarily.
 
 At handoff, report what changed, relevant validation and review, the committed
 revision or remaining uncommitted work, and material limitations or next steps.
