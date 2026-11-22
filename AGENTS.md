@@ -37,6 +37,10 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   limitations. Put implementation details, development procedures, and
   qualification evidence in documents under `docs/`, and link to them instead of
   expanding the README with maintainer material.
+- Runtime sequencing, recovery procedures, version pins, data-as-of dates, and
+  submission provenance remain valid when they explain a current fact.
+  Distinguish them from the sequence in which an agent discovered or changed
+  that fact.
 - Do not append development journals, changelogs, dated test/probe narratives,
   review-acceptance logs, cleanup reports, or "initially/later/retested"
   histories outside plans. Do not carry retired plan phase/gate codes into
@@ -48,10 +52,6 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
   practical limits. Keep detailed logs and generated reports in ignored/private
   evidence storage. A source pin or evidence identifier may support a current
   claim; it must not become a chronology of approvals or failed attempts.
-- Runtime sequencing, recovery procedures, version pins, data-as-of dates, and
-  submission provenance remain valid when they explain a current fact.
-  Distinguish them from the sequence in which an agent discovered or changed
-  that fact.
 - Keep active/deferred work and concrete next actions explicit. A completed plan
   retained at the user's request stays marked as a reference, without exporting
   its historical phase/status updates into maintained guides.
@@ -62,39 +62,41 @@ optional Tailscale Funnel. Do not add framework selection or unrelated services.
 These rules apply to all prose: documentation, plans, commit messages, PR and
 issue drafts, code comments, and handoff notes.
 
-- Write directly in plain English for human readers. Omit filler qualifiers
-  such as "selected", "ordinary", "applicable", "configured", "disposable",
-  "harmless", "affected", "actual", "native", "existing", "matching",
-  "deliberate", "explicit", "saved", "current", or "relevant" unless the
-  adjective distinguishes two real cases in that sentence.
+- Write directly in plain English for human readers, and be concrete at the
+  reader's level of detail. State the behavior, setting, command, or failure
+  mode directly rather than using vague shorthand or invented jargon (for
+  example, "the affected operation", "captured policy eligibility", or
+  "historical completion authority"). Use file paths, function names, and
+  implementation details in commit bodies, code comments, and maintainer docs
+  where they clarify the change, without turning prose into pseudocode.
+- State what a feature does rather than piling up defensive negative disclaimers
+  about what it does not do or does not prove. Only use caveats that prevent a
+  real misunderstanding or safety mistake.
+- Keep internal process terms (qualification runs, replay branches, cleanup
+  passes, or plan phases) out of user-facing docs, commit messages, and
+  upstream PR/issue drafts.
+- Omit filler qualifiers such as "selected", "ordinary", "applicable",
+  "configured", "disposable", "harmless", "affected", "actual", "native",
+  "existing", "matching", "deliberate", "explicit", "saved", "current", or
+  "relevant" unless the adjective distinguishes two real cases in that
+  sentence.
 - Do not stack nouns or modifiers into dense noun-chains (such as "shared-
   namespace owner recovery qualification check" or "managed startup policy
   enforcement"); break them into clear subject-verb clauses.
-- Be concrete at the reader's level of detail. Avoid vague shorthand and
-  invented jargon (for example, "the affected operation", "captured policy
-  eligibility", or "historical completion authority"); state the behavior,
-  setting, command, or failure mode directly. Keep file paths, function names,
-  and implementation details in commit bodies, code comments, and maintainer
-  docs where they clarify the change, without turning prose into pseudocode.
 - Do not pack multiple concepts into slash-joined compounds (such as
   "identity/mount/profile/cwd restoration" or "policy/credential/storage
   validation"). Spell out separate items with commas and conjunctions, or split
   them into bullets.
-- State what a feature does rather than piling up defensive negative disclaimers
-  about what it does not do or does not prove. Keep only caveats that prevent a
-  real misunderstanding or safety mistake, and state each caveat once in the
-  section that owns it.
-- Do not repeat the same rule or caveat across multiple sections of a document
-  or across sibling guides; state it once in its owning section and link to it
-  from elsewhere.
-- Always use the Oxford (serial) comma (`a, b, and c`).
 - Keep paragraphs short (2–4 sentences, one idea per paragraph). Break
   multi-part details, options, and edge cases into headings, tables, or
   bulleted lists with clear lead-ins rather than dense walls of text.
-- Place new information in the section that owns it and integrate it into the
-  surrounding structure. Do not bolt unrelated caveats onto the end of a
-  nearby paragraph, and do not scatter test-suite notes inside operator setup
-  sections when a dedicated verification section exists.
+- Place each rule, caveat, and detail once in the section that owns it,
+  integrated into the surrounding structure, and link to it from elsewhere. Do
+  not repeat the same rule or caveat across multiple sections or sibling guides,
+  do not bolt unrelated caveats onto the end of a nearby paragraph, and do not
+  scatter test-suite notes inside operator setup sections when a dedicated
+  verification section exists.
+- Always use the Oxford (serial) comma (`a, b, and c`).
 - Enforce clear tense boundaries:
   - Maintained docs, READMEs, and code comments describe **current** behavior
     in present tense. Never narrate prior code states, how the code evolved, or
@@ -102,19 +104,12 @@ issue drafts, code comments, and handoff notes.
   - Commit messages and PR descriptions state the prior bug or limitation in
     **past tense** and the new behavior or fix in **present tense**. Never
     describe both the old broken state and the new state in present tense.
-- Keep internal process terms (qualification runs, replay branches, cleanup
-  passes, or plan phases) out of user-facing docs, commit messages, and
-  upstream PR/issue drafts.
 
 ## Prefer the least machinery that meets the requirement
 
 - Start with native component capabilities and straightforward code. Preserve
   useful Python setup/lifecycle helpers and the documented Make workflow; neither
   a language ban nor moving code into containers makes a design simpler.
-- Support Docker and rootless Podman through the existing engine selector and
-  Make/Compose workflow. Prefer shared service behavior and explicit grants;
-  justify engine-specific overlays with demonstrated native differences. Consult
-  the maintained engine guidance rather than adding a compatibility framework.
 - Before adding a service, persistent record, configuration option, or
   abstraction, identify its concrete responsibility and why an existing
   component cannot reasonably own it. Prefer fewer responsibilities and state
@@ -130,6 +125,10 @@ issue drafts, code comments, and handoff notes.
   engines, configuration frameworks, or provenance systems for speculative
   needs. Use native Compose behavior where suitable and small explicit helpers
   where native behavior does not meet a demonstrated requirement.
+- Support Docker and rootless Podman through the existing engine selector and
+  Make/Compose workflow. Prefer shared service behavior and explicit grants;
+  justify engine-specific overlays with demonstrated native differences. Consult
+  the maintained engine guidance rather than adding a compatibility framework.
 - Fail visibly with useful reasons, without secret values. Do not mask failures
   with broad exception handling, silent fallback, or unconditional success.
 - Do not introduce arbitrary container resource limits, storage quotas, or work
