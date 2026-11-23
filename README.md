@@ -136,9 +136,10 @@ To build and start the stack:
 make up
 ```
 
-> **NOTE**: Use the documented `make` commands to operate the stack. `make up`
-> prepares local state, validates the engine setup, and starts the enabled
-> services. `make down` shuts the stack down.
+> **NOTE**: Use the documented `make` commands to operate the stack (run
+> `make` or `make help` for a summary). `make up` prepares local state,
+> validates the engine setup, and starts the enabled services. `make down`
+> shuts the stack down.
 
 Builds need Internet access and use your host's default networking, not Tor.
 

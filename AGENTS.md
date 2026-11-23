@@ -189,6 +189,13 @@ invariants across all changes:
 - Runtime Compose files live at the root. Component Dockerfiles, defaults, and
   container scripts live under `components/`; host helpers under `scripts/`;
   qualification code and test fixtures under `tests/`.
+- `make help` (the default goal) is a user-facing command index plus the
+  primary baseline checks (`make check`, `make test`, and `make webapp-test`).
+  Add targets to `make help` only for user-facing operator workflows; do not
+  add internal, component-scoped, or live-network developer targets there.
+  Document developer targets in
+  [docs/development.md](docs/development.md#makefile-test-targets) and
+  their owning guides instead.
 - Keep host helpers in `scripts/` and unit tests in `tests/test_*.py` on the
   Python standard library (plus repo-local modules) so operator commands and
   `make check` work with bare `python3` and no virtualenv. Keep optional
@@ -308,9 +315,15 @@ delegation request. Scale review to the change.
 
 | Command or check | When to run | Scope and limits |
 | --- | --- | --- |
-| `make check` | Default fast baseline for code, script, and Compose changes | Unit tests (`tests/test_*.py`), all four Compose models, and Python compilation. Does not prove runtime engine behavior. |
+| `make check` | Default fast baseline for code, script, and Compose changes | Unit tests (`tests/test_*.py`), `make help`, all four Compose models, and Python compilation. Does not prove runtime engine behavior. |
+| `make test` | Core stack, networking, SSH executor, Teep, or Tor egress changes | Isolated live stack covering SSH execution, secret separation, Tor vs. Teep routing, MCP, and Tor outage. |
+| `make webapp-test` | WebApp auth, HAProxy, terminal, or external-content policy changes | Isolated WebApp stack covering login, Code and Agent terminals, and browser content containment. |
+| `make onion-test` | Tor onion identity, configuration, or onion ingress changes | Offline (`DisableNetwork=1`) onion identity, routing, auth, WebSockets, image consent, and recovery. |
+| `make computer-use-test` | Desktop executor or CUA display changes | Desktop GUI actions over SSH alongside Tor and forbidden-path checks. |
+| `make browser-use-test` | Executor browser harness or Chromium sandbox changes | Executor browser harness, Chromium namespace sandboxing, named tabs, and recovery over SSH. |
+| `make hermes-ui-test` | Hermes frontend renderer or terminal UI changes | TypeScript type-checking and renderer terminal, gateway, and session tests. |
 | Local link check and `git diff --check` | Documentation-only edits | Verifies links, anchors, and whitespace without running container suites. |
-| Targeted `make *-test` or `tests/*_smoke.py` | Runtime, Compose, security, ingress, or component changes | Demonstrates changed runtime behavior on isolated fixtures; see [development and qualification](docs/development.md). |
+| Other `make *-test` and `tests/*_smoke.py` suites | Storage, treasury, plugins, image proxy, live-network, or Podman path changes | See [development and qualification](docs/development.md#qualification-and-maintenance) for the full target index and direct smoke scripts. |
 
 - Compose changes require effective-model validation and runtime checks.
   Security changes need allowed-path and forbidden-path evidence, including

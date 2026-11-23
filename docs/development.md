@@ -53,6 +53,30 @@ Stop any running deployment before running live test targets: tests reuse the
 pinned stack subnets, and preflight rejects overlapping subnets before creating
 resources.
 
+### Makefile test targets
+
+`make help` (the default goal) lists user-facing commands plus the baseline
+`make check`, `make test`, and `make webapp-test` targets. All development and
+qualification `make` targets are indexed below; pass `CONTAINER_ENGINE=docker`
+or `CONTAINER_ENGINE=podman` to select the engine without editing `.env`.
+
+| Target | Scope | Owning details |
+| --- | --- | --- |
+| `make check` | Unit tests, `make help`, Docker and Podman Compose models, and Python compilation | [Core unit and smoke suites](#core-unit-and-smoke-suites) |
+| `make test` | Isolated live stack (SSH executor, secret separation, Tor, Teep, and MCP) | [Core unit and smoke suites](#core-unit-and-smoke-suites) |
+| `make webapp-test` | Isolated WebApp auth, Code and Agent terminals, and browser content containment | [WebApp verification](webapp.md#verification-and-qualification) |
+| `make webapp-live-test` | Live public-network Tor image retrieval, outage, and recovery | [WebApp verification](webapp.md#verification-and-qualification) |
+| `make onion-test` | Offline (`DisableNetwork=1`) onion identity, routing, auth, WebSockets, and recovery | [Onion ingress qualification](#onion-ingress-qualification) |
+| `make onion-live-test` | Temporary live authenticated onion service and separate Tor client rendezvous | [Onion ingress qualification](#onion-ingress-qualification) |
+| `make computer-use-test` | Desktop executor GUI actions over SSH, Tor routing, and forbidden-path checks | [Executor desktop qualification](#executor-desktop-qualification) |
+| `make browser-use-test` | Executor browser harness, Chromium namespace sandboxing, named tabs, and recovery | [Browser harness and results](#browser-harness-and-results) |
+| `make storage-test` | Named-volume and bind-mount persistence across `make down` and container restarts | [Persistent data layout](configuration.md#why-databases-stay-in-named-volumes) |
+| `make x402_treazury-test` | Treasury image build, bearer-token auth, and MCP integration on an unfunded fixture | [Shutdown and testing](x402_treazury.md#shutdown-and-testing) |
+| `make plugins-test` | Wheel-backed user plugin install, update, reload, and persistence | [Manage persistent user plugins](updates-and-plugins.md#manage-persistent-user-plugins) |
+| `make images-test` | Isolated HTTP and TLS canaries for authenticated image proxy destination and DNS checks | [WebApp qualification](webapp.md#qualification) |
+| `make hermes-ui-test` | Frontend TypeScript type-checking and renderer terminal, gateway, and session tests | [Code terminal qualification](#code-terminal-qualification) |
+| `make podman-paths-test` | Allowed and forbidden network paths of a running stack on rootless Podman | [Core unit and smoke suites](#core-unit-and-smoke-suites) |
+
 ### Preflight checks
 
 Every network subnet is pinned in `compose.yaml` (and `compose.funnel.yaml` for
@@ -74,11 +98,13 @@ Run tests against each engine by setting `CONTAINER_ENGINE=docker` or
 `CONTAINER_ENGINE=podman` (no `.env` edit needed). Tests always use isolated
 project volumes and temporary bind directories, never operator data.
 
-- **`make check`:** Validates Docker and Podman Compose models, Python syntax,
-  and unit tests without requiring initialized operator state (`tests/test_bind_sources.py`
-  covers bind-source checks; `tests/test_engine.py` covers engine selection,
-  version floors, `stack.py compose` flag parsing, Podman network creation, and
-  proxy firewall rules without a running engine).
+- **`make check`:** Validates Docker and Podman Compose models, `make help`,
+  Python syntax, and unit tests without requiring initialized operator state
+  (`tests/test_bind_sources.py` covers bind-source checks; `tests/test_engine.py`
+  covers engine selection, version floors, `stack.py compose` flag parsing,
+  Podman network creation, and proxy firewall rules without a running engine;
+  `tests/test_makefile.py` checks default `make help` execution and target
+  consistency).
 - **`make test`:** Runs the full live stack in a temporary project using the
   pinned Hermes image, SSH executor, Tor, Teep (dummy key), and `x402_treazury`
   (unfunded fixture wallet). Covers SSH terminal and Python execution, secret
