@@ -1,5 +1,5 @@
 """Maintenance remains available without weakening application launch checks."""
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
 import json
@@ -117,16 +117,84 @@ class MaintenanceScopeTests(unittest.TestCase):
             with operation_lock(root):
                 self.assertEqual((root / '.operation.lock').stat().st_mode & 0o777, 0o600)
 
-    def test_credential_rotation_needs_no_deployment_settings(self):
+    def _run_credentials_cli(self, root, *argv, env=None):
         spec = importlib.util.spec_from_file_location('credential_cli', ROOT / 'scripts/webapp-credentials.py')
+        module = importlib.util.module_from_spec(spec)
+        stdout, stderr = io.StringIO(), io.StringIO()
+        environment = {key: value for key, value in os.environ.items() if key != 'WEBAPP_USERNAME'}
+        if env:
+            environment.update(env)
+        with patch.dict(os.environ, environment, clear=True), patch.object(deployment, 'ROOT', root), \
+                patch.object(sys, 'argv', ['webapp-credentials.py', *argv]), \
+                patch.object(deployment, 'settings', side_effect=AssertionError('unrelated validation')), \
+                redirect_stdout(stdout), redirect_stderr(stderr):
+            spec.loader.exec_module(module)
+            module.main()
+        return stdout.getvalue(), stderr.getvalue()
+
+    def test_credential_rotation_needs_no_deployment_settings(self):
         with tempfile.TemporaryDirectory() as folder:
-            module = importlib.util.module_from_spec(spec)
-            with patch.dict(os.environ, BAD), patch.object(deployment, 'ROOT', Path(folder)), \
-                    patch.object(sys, 'argv', ['webapp-credentials.py', '--rotate']), \
-                    patch.object(deployment, 'settings', side_effect=AssertionError('unrelated validation')), \
-                    redirect_stdout(io.StringIO()):
-                spec.loader.exec_module(module)
-            self.assertTrue((Path(folder) / 'config/webapp/auth.json').is_file())
+            root = Path(folder)
+            stdout, _ = self._run_credentials_cli(root, '--rotate', env=BAD)
+            self.assertTrue((root / 'config/webapp/auth.json').is_file())
+            password = (root / 'config/webapp/password').read_text().strip()
+            self.assertIn('admin', stdout)
+            self.assertIn('config/webapp/password', stdout)
+            self.assertNotIn(password, stdout)
+
+    def test_webapp_credentials_reports_username_and_password_path_for_existing_credentials(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / '.env').write_text('WEBAPP_BIND=invalid\nWEBAPP_USERNAME=alice\n', encoding='utf-8')
+            generated, _ = self._run_credentials_cli(root)
+            password = (root / 'config/webapp/password').read_text().strip()
+            self.assertIn('alice', generated)
+            self.assertIn('config/webapp/password', generated)
+            self.assertNotIn(password, generated)
+
+            existing, _ = self._run_credentials_cli(root)
+            self.assertIn('credentials for alice are in config/webapp/password', existing)
+            self.assertNotIn(password, existing)
+
+            overridden, _ = self._run_credentials_cli(root, env={'WEBAPP_USERNAME': 'bob'})
+            self.assertIn('credentials for bob are in config/webapp/password', overridden)
+            self.assertNotIn(password, overridden)
+
+            blank_env, _ = self._run_credentials_cli(root, env={'WEBAPP_USERNAME': ''})
+            self.assertIn('credentials for admin are in config/webapp/password', blank_env)
+            self.assertNotIn(password, blank_env)
+
+    def test_webapp_credentials_handles_missing_password_and_invalid_username_without_blocking(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._run_credentials_cli(root)
+            (root / 'config/webapp/password').unlink()
+            stdout, stderr = self._run_credentials_cli(root)
+            self.assertIn('admin', stdout)
+            self.assertIn('config/webapp/password is missing or empty', stdout)
+            self.assertIn('make webapp-rotate', stderr)
+
+            (root / 'config/webapp/password').write_text('   \n', encoding='utf-8')
+            empty_out, empty_err = self._run_credentials_cli(root)
+            self.assertIn('config/webapp/password is missing or empty', empty_out)
+            self.assertIn('make webapp-rotate', empty_err)
+
+            self._run_credentials_cli(root, '--rotate')
+            (root / '.env').write_text('WEBAPP_USERNAME=bad user!\n', encoding='utf-8')
+            invalid_out, _ = self._run_credentials_cli(root)
+            self.assertIn('config/webapp/password', invalid_out)
+            self.assertIn('WEBAPP_USERNAME in .env is invalid', invalid_out)
+            self.assertNotIn('bad user!', invalid_out)
+
+            invalid_env, _ = self._run_credentials_cli(root, env={'WEBAPP_USERNAME': 'bad env!'})
+            self.assertIn('WEBAPP_USERNAME in the environment is invalid', invalid_env)
+            self.assertNotIn('bad env!', invalid_env)
+
+            (root / '.env').write_text('WEBAPP_USERNAME=alice\nTEEP_SERVE_ARGS="unclosed\n', encoding='utf-8')
+            malformed_out, _ = self._run_credentials_cli(root)
+            self.assertIn('config/webapp/password', malformed_out)
+            self.assertIn('could not be read from .env', malformed_out)
+            self.assertNotIn('alice', malformed_out)
 
 
 class DefaultPublicationTests(unittest.TestCase):

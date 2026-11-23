@@ -23,7 +23,7 @@ help:
 	@echo "  make chat                       # Open the Hermes terminal client against the running stack"
 	@echo ""
 	@echo "WebApp and optional Tor onion ingress:"
-	@echo "  make webapp-credentials         # Create missing webapp login credentials without rotating existing ones"
+	@echo "  make webapp-credentials         # Show webapp username and password path (creates missing credentials)"
 	@echo "  make webapp-rotate              # Rotate webapp password and signing key (apply with make up)"
 	@echo "  make onion-address              # Create an offline onion identity or print its saved .onion URL"
 	@echo ""

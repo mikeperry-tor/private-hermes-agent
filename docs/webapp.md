@@ -48,10 +48,12 @@ without starting containers or initializing wallets:
   existing authentication continues to work and initialization warns without
   replacing the identity. Restore the password from backup or run
   `make webapp-rotate` intentionally.
-- `make webapp-credentials` and `make webapp-rotate` touch only credential
-  files, so unrelated invalid settings in `.env` never block login repair. If
-  rotation is interrupted, rerun `make webapp-rotate` to rotate both password
-  and signing secret cleanly.
+- `make webapp-credentials` creates missing credentials and prints the
+  configured `WEBAPP_USERNAME` and password file path (`config/webapp/password`)
+  without printing the password. Both `make webapp-credentials` and
+  `make webapp-rotate` touch only credential files, so unrelated invalid
+  settings in `.env` never block login repair. If rotation is interrupted, rerun
+  `make webapp-rotate` to rotate both password and signing secret cleanly.
 - `config/webapp/proxy.cfg` is regenerated on every `make up`; edit `.env`
   rather than the generated file. Only offline `setup` mounts `config/webapp/`
   (read-only) to copy auth settings into `hermes-data`. Neither the executor nor
