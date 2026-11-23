@@ -26,6 +26,41 @@ from deployment import compose_base, compose_files, engine, engine_command, insp
 COMPOSE = [*compose_base(), '-p', 'private-hermes-test', *compose_files(False, extra=('tests/compose.yaml',))]
 
 
+def remove_storage_fixture(root, marker):
+    try:
+        shutil.rmtree(root)
+    except PermissionError:
+        # Linux hosts need ownership returned from container UIDs.
+        # A nonce and one explicit disposable bind keep this
+        # metadata operation away from operator data.
+        (root / '.test-storage').write_text(marker)
+        script = '''import os, pathlib, stat, sys
+root=pathlib.Path('/persistent-data')
+assert root.joinpath('.test-storage').read_text()==sys.argv[1]
+uid,gid=int(sys.argv[2]),int(sys.argv[3])
+for base,dirs,files in os.walk(root):
+ for path in [pathlib.Path(base),*(pathlib.Path(base)/p for p in dirs+files)]:
+  meta=path.lstat()
+  os.chown(path,uid,gid,follow_symlinks=False)
+  if not stat.S_ISLNK(meta.st_mode): path.chmod(stat.S_IMODE(meta.st_mode)|(0o700 if stat.S_ISDIR(meta.st_mode) else 0o600))
+'''
+        # Rootless Podman maps the host user to container UID 0.
+        owner = ('0', '0') if engine() == 'podman' else (str(os.getuid()), str(os.getgid()))
+        # Do not reuse setup: its application-volume mounts would
+        # recreate empty named volumes after the suite's shutdown.
+        subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none',
+                        '--user', '0:0', '--cap-drop', 'ALL',
+                        '--cap-add', 'CHOWN', '--cap-add', 'FOWNER',
+                        '--cap-add', 'DAC_OVERRIDE', '--read-only',
+                        '--security-opt', 'no-new-privileges:true',
+                        '--tmpfs', '/tmp:mode=1777',
+                        '--mount', f'type=bind,source={root},target=/persistent-data',
+                        '--entrypoint', '/opt/hermes/.venv/bin/python',
+                        'private-hermes-agent:local', '-c', script, marker, *owner],
+                       check=True)
+        shutil.rmtree(root)
+
+
 @contextmanager
 def storage_fixture(root=None):
     if root is None:
@@ -50,38 +85,7 @@ def storage_fixture(root=None):
             if retain:
                 print('Retained disposable bind data: ' + str(root), flush=True)
             else:
-                try:
-                    shutil.rmtree(root)
-                except PermissionError:
-                    # Linux hosts need ownership returned from container UIDs.
-                    # A nonce and one explicit disposable bind keep this
-                    # metadata operation away from operator data.
-                    (root / '.test-storage').write_text(marker)
-                    script = '''import os, pathlib, stat, sys
-root=pathlib.Path('/persistent-data')
-assert root.joinpath('.test-storage').read_text()==sys.argv[1]
-uid,gid=int(sys.argv[2]),int(sys.argv[3])
-for base,dirs,files in os.walk(root):
- for path in [pathlib.Path(base),*(pathlib.Path(base)/p for p in dirs+files)]:
-  meta=path.lstat()
-  os.chown(path,uid,gid,follow_symlinks=False)
-  if not stat.S_ISLNK(meta.st_mode): path.chmod(stat.S_IMODE(meta.st_mode)|(0o700 if stat.S_ISDIR(meta.st_mode) else 0o600))
-'''
-                    # Rootless Podman maps the host user to container UID 0.
-                    owner = ('0', '0') if engine() == 'podman' else (str(os.getuid()), str(os.getgid()))
-                    # Do not reuse setup: its application-volume mounts would
-                    # recreate empty named volumes after the suite's shutdown.
-                    subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none',
-                                    '--user', '0:0', '--cap-drop', 'ALL',
-                                    '--cap-add', 'CHOWN', '--cap-add', 'FOWNER',
-                                    '--cap-add', 'DAC_OVERRIDE', '--read-only',
-                                    '--security-opt', 'no-new-privileges:true',
-                                    '--tmpfs', '/tmp:mode=1777',
-                                    '--mount', f'type=bind,source={root},target=/persistent-data',
-                                    '--entrypoint', '/opt/hermes/.venv/bin/python',
-                                    'private-hermes-agent:local', '-c', script, marker, *owner],
-                                   check=True)
-                    shutil.rmtree(root)
+                remove_storage_fixture(root, marker)
         finally:
             if previous is None:
                 os.environ.pop('TEST_DATA_DIR', None)

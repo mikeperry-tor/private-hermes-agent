@@ -249,6 +249,12 @@ networks. This covers `make up`, offline setup and treasury jobs, and
   (Podman 5.4.2's Docker-compatible API does not enforce
   `create_host_path: false`).
 
+Managed startup adds configured project binds only to the executor. It checks
+sources against the local engine's filesystem view before starting containers,
+then checks the selected mount sources again before creating the executor.
+Project shares grant the executor write access to host files under the chosen
+directories. See [permissions for shared projects](configuration.md#permissions-for-shared-projects).
+
 Compose creates networks through Podman's Docker-compatible API, which preserves
 only `isolate=true` and drops other bridge options. Before Compose creates
 containers, `deployment.ensure_networks()` creates the project's networks

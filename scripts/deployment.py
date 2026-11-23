@@ -127,13 +127,15 @@ def check_engine():
         if not (host.get('remoteSocket') or {}).get('exists'):
             raise EngineError('Enable the user Podman API socket: systemctl --user enable --now podman.socket')
         try:
-            provider = _output(*compose_base(), 'version')
+            provider = subprocess.run([*engine_command(), '--log-level=debug', 'compose', 'version'],
+                                      cwd=ROOT, text=True, capture_output=True, check=True,
+                                      env={**os.environ, 'PODMAN_COMPOSE_WARNING_LOGS': 'true'})
         except (OSError, subprocess.CalledProcessError) as error:
             raise EngineError('podman compose needs Docker Compose 2.36 or later as its provider.') from error
-        if 'Docker Compose' not in provider or _version(provider.rsplit(' ', 1)[-1]) < (2, 36, 0):
+        if 'Docker Compose' not in provider.stdout or _version(provider.stdout.rsplit(' ', 1)[-1]) < (2, 36, 0):
             raise EngineError('podman compose needs Docker Compose 2.36 or later as its provider '
                               '(PODMAN_COMPOSE_PROVIDER or compose_providers in containers.conf).')
-        return
+        return info, provider.stderr
     reaches_podman = EngineError('The docker command reaches Podman. Set CONTAINER_ENGINE=podman to use Podman.')
     try:
         if _output('docker', '--version').lower().startswith('podman'):
@@ -560,15 +562,18 @@ def inspect_launch(command, launch, *, dry_run=False, require_offline=False):
         if launch.no_deps and targets and name not in targets:
             continue
         launch_services[name] = service
-        mounts = {mount['target']: mount for mount in service.get('volumes', [])}
-        if action == 'run' and name == targets[0]:
+        mounts = {mount['target'].replace('$$', '$'): mount for mount in service.get('volumes', [])}
+        run_target = action == 'run' and name == targets[0]
+        if run_target:
             for destination, source in overrides.items():
                 mounts[destination] = {'type': 'bind', 'source': source,
                                        'bind': {'create_host_path': False}} if source else {'type': 'volume'}
-        for mount in mounts.values():
+        for destination, mount in mounts.items():
             if mount['type'] != 'bind' or mount.get('bind', {}).get('create_host_path', True):
                 continue
             source = mount.get('source')
+            if source and not (run_target and destination in overrides):
+                source = source.replace('$$', '$')
             if not source or not Path(source).exists():
                 raise RuntimeError(f'Required bind source missing for service {name}: {source}. '
                                    'Restore the source or run its documented initialization before launching.')

@@ -28,6 +28,7 @@ class Settings:
     node: str
     external_content: str
     teep: bool
+    executor_bind_mounts: str = ''
 
     @classmethod
     def read(cls, values):
@@ -63,7 +64,8 @@ class Settings:
         if public_port not in (443, 8443, 10000):
             raise ValueError('TAILSCALE_FUNNEL_PORT must be 443, 8443 or 10000')
         teep = boolean(values.get('teep_enabled', 'true'), 'TEEP_ENABLED')
-        return cls(onion, funnel, bind, local_port, username, host, public_port, node, external_content, teep)
+        return cls(onion, funnel, bind, local_port, username, host, public_port, node, external_content,
+                   teep, values.get('code_executor_bind_mounts', ''))
 
 
 def authorities(host, port_number, default_port):

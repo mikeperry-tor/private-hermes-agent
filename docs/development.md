@@ -21,8 +21,9 @@ execution boundaries, see [architecture and isolation](architecture.md). Read
 
 - `make init` creates missing local configuration while preserving existing
   files.
-- `make up` runs `make init`, builds images (using engine caching) for enabled
-  services and `x402_treazury`, runs offline `setup`, and starts services.
+- `make up` prepares host configuration, validates startup settings, builds
+  images for enabled services and `x402_treazury`, runs offline `setup`, and
+  starts services.
   `x402_treazury` is always built because its image supplies the default
   research policy.
 - `make x402_treazury-prepare` builds only the `x402_treazury` image before
@@ -131,6 +132,55 @@ project volumes and temporary bind directories, never operator data.
   `make webapp-test` covers UI, auth, terminals, and content containment;
   `make webapp-live-test` verifies live Tor image retrieval, outage, and
   recovery. See [webapp verification and qualification](webapp.md#verification-and-qualification).
+
+### Project mount tests
+
+The two-way sharing fixture covers both executor images on ARM64 macOS with
+Docker Desktop (Docker Engine 29.9.3) and on ARM64 Debian 13 with native Docker
+29.10.0 and rootless Podman 5.4.2. It passes with Docker Compose 2.36.0 and
+5.7.1. Docker Desktop shares directories from APFS, and the Linux fixtures use
+ext4 with POSIX ACLs. Creating a device node requires host permission, which
+was unavailable on the test hosts. See
+[native Linux Docker checks](#native-linux-docker-checks) for
+the scope of the other native Docker checks.
+
+Run `make check` for mount list and admission checks. To test read-write
+sharing on your engine, build the executor images and run the scratch
+projects:
+
+```sh
+COMPUTER_USE_ENABLED=false make build
+COMPUTER_USE_ENABLED=true make build
+python3 tests/project_mount_smoke.py
+```
+
+For rootless Podman, set `CONTAINER_ENGINE=podman` for the builds and the
+test. Use `--variant lean` or `--variant desktop` for one image,
+or `--compose-binary /path/to/docker-compose` to test another Compose
+version. Linux requires `libacl.so.1` and a local filesystem with POSIX
+ACLs. The test uses temporary projects and covers Compose path handling,
+source checks, Git operations, two-way edits, and behavior after source
+deletion. It prints the engine and Compose version and reports what the
+engine does if the source disappears just before creation.
+
+The managed startup test covers SSH-backed agent tools, authenticated Code
+terminal writes, executor exit and recovery through `make up`, and clearing
+all shares without shutting down the stack. Both executor images pass these
+checks on Docker Desktop, native Docker, and rootless Podman with Compose
+5.7.1. Stop stacks that use the fixed subnets before running the test.
+
+```sh
+python3 tests/project_mount_lifecycle.py --variant lean
+python3 tests/project_mount_lifecycle.py --variant desktop
+```
+
+Use the Playwright environment from [WebApp verification](webapp.md#verification-and-qualification)
+for the Code terminal check. With `--skip-browser`, the test reports that
+check as skipped. Pass `--prior-ref <local-git-revision>` to populate the
+disposable checkout using an older wrapper before testing the in-place
+upgrade. The scratch checkout uses the committed source at `HEAD` for the
+new wrapper. The recorded upgrade fixture covers the lean image on Docker
+Desktop from `5131b69`.
 
 ### Handling shared-namespace interruptions in tests
 

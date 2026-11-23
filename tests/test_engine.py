@@ -174,8 +174,12 @@ class EngineCommandTests(unittest.TestCase):
             raise AssertionError(key)
         deployment.check_engine.cache_clear()
         with patch.object(deployment, 'engine', return_value=selected), \
-                patch.object(deployment, '_output', side_effect=output):
-            deployment.check_engine()
+                patch.object(deployment, '_output', side_effect=output), \
+                patch.object(deployment.subprocess, 'run') as run:
+            if selected == 'podman':
+                provider = answers.get('podman --remote=false compose version', '')
+                run.return_value = subprocess.CompletedProcess([], 0, provider, 'provider log')
+            return deployment.check_engine()
 
     def podman(self, version='5.4.0', rootless=True, socket=True, provider='Docker Compose version v2.36.0'):
         return {'podman --remote=false info': json.dumps({'version': {'Version': version}, 'host': {
@@ -200,7 +204,9 @@ class EngineCommandTests(unittest.TestCase):
                 self.checked('docker', answers)
 
     def test_podman_must_be_local_rootless_with_socket_and_provider(self):
-        self.checked('podman', self.podman())
+        info, provider_log = self.checked('podman', self.podman())
+        self.assertTrue(info['host']['security']['rootless'])
+        self.assertEqual(provider_log, 'provider log')
         for answers, reason in ((self.podman(version='5.3.9'), '5.4'),
                                 (self.podman(rootless=False), 'rootless'),
                                 (self.podman(socket=False), 'podman.socket'),

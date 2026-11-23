@@ -58,7 +58,8 @@ init:
 build:
 	python3 scripts/stack.py build
 
-up: init
+up:
+	python3 scripts/init-config.py --host-only
 	python3 scripts/stack.py up
 
 down:

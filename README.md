@@ -285,6 +285,27 @@ independently isolated Tor circuits.
 > other than enabling this feature and politely asking your agent to send you
 > its remaining ZEC. **Be kind to your agents!**
 
+## Sharing directories with Private Hermes agents
+
+Share folders from your computer when you want an agent to work on an existing
+project. Add a comma-separated list of `host:executor` pairs to `.env`. For
+each pair, enter the absolute path on your computer first and the path the agent
+will use below `/mnt/projects/` second.
+
+```dotenv
+CODE_EXECUTOR_BIND_MOUNTS="/home/me/my-app:/mnt/projects/my-app,/home/me/notes:/mnt/projects/notes"
+```
+
+Use your own folder paths, then run `make down && make up`. Ask the agent to
+use its terminal to work in `/mnt/projects/my-app` or `/mnt/projects/notes`.
+Its edits update the files on your computer. To stop sharing a folder, remove
+its pair and run the same commands.
+
+See [project permissions](docs/configuration.md#permissions-for-shared-projects)
+for UID mappings and permission troubleshooting, and
+[project mount tests](docs/development.md#project-mount-tests) to check
+compatibility with your local engine.
+
 ## Web Page Previews
 
 By default, the Web UI uses a Content Security Policy and an internal Tor proxy

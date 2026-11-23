@@ -32,9 +32,10 @@ def initialize(root, wallet_only=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wallet', action='store_true', help='Prepare new-wallet Tor/network inputs without unrelated host paths')
+    parser.add_argument('--host-only', action='store_true', help='Prepare host files without rendering ingress configuration')
     args = parser.parse_args()
     initialize(Path(__file__).resolve().parents[1], wallet_only=args.wallet)
-    if not args.wallet:
+    if not args.wallet and not args.host_only:
         from deployment import render, settings
         config, _ = settings(allow_unused_teep=True)
         render(config)

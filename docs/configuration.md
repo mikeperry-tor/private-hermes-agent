@@ -27,6 +27,7 @@ Compose passes each setting only to the services that need it:
 | `TEEP_SERVE_ARGS` | Compose command arguments for `teep serve` |
 | `HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS`, `HERMES_INTEGRATIONS_LAN_ENDPOINTS` (default `none`) | Direct IPv4 TCP socket grants for Hermes |
 | `COMPUTER_USE_ENABLED` | Executor image and seccomp selection, and Hermes desktop and browser tool policy |
+| `CODE_EXECUTOR_BIND_MOUNTS` | Extra read-write directory mounts for the executor during managed startup |
 | `TS_AUTHKEY` | Optional `tailscale` container |
 | `WEBAPP_TERMINAL_ENVIRONMENT` | Deployment validation and `hermes` |
 | `WEBAPP_EXTERNAL_CONTENT` | Deployment validation, `hermes`, offline `setup`, and `webapp-proxy` |
@@ -202,6 +203,75 @@ uses display `:20` for every profile and shares the runner's browser profile, so
 concurrent profile desktops can interrupt one another. See
 [executor desktop qualification](development.md#executor-desktop-qualification)
 for test coverage and platform limits.
+
+## Permissions for shared projects
+
+Set up new shares using the [README workflow](../README.md#sharing-directories-with-private-hermes-agents).
+An empty `CODE_EXECUTOR_BIND_MOUNTS` adds no mounts. Paths may contain spaces.
+When a path contains literal dollar signs, single-quote the entire value in
+`.env`. For agent terminal working directories, use names with letters,
+numbers, hyphens, underscores, and spaces between words. Commas and colons
+separate entries and paths.
+Stop the stack before changing mounts on an existing executor. Run
+`make down && make up` after
+moving or replacing a shared directory, even if its path stays the same.
+
+Share independent project directories. Managed startup rejects paths around
+the deployment checkout, host control directories, and engine storage. It
+also rejects nested mounts, device nodes, sockets, and other special files
+inside a project. Keep credentials and hard links to protected files out of
+each project while it is shared. Keep host configuration and automation from
+following links into a shared project. For a separate local Git clone, use
+`git clone --no-hardlinks`. Review project hooks and automation before
+running them on the host. All executor sessions share write access, and host
+edits and agent edits can affect the same files. Back up these projects on
+the host.
+
+The executor runs project commands as `runner` with UID/GID `10000:10000`.
+Setup leaves project ownership, labels, modes, and ACLs under your control.
+Use the agent's terminal or the Code terminal for edits. Hermes's file tools
+can read project files, and their write policy still limits writes to
+`/opt/data`.
+
+| Engine | Permission behavior |
+| --- | --- |
+| Docker Desktop on macOS | Use the standard local Desktop socket and a directory on the home volume that Docker Desktop can share. Check file sharing and host permissions if the engine cannot mount the directory. |
+| Native Docker on Linux | Use the standard local Docker and containerd services with direct UID mapping. The host sees `runner` as UID `10000`. |
+| Rootless Podman on Linux | Use the local user API socket and default user namespace. The host sees `runner` as a subordinate UID. |
+
+Check `ls -ldn` in the executor to see how the mounted project appears to
+`runner`. On Linux, set `runner_uid=10000` for native Docker. For rootless
+Podman, derive the host ID from the default namespace:
+
+```sh
+runner_uid=$(podman unshare awk '$1 <= 10000 && 10000 < $1 + $3 { print $2 + 10000 - $1 }' /proc/self/uid_map)
+test -n "$runner_uid"
+```
+
+On Linux, use an ACL-capable ext4, XFS, or Btrfs filesystem mounted at its
+filesystem root. Install the host ACL utilities if needed. Grant access to
+the directories and files you intend to share. This example grants access
+to one directory and one existing file:
+
+```sh
+host_uid=$(id -u)
+project=/home/me/my-app
+setfacl -m "u:${runner_uid}:rwx,d:u:${runner_uid}:rwx,d:u:${host_uid}:rwx" "$project"
+setfacl -m "u:${runner_uid}:rw" "$project/notes.md"
+```
+
+Repeat the directory step for existing subdirectories that both users
+should write to. Default ACLs apply to new files and directories below
+them. A tool that creates private files with mode `0600` can keep the
+other writer out. Use `getfacl` to check the ACL and effective mask after
+an edit or rename. Confirm that the mounted source is the one you intended,
+and apply any filesystem security labels through the host's policy.
+
+If Git refuses a checkout because it belongs to the other user, trust that
+exact project path in the account that runs Git. For example, run
+`git config --global --add safe.directory /mnt/projects/my-app` in the
+executor for a host-owned checkout. Use only paths whose configuration and
+hooks you trust.
 
 ## Host inference access
 

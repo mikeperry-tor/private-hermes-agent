@@ -327,16 +327,17 @@ def check_published_ports(project, config, containers):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('project', nargs='?', default='private-hermes')
+    parser.add_argument('project', nargs='?')
     parser.add_argument('--funnel', action='store_true')
     parser.add_argument('--skip-ports', action='store_true')
     parser.add_argument('--services', nargs='+', help='Check the selected Compose services and their networks')
     arguments = parser.parse_args()
-    project = arguments.project
     check_engine()
-    command = [*compose_base(), '-p', project, *compose_files(arguments.funnel)]
+    options = ['-p', arguments.project] if arguments.project else []
+    command = [*compose_base(), *options, *compose_files(arguments.funnel)]
     config = json.loads(output(*command, 'config', '--format', 'json',
                                *(['--', *arguments.services] if arguments.services else [])))
+    project = arguments.project or config.get('name', 'private-hermes')
     check_security_options(config)
     check_pinned_networks(config)
     identifiers = output(*engine_command(), 'network', 'ls', '-q').split()

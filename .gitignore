@@ -1,6 +1,7 @@
 /.env
 /.operation.lock
 /config/
+/.executor-projects-*/
 /data/
 __pycache__/
 reference_repos/

@@ -7,6 +7,7 @@ x-hermes-build: &hermes-build
   dockerfile: components/hermes/Dockerfile
 
 x-deployment:
+  code_executor_bind_mounts: "${CODE_EXECUTOR_BIND_MOUNTS-}"
   teep_enabled: "${TEEP_ENABLED-true}"
   onion_enabled: "${TOR_ONION_ENABLED:-false}"
   funnel_enabled: "${TAILSCALE_FUNNEL_ENABLED:-false}"

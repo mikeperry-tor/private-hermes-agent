@@ -6,11 +6,13 @@ from pathlib import Path
 import subprocess
 import sys
 from deployment import (ROOT, check_bind_sources, check_engine, compose, compose_base, compose_files,
-                        inspect_launch, maintenance_command, maintenance_compose, prepare_launch,
+                        engine, engine_command, inspect_launch, maintenance_command, maintenance_compose, prepare_launch,
                         remove_networks, render, settings, split_passthrough)
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config, report_research_config_diff
+from project_mounts import (PROJECTS, SETTING, bind_sources, check_project_model, engine_views, parse_mounts,
+                            project_override, source_ids, validate_sources)
 
 
 def run(command, **kwargs):
@@ -50,6 +52,16 @@ def stop_funnel(all_command):
             raise RuntimeError('Stopped Tailscale, but could not confirm persistent Funnel reset. Inspect the node before re-enabling.')
     run(all_command + ['stop', 'tailscale'])
     run(all_command + ['rm', '-f', 'tailscale'])
+
+
+def require_same_project_mounts(command, mounts):
+    expected = {str(target): str(source) for target, source in mounts.items()}
+    for executor in capture(command + ['ps', '-a', '-q', 'executor']).splitlines():
+        volumes = json.loads(capture([*engine_command(), 'inspect', '--format', '{{json .Mounts}}', executor]))
+        attached = {volume['Destination']: volume['Source'] for volume in volumes
+                    if Path(volume['Destination']).is_relative_to(PROJECTS)}
+        if attached != expected:
+            raise ValueError(f'Run make down before applying changes to {SETTING}.')
 
 
 def main_unlocked():
@@ -101,52 +113,76 @@ def main_unlocked():
         run(command + rest)
         return
     config, prefix = settings(allow_unused_teep=args.action == 'up')
-    command = prefix + compose(config)
-    if args.action == 'config':
-        run(command + ['config', '--quiet'])
-    else:
-        # Refuse a wrong engine or an endpoint override before setup writes anything.
+    mounts = parse_mounts(config.executor_bind_mounts)
+    original_sources = {}
+    if args.action == 'up':
+        # Validate project sources before any build or container creation.
+        if mounts:
+            views, protected, mac_mounts = engine_views(engine(), Path.home().resolve())
+            base_command = prefix + compose(config, all_ingress=True)
+            model = json.loads(capture(base_command + ['--profile', '*', 'config', '--format', 'json']))
+            mounts, original_sources = validate_sources(mounts, ROOT, views,
+                                                         (*protected, *bind_sources(model)), mac_mounts)
         check_engine()
-        inference = ['teep'] if config.teep else []
-        funnel = ['tailscale'] if config.funnel else []
-        network_endpoints = ['agent-net', 'executor-net']
-        infrastructure = ['tor', *network_endpoints, 'executor', *inference]
-        application = ['webapp-proxy', 'hermes']
-        selected = [*infrastructure, *application, *funnel]
-        run_preflight([*prefix, sys.executable, 'scripts/preflight.py', *(['--funnel'] if funnel else []),
-                       '--services', *selected])
-        path = ROOT / 'config/webapp/auth.json'
-        if not path.is_file():
-            raise RuntimeError('Run make init before starting the stack.')
-        validate(json.loads(path.read_text()))
-        if inference:
-            require_inference_key(command)
-        # Build shared images before setup consumes them or services are changed.
-        # Include treasury even before preparation: setup/config seeding need it.
-        build = [service for service in selected if service not in network_endpoints] + ['x402_treazury']
-        run(command + ['build', *build])
-        render(config)
-        if not funnel:
-            stop_funnel(prefix + compose(config, all_ingress=True))
-        # A changed bind-mounted credential file does not itself recreate a
-        # completed container. Always apply current settings before startup.
-        initialize_research_config(command, ROOT)
-        report_research_config_diff(command, ROOT)
-        initialize_setup(command)
-        model = check_bind_sources(command, ['up', '--no-deps', *selected])
-        prepare_launch(command, model)
-        run(command + ['up', '-d', '--wait', '--no-deps', *infrastructure])
-        try:
-            run(command + ['exec', '-T', '--user', '65534:65534', 'tor', 'cat', '/tmp/local-grant-warnings'])
-        except subprocess.CalledProcessError:
-            print('Could not read local grant warnings. Check the tor service logs.', file=sys.stderr)
-        controller = Controller(command, ROOT)
-        # Setup already removed research registrations. The recreated gateway
-        # reads that configuration without needing an old gateway's control RPC.
-        run(command + ['up', '-d', '--no-deps', '--force-recreate', *application])
-        if funnel:
-            run(command + ['up', '-d', '--no-deps', *funnel])
-        controller.startup()
+    with project_override(mounts, ROOT) as extra:
+        command = prefix + compose(config, extra=extra)
+        if mounts:
+            check_project_model(json.loads(capture(command + ['config', '--format', 'json'])), mounts)
+        if args.action == 'config':
+            if not mounts:
+                run(command + ['config', '--quiet'])
+        else:
+            start_stack(config, prefix, command, mounts, original_sources)
+
+
+def start_stack(config, prefix, command, mounts, original_sources):
+    if mounts:
+        require_same_project_mounts(command, mounts)
+    inference = ['teep'] if config.teep else []
+    funnel = ['tailscale'] if config.funnel else []
+    network_endpoints = ['agent-net', 'executor-net']
+    infrastructure = ['tor', *network_endpoints, 'executor', *inference]
+    application = ['webapp-proxy', 'hermes']
+    selected = [*infrastructure, *application, *funnel]
+    run_preflight([*prefix, sys.executable, 'scripts/preflight.py', *(['--funnel'] if funnel else []),
+                   '--services', *selected])
+    path = ROOT / 'config/webapp/auth.json'
+    if not path.is_file():
+        raise RuntimeError('Run make init before starting the stack.')
+    validate(json.loads(path.read_text()))
+    if inference:
+        require_inference_key(command)
+    # Build shared images before setup consumes them or services are changed.
+    # Include treasury even before preparation: setup/config seeding need it.
+    build = [service for service in selected if service not in network_endpoints] + ['x402_treazury']
+    run(command + ['build', *build])
+    render(config)
+    if not funnel:
+        stop_funnel(prefix + compose(config, all_ingress=True))
+    # A changed bind-mounted credential file does not itself recreate a
+    # completed container. Always apply current settings before startup.
+    initialize_research_config(command, ROOT)
+    report_research_config_diff(command, ROOT)
+    initialize_setup(command)
+    model = check_bind_sources(command, ['up', '--no-deps', *selected])
+    prepare_launch(command, model)
+    if mounts:
+        check_project_model(model, mounts)
+        for source, identity in source_ids(mounts).items():
+            if identity != original_sources[source]:
+                raise ValueError(f'{SETTING} source changed before creation: {source}.')
+    run(command + ['up', '-d', '--wait', '--no-deps', *infrastructure])
+    try:
+        run(command + ['exec', '-T', '--user', '65534:65534', 'tor', 'cat', '/tmp/local-grant-warnings'])
+    except subprocess.CalledProcessError:
+        print('Could not read local grant warnings. Check the tor service logs.', file=sys.stderr)
+    controller = Controller(command, ROOT)
+    # Setup already removed research registrations. The recreated gateway
+    # reads that configuration without needing an old gateway's control RPC.
+    run(command + ['up', '-d', '--no-deps', '--force-recreate', *application])
+    if funnel:
+        run(command + ['up', '-d', '--no-deps', *funnel])
+    controller.startup()
 
 
 def main():
@@ -160,5 +196,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (ValueError, RuntimeError) as error:
+    except (OSError, ValueError, RuntimeError) as error:
         raise SystemExit(str(error))
