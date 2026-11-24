@@ -119,6 +119,8 @@ the agent from executed code, not tasks or tenants from each other.
   skill and cache synchronization.
 - SSH allows key-based authentication only, with a pinned host key. Password
   login, TCP forwarding, agent forwarding, tunnels, and root login are disabled.
+  The Hermes image packages its SSH client configuration as a root-owned file
+  so OpenSSH accepts it under the unprivileged Hermes account.
   The SSH daemon keeps only the capabilities required for privilege separation;
   executed code runs as UID 10000 with empty capability sets.
 

@@ -39,6 +39,7 @@ COPY components/hermes/managed_policy.py /opt/hermes/docker/private-managed-poli
 COPY components/hermes/external_content.py /opt/hermes/hermes_cli/private_external_content.py
 COPY components/hermes/public_images.py /opt/hermes/hermes_cli/private_public_images.py
 COPY components/hermes/browser_policy.py /opt/hermes/hermes_cli/private_browser_policy.py
+COPY --chown=0:0 --chmod=0644 components/hermes/ssh-client.conf /etc/ssh/ssh_config.d/99-private-hermes.conf
 # Keep the user-writable profile wrapper directory last so root s6, cont-init
 # and wrapper command lookup cannot execute profile content. Unique profile
 # wrapper names still resolve for the unprivileged application.

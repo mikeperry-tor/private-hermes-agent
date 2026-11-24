@@ -424,7 +424,6 @@ services:
         target: /run/agent-ssh
         read_only: true
         bind: {create_host_path: false}
-      - ./components/hermes/ssh-client.conf:/etc/ssh/ssh_config.d/99-private-hermes.conf:ro
       - ./components/hermes/resolv.conf:/etc/resolv.conf:ro
     environment:
       COMPUTER_USE_ENABLED: ${COMPUTER_USE_ENABLED-false}

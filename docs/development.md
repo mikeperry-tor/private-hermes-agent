@@ -404,10 +404,6 @@ CONTAINER_ENGINE=podman COMPUTER_USE_ENABLED=true WEBAPP_BROWSER_PYTHON=/path/to
   `python3 tests/webapp_smoke.py --terminal-only` (lean executor) or with
   `COMPUTER_USE_ENABLED=true` (desktop executor).
 
-When exporting repository archives to a test VM, use
-`git -c tar.umask=0022 archive` so tracked SSH configuration keeps mode `0644`
-as OpenSSH requires.
-
 ## Diagnostic messages
 
 Error and status messages should name the operation or capability, its impact,
