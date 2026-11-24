@@ -204,39 +204,36 @@ concurrent profile desktops can interrupt one another. See
 [executor desktop qualification](development.md#executor-desktop-qualification)
 for test coverage and platform limits.
 
-## Permissions for shared projects
+## Shared project setup
 
 Set up new shares using the [README workflow](../README.md#sharing-directories-with-private-hermes-agents).
 An empty `CODE_EXECUTOR_BIND_MOUNTS` adds no mounts. Paths may contain spaces.
 When a path contains literal dollar signs, single-quote the entire value in
 `.env`. For agent terminal working directories, use names with letters,
 numbers, hyphens, underscores, and spaces between words. Commas and colons
-separate entries and paths.
-Stop the stack before changing mounts on an existing executor. Run
-`make down && make up` after
-moving or replacing a shared directory, even if its path stays the same.
+separate entries and paths. Use paths without double quotes or control
+characters. Run `make down` before adding a share, changing the list while
+keeping shares, or moving or replacing a shared directory, even if its path
+stays the same. Then run `make up`. To remove all shares, clear the setting
+and run `make up`.
 
-Share independent project directories. Managed startup rejects paths around
-the deployment checkout, host control directories, and engine storage. It
-also rejects nested mounts, device nodes, sockets, and other special files
-inside a project. Keep credentials and hard links to protected files out of
-each project while it is shared. Keep host configuration and automation from
-following links into a shared project. For a separate local Git clone, use
-`git clone --no-hardlinks`. Review project hooks and automation before
-running them on the host. All executor sessions share write access, and host
-edits and agent edits can affect the same files. Back up these projects on
-the host.
+With shares configured, the executor stays stopped after an exit. Run
+`make up` to check the project sources and start it again. If the executor's
+network namespace owner also needs recovery, follow the
+[stack recovery procedure](architecture.md#failure-behavior-and-shared-namespace-restarts).
 
-The executor runs project commands as `runner` with UID/GID `10000:10000`.
+### Shared project filesystem permissions
+
 Setup leaves project ownership, labels, modes, and ACLs under your control.
 Use the agent's terminal or the Code terminal for edits. Hermes's file tools
 can read project files, and their write policy still limits writes to
 `/opt/data`.
 
+
 | Engine | Permission behavior |
 | --- | --- |
 | Docker Desktop on macOS | Use the standard local Desktop socket and a directory on the home volume that Docker Desktop can share. Check file sharing and host permissions if the engine cannot mount the directory. |
-| Native Docker on Linux | Use the standard local Docker and containerd services with direct UID mapping. The host sees `runner` as UID `10000`. |
+| Native Docker on Linux | Use the standard local Docker and containerd services with direct UID mapping and standard containerd storage. The host sees `runner` as UID `10000`. |
 | Rootless Podman on Linux | Use the local user API socket and default user namespace. The host sees `runner` as a subordinate UID. |
 
 Check `ls -ldn` in the executor to see how the mounted project appears to
@@ -247,6 +244,12 @@ Podman, derive the host ID from the default namespace:
 runner_uid=$(podman unshare awk '$1 <= 10000 && 10000 < $1 + $3 { print $2 + 10000 - $1 }' /proc/self/uid_map)
 test -n "$runner_uid"
 ```
+
+Native Docker uses containerd's system service at
+`/run/containerd/containerd.sock`, with data in `/var/lib/containerd` and
+state in `/run/containerd`. Use the packaged service command and snapshotter
+storage paths. Restart containerd after changing its configuration so the
+running service uses the settings that startup checks on disk.
 
 On Linux, use an ACL-capable ext4, XFS, or Btrfs filesystem mounted at its
 filesystem root. Install the host ACL utilities if needed. Grant access to
@@ -264,14 +267,104 @@ Repeat the directory step for existing subdirectories that both users
 should write to. Default ACLs apply to new files and directories below
 them. A tool that creates private files with mode `0600` can keep the
 other writer out. Use `getfacl` to check the ACL and effective mask after
-an edit or rename. Confirm that the mounted source is the one you intended,
-and apply any filesystem security labels through the host's policy.
+an edit or rename. The host user also needs permission to list and traverse
+each directory for the startup scan to complete. Confirm that the mounted
+source is the one you intended, and apply any filesystem security labels
+through the host's policy.
 
 If Git refuses a checkout because it belongs to the other user, trust that
 exact project path in the account that runs Git. For example, run
 `git config --global --add safe.directory /mnt/projects/my-app` in the
 executor for a host-owned checkout. Use only paths whose configuration and
-hooks you trust.
+hooks you trust. For a checkout the executor can modify, see
+[reviewing changes in the executor](#reviewing-changes-in-the-executor).
+
+## Security considerations for shared projects
+
+Host tools can run code from shared folders through build scripts, Git hooks,
+or editor tasks.
+
+In particular, when the executor can modify a checkout's `.git` directory,
+keep inspection of that checkout in the executor. Git configuration can launch
+programs during inspection, including through filesystem monitors or diff
+filters. Using `git -c core.hooksPath=/dev/null` on the host will override
+traditional hook files, but there are other ways to run code from a malicious
+repository's git commands beyond these traditional hooks. See [Git's
+security guidance](https://git-scm.com/docs/git#_security).
+
+This means you should always review executor-written files in the executor
+before using them on the host. This also applies to files in the built-in
+executor workspace and home that the stack bind-mounts in `data/executor`
+by default.
+
+### Reviewing changes in the executor
+
+The best way to review changes in the executor is currently through the
+WebApp: open the interactive **Code** terminal and go to the project
+directory. For example, run the following commands for a project at
+`/mnt/projects/my-app`. Use `/workspace` as the starting point for
+checkouts in the built-in workspace. See
+[terminal environment](webapp.md#terminal-environment) if the WebApp
+terminal is labeled **Agent**.
+
+```sh
+cd /mnt/projects/my-app
+git status --short
+git --no-pager diff
+git --no-pager diff --cached
+git --no-pager log -p -n 5
+```
+
+In WebApp chat or `make chat`, you can also ask the agent to run these
+commands with its terminal tool in the project directory and show the output.
+Both the **Code** terminal and the agent's terminal tool run Git inside the
+executor.
+
+### Host-side shared project security enforcement
+
+On the host side, the shared project directories must be independent. Keep
+host configuration and automation from following links into a share, and keep
+hard links to protected files out of it. Keep custom engine storage,
+configuration, and host executables outside shares. When preparing a share
+from a trusted local Git repository, use `git clone --no-hardlinks` to keep
+the object files independent.
+
+Before attaching an extra project directory, managed startup checks the host
+source for existing device nodes, sockets, other special files, and nested
+mounts. It rejects a share containing any of these or overlapping the
+deployment checkout, host control directories, or known engine storage. This
+scan only applies to `CODE_EXECUTOR_BIND_MOUNTS`. The built-in home and
+workspace mounts go through [offline setup](#offline-setup-and-maintenance).
+
+### Agent-side code executor shared project security enforcement
+
+All executor sessions can read, change, or delete shared files as host
+permissions allow. This includes the built-in `data/executor/workspace/`
+and `data/executor/home/` directories, even when you add no project mounts.
+Compromised software can change build scripts, Git hooks, or editor tasks
+that host tools later run with your account's permissions and network access.
+
+Agent commands run as `runner` with UID/GID `10000:10000` and no effective
+Linux capabilities. The `no-new-privileges` setting prevents them from
+gaining privileges by running a setuid binary or a binary with file
+capabilities.
+
+The root SSH listener uses `CHOWN` to assign ownership of remote terminals,
+`SETUID` and `SETGID` to start sessions as `runner`, and `SYS_CHROOT` to
+isolate clients before authentication. The desktop variant also uses
+`AUDIT_WRITE` to submit audit records for interactive terminals.
+See [executor capability requirements](architecture.md#executor-capability-requirements).
+
+While the executor runs, even UID 0 lacks `CAP_MKNOD`, so it cannot create a
+block or character device node in a bind mount. Creating a mount in the
+executor's main mount namespace requires `CAP_SYS_ADMIN`, which the service
+drops. On Linux, private bind propagation also keeps mounts made in the
+executor from appearing on the host. Linux allows processes to create named
+pipes and pathname sockets without either capability where permissions and
+the filesystem allow it. An entry added on either side after startup can
+appear on the other side. A later `make up` checks for entries left in an
+extra project directory.
+
 
 ## Host inference access
 
@@ -479,6 +572,9 @@ and run `make up`.
 Hermes state (`hermes-data`) and `x402_treazury` wallet state
 (`x402_treazury-data`) live in container-engine named volumes; other persistent
 files live in bind directories under `data/` and `config/`.
+
+When working with files from the executor workspace or home on the host,
+review the [risks of opening executor-written files](#security-considerations-for-shared-projects).
 
 | Storage | Contents |
 | --- | --- |

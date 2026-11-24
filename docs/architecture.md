@@ -117,6 +117,9 @@ the agent from executed code, not tasks or tenants from each other.
 - The executor's browser profile stays in its persistent home mount and is
   excluded from SSH sync-back archives so live socket symlinks do not break
   skill and cache synchronization.
+- The built-in home and workspace mounts hold files that executor code can
+  change. Review those files before using host tools that can run them. See
+  [reviewing changes in the executor](configuration.md#reviewing-changes-in-the-executor).
 - SSH allows key-based authentication only, with a pinned host key. Password
   login, TCP forwarding, agent forwarding, tunnels, and root login are disabled.
   The Hermes image packages its SSH client configuration as a root-owned file
@@ -253,7 +256,7 @@ Managed startup adds configured project binds only to the executor. It checks
 sources against the local engine's filesystem view before starting containers,
 then checks the selected mount sources again before creating the executor.
 Project shares grant the executor write access to host files under the chosen
-directories. See [permissions for shared projects](configuration.md#permissions-for-shared-projects).
+directories. See [security considerations for shared projects](configuration.md#security-considerations-for-shared-projects).
 
 Compose creates networks through Podman's Docker-compatible API, which preserves
 only `isolate=true` and drops other bridge options. Before Compose creates

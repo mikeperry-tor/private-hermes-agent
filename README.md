@@ -298,11 +298,23 @@ CODE_EXECUTOR_BIND_MOUNTS="/home/me/my-app:/mnt/projects/my-app,/home/me/notes:/
 
 Use your own folder paths, then run `make down && make up`. Ask the agent to
 use its terminal to work in `/mnt/projects/my-app` or `/mnt/projects/notes`.
-Its edits update the files on your computer. To stop sharing a folder, remove
-its pair and run the same commands.
+Its edits update the files on your computer. See the
+[shared project setup](docs/configuration.md#shared-project-setup) for applying
+changes and removing shares.
 
-See [project permissions](docs/configuration.md#permissions-for-shared-projects)
-for UID mappings and permission troubleshooting, and
+Share only folders whose contents the agent and any software it runs may
+read, change, or delete. Keep credentials outside shared folders and keep
+backups. Review changes before using host tools that can run project scripts,
+Git hooks, or editor tasks. The same risk applies when you work on the host
+with files from `data/executor/workspace/` or `data/executor/home/`, even if
+you never set `CODE_EXECUTOR_BIND_MOUNTS`.
+
+Review Git changes in the WebApp's **Code** terminal, or ask the agent to use
+its terminal tool in chat. See [reviewing changes in the executor](docs/configuration.md#reviewing-changes-in-the-executor)
+and [Git's security guidance](https://git-scm.com/docs/git#_security).
+
+See [project permissions](docs/configuration.md#shared-project-filesystem-permissions)
+for UID mappings and permission troubleshooting. Run the
 [project mount tests](docs/development.md#project-mount-tests) to check
 compatibility with your local engine.
 

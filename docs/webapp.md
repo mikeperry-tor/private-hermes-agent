@@ -375,6 +375,7 @@ By default (`WEBAPP_TERMINAL_ENVIRONMENT=code`), the WebApp terminal is labeled
 **Code** and opens an interactive `runner` bash shell inside the SSH executor
 at `/workspace`. With `COMPUTER_USE_ENABLED=true`, it opens in the desktop
 executor without attaching to a graphical terminal or inheriting `DISPLAY`.
+Use **Code** to [review Git changes inside the executor](configuration.md#reviewing-changes-in-the-executor).
 
 Set `WEBAPP_TERMINAL_ENVIRONMENT=agent`, run `make up`, and reload browser tabs
 for an **Agent** terminal inside Hermes with administrative access to
