@@ -981,6 +981,7 @@ class EngineDependentCheckTests(unittest.TestCase):
 
     def test_preflight_probes_for_a_non_container_listener(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind(('127.0.0.1', 0))
             listener.listen()
             port = listener.getsockname()[1]
@@ -991,6 +992,20 @@ class EngineDependentCheckTests(unittest.TestCase):
             message = str(raised.exception)
             self.assertIn('Host port conflict', message)
             self.assertIn('TEEP_HOST_PORT', message)
+
+    def test_preflight_accepts_a_tcp_port_after_the_listener_closes(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            with socket.create_connection(('127.0.0.1', port)) as client:
+                connection, _ = listener.accept()
+                connection.close()
+                self.assertEqual(client.recv(1), b'')
+        config = {'services': {'webapp-proxy': {'ports': [
+            {'host_ip': '127.0.0.1', 'published': str(port), 'protocol': 'tcp'}]}}}
+        preflight.check_published_ports('private-hermes', config, [])
 
     def test_preflight_accepts_an_available_published_port(self):
         config = {'services': {'teep': {'ports': [

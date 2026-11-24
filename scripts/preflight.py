@@ -300,7 +300,11 @@ def check_published_ports(project, config, containers):
             kind = socket.SOCK_STREAM if protocol == 'tcp' else socket.SOCK_DGRAM
             with socket.socket(family, kind) as probe:
                 try:
+                    if kind == socket.SOCK_STREAM:
+                        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     probe.bind((host_ip, port))
+                    if kind == socket.SOCK_STREAM:
+                        probe.listen(1)
                 except OSError as error:
                     # A privileged or otherwise unbindable address is left to the engine.
                     if error.errno != errno.EADDRINUSE:
