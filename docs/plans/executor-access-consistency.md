@@ -593,12 +593,20 @@ to match the final image. Recheck the documented reason for the empty Hermes
   **Add to chat**. Saved gateway checks covered relay sockets and renderer
   dispatch. Full WebApp qualification on Docker Desktop and rootless Podman
   remains open.
-- The SSH file-state design review found host filesystem reads in overwrite
-  protection, read tracking, and the path checks for credentials, device
-  files, instruction files, and skills. The next change uses executor file
-  state to establish a complete read baseline and refuses writes when SSH
-  cannot establish the target state. Managed write roots and shared file
-  permissions remain in the workspace topic.
+- SSH `read_file` checks the requested and canonical paths on the executor
+  and reads the page and digest through the same descriptor. Read baselines
+  use the SSH endpoint and file version. The native topic is
+  `eb93959ce81702c6156537a53d91b9c82f808546`, the release topic is
+  `88e56b429ec2e283e1efd33a96236177de00fc38`, and the combined replay is
+  `81c3873f1dee1ef919be6ee1b15870d92cb7a00d`. Both trees passed 129 focused
+  tests with eight skips. The image built from this replay passed the Docker
+  Desktop ARM64 OpenSSH fixture with separate Hermes and executor filesystems.
+  The fixture checked canonical reads, credential and special-file refusal,
+  pagination, and programmatic reads. The WebApp and TUI output hashes match
+  the preceding shell package. The exported
+  patch SHA-256 is `1f247348e2c7fa56b5a90d2e5b2509ed93a1b3b23fd05c22916c3c8d35f59bfc`.
+  SSH search results and write guards remain open. Managed write roots and
+  shared file permissions remain in the workspace topic.
 - The classic chat now reads the shell directory from its session owner in
   both managed modes. The local topic is `c4700df74951bf75dfb9bc5b2332c7f6397d98cc`,
   the release topic is `b20fe45d957aa561175138cc3e18e6aa220cb20c`, and the
@@ -624,6 +632,13 @@ to match the final image. Recheck the documented reason for the empty Hermes
   to verify foreground process termination, draft retention, and Ctrl+G
   submission for executor shortcuts in both modes and for a Code `!` command.
   The full `make chat` lifecycle test remains open.
+- Linux ARM64 rootless Podman 5.4.2 passed `make test` and the Chromium,
+  Firefox, and WebKit matrix in `make webapp-test` with the shell package from
+  wrapper `1afca1c9a16be48e8940e1271d894aab943b9849`. A Linux Docker lean
+  upgrade fixture passed classic and TUI commands in Code and Agent modes
+  and a Code WebApp write to a shared project. The gateway remained absent
+  from owner discovery after the final Code recreation in that fixture. A
+  shorter Code to Agent to Code fixture passed on the same engine.
 
 ### Completion checks
 

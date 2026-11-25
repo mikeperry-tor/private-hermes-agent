@@ -201,7 +201,7 @@ for `PR7`). The author identity is
 | Topic | Draft | Submission branch | Head | Review base |
 | --- | --- | --- | --- | --- |
 | PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | Upstream main |
-| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `76f7e68e2a74a3ef021cf446335dd3fa5cb8b600` | Upstream main |
+| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `eb93959ce81702c6156537a53d91b9c82f808546` | Upstream main |
 | PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | PR1 |
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
@@ -237,7 +237,7 @@ tree, including the Doctor module, passed 590 Python tests with 21 skips
 and the same three baseline failures. Exact-tip and baseline logs are in
 `upstream_work/pr2-split-evidence/`.
 
-For checkpoint refusal and the v0.23.3 replay, see
+For SSH checkpoint refusal, guarded file reads, and the local v0.23.3 replay, see
 [executor access qualification](executor-access-consistency.md#phase-1-progress).
 
 PR2b makes Doctor probe the terminal's port when an explicit SSH file is
@@ -324,7 +324,7 @@ Upstream package boundaries:
 | Package | Purpose | Responsibilities |
 | --- | --- | --- |
 | PR1 | Preserve instance configuration policy while reading or reloading profile settings | Strict managed reads, validated snapshots, dotenv precedence and routed interpolation |
-| PR2a | Preserve SSH workspace sync and missing-file behavior | Browser-profile sync exclusion and missing-path handling |
+| PR2a | Preserve SSH workspace sync and check files on the executor | Browser-profile sync exclusion, missing-path handling, and guarded `read_file` snapshots |
 | PR2b | Let operators select explicit SSH client trust | `terminal.ssh_config`, shared across model SSH operations, workspace access, streams, and Doctor |
 | PR3a | Fix sandbox desktop probes, CUA placement, and Chromium recovery | Independent binary/`DISPLAY` probes and viewer blockers, CUA terminal permission/lease pinning, sandbox Chromium DevTools/`SingletonLock` recovery and two-token arg preservation |
 | PR3b | Keep desktop/browser automation on the terminal executor | `browser.require_sandbox`, executor-side browser-harness runner (`browser.executor_python`, `browser.executor_workspace`), managed `bot_desktop.executor_only` and `sandbox.json` owner binding |
@@ -350,18 +350,18 @@ The stack's tracked v0.23.3 patch was exported from the combined replay below.
 For a later release, use the
 [candidate patch update workflow](../update-workflow.md#rebuild-the-candidate-patch-for-a-new-release).
 
-| Branch under `stack-patches/v0.23.3/` | Head | Commits | Scope |
+| Local branch under `stack-patches/v0.23.3/` | Head | Commits | Scope |
 | --- | --- | --- | --- |
 | `managed-config` (PR1) | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
-| `executor-desktop-browser` (PR3) | `3aa5db2279f56e891e4e5108028e7603a129e7f1` | 15 | SSH fixes, checkpoint refusal, and desktop and browser placement |
+| `executor-desktop-browser` (PR3) | `88e56b429ec2e283e1efd33a96236177de00fc38` | 16 | SSH file reads, checkpoint refusal, and desktop and browser placement |
 | `executor-terminals` (PR4) | `b886b1b648231e528a174a01c35f733548debf11` | 13 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
-- Combined replay: `stack-patches/v0.23.3/combined`
-  `58f19c2b7d7b98979a705910514567fa1053be80` (44 commits).
+- Local combined replay: `stack-patches/v0.23.3/combined`
+  `81c3873f1dee1ef919be6ee1b15870d92cb7a00d` (46 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).
@@ -401,7 +401,7 @@ reviews cover the combined topics, managed scope, release parity and the
 local branch handoff. Current operating limits are recorded in the
 [qualification guide](../development.md#packaged-hermes-qualification). See
 [executor access qualification](executor-access-consistency.md#phase-1-progress)
-for the checkpoint replay.
+for the newer executor access replay and its package checks.
 
 The local submission branches and drafts are prepared. Submission and
 qualification against the first official release carrying the accepted changes

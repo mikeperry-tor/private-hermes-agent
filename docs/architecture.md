@@ -384,9 +384,10 @@ and wrapper lookups prefer system directories, preventing a UID-10000 executable
 from shadowing a root service command while still resolving uniquely named
 wrappers.
 
-Other Hermes options have narrower scopes and are not part of this stack's
-execution boundary:
+Hermes tools and configuration provide these additional controls.
 
+- With the SSH backend, `read_file` resolves paths and checks protected files on the executor.
+  It records complete, unredacted text reads by SSH endpoint and file version.
 - `HERMES_WRITE_SAFE_ROOT` limits destination paths for tools such as
   `write_file` and `patch`. The SSH backend selects where model commands run.
   The executor mounts and runner permissions govern access to shared files.

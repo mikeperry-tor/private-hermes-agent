@@ -290,7 +290,7 @@ The derived Hermes image builds from official Hermes v0.23.3
 build verifies the ARM64 source stamp and renderer receipt against official
 source hash `03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`
 before applying the [downstream patches](updates-and-plugins.md#downstream-responsibility-inventory).
-The executor access replay `58f19c2b7d7b98979a705910514567fa1053be80` produces
+The local executor access replay `81c3873f1dee1ef919be6ee1b15870d92cb7a00d` produces
 WebApp source hash `18a05aad0be750ec2becb54a42fc71cfec80192c990a7233964cdeabc465739d`
 and TUI source hash `07604be7ad1b3d8e6b27127491f4fd70eabf03b9fe4607deac6e448c7c378309`.
 See [executor access qualification](plans/executor-access-consistency.md#phase-1-progress)
@@ -514,7 +514,7 @@ base preserved for PR7).
 | Candidate | Recorded passing checks | Scope |
 | --- | --- | --- |
 | PR1: managed configuration | Config and profile unit tests, and Docker and Podman managed-policy image fixtures | Strict reads, dotenv bootstrap and reload precedence, routed interpolation, secret ownership |
-| PR2a: SSH workspace fixes | Sync and workspace tests, and packaged shell and HTTP checks | Browser-profile sync exclusion and missing-file `ENOENT` and 404 |
+| PR2a: SSH workspace fixes | Sync tests, packaged shell and HTTP checks, and [guarded SSH reads](plans/executor-access-consistency.md#phase-1-progress) | Browser-profile sync exclusion, missing-file `ENOENT` and 404, and protected paths and whole-file baselines in `read_file` |
 | PR2b: explicit SSH client config | SSH environment and config tests, and packaged shell checks | Pinned SSH client options across terminal, workspace, streams, and Doctor |
 | PR3: executor desktop and browser | 224 Python tests, 6 desktop renderer tests, browser and SSH suites, live SSH Chromium checks | Cold executor discovery, viewer identity, warm CUA driver, named-profile RFB, raw CDP refusal, vault lease, scratch, screenshots, sandboxing |
 | PR4: operator terminals and exact `cwd` | 80 Python tests, 95 terminal renderer tests, live SSH checks | Placement pinning, rollback refusal, Bash and `cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |
