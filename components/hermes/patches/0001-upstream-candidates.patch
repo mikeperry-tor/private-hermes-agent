@@ -1,9 +1,5 @@
-Runtime and renderer changes from the upstream PR1–PR6 combined replay.
-Base: caafe5389ae585ef77387a962aee05b1bcf17029
-Head: e1d5320d2cd6095f25e67004b1bcd1586258f14a
-
 diff --git a/agent/agent_init.py b/agent/agent_init.py
-index fa4c1e24a000e9273b889982236fe675059d3ac1..d48bdd3083dfb4f3b38c35e981e352d335d2442e 100644
+index fa4c1e24a..d48bdd308 100644
 --- a/agent/agent_init.py
 +++ b/agent/agent_init.py
 @@ -1016,16 +1016,9 @@ def _load_tools(agent, enabled_toolsets, disabled_toolsets):
@@ -70,7 +66,7 @@ index fa4c1e24a000e9273b889982236fe675059d3ac1..d48bdd3083dfb4f3b38c35e981e352d3
              agent.tools.append({"type": "function", "function": _schema})
              for _names in (agent.valid_tool_names, agent._context_engine_tool_names, _existing_tool_names):
 diff --git a/agent/background_review.py b/agent/background_review.py
-index 83d5bb2c08b60aa930298c1d9bb6982962412d1a..037509d62cdc8847e103888510d705788a872170 100644
+index 83d5bb2c0..037509d62 100644
 --- a/agent/background_review.py
 +++ b/agent/background_review.py
 @@ -1047,21 +1047,24 @@ def _fork_init_kwargs(agent: Any, rt: dict[str, Any], routed: bool, max_iteratio
@@ -248,7 +244,7 @@ index 83d5bb2c08b60aa930298c1d9bb6982962412d1a..037509d62cdc8847e103888510d70578
              )
      finally:
 diff --git a/agent/checkpoints/manager.py b/agent/checkpoints/manager.py
-index f39334cc679ae901f75b940b2303f2a544f4a2ff..d578451718419ff4ee86c28f9b637673ba04ee6c 100644
+index f39334cc6..d57845171 100644
 --- a/agent/checkpoints/manager.py
 +++ b/agent/checkpoints/manager.py
 @@ -924,12 +924,20 @@ class CheckpointManager:
@@ -278,7 +274,7 @@ index f39334cc679ae901f75b940b2303f2a544f4a2ff..d578451718419ff4ee86c28f9b637673
          if backend is None:
              return None
 diff --git a/agent/context_references.py b/agent/context_references.py
-index 9521c8d3391099d9c75f51b831898e3a4b9c9399..1f6656491ce554eef5a3534a0b76bd2c233cd305 100644
+index 9521c8d33..1f6656491 100644
 --- a/agent/context_references.py
 +++ b/agent/context_references.py
 @@ -26,6 +26,8 @@ from hermes_cli._subprocess_compat import (
@@ -348,7 +344,7 @@ index 9521c8d3391099d9c75f51b831898e3a4b9c9399..1f6656491ce554eef5a3534a0b76bd2c
  _GIT_REFERENCE_ARGS: dict[str, Callable[[ContextReference], list[str]]] = {
      "diff": lambda ref: ["diff"],
 diff --git a/agent/conversation_compression.py b/agent/conversation_compression.py
-index ea3f75acccb201216ade16c35947865bcacc1fa3..21234ebac469af9cf2ba7b6a3362519f120409d7 100644
+index ea3f75acc..21234ebac 100644
 --- a/agent/conversation_compression.py
 +++ b/agent/conversation_compression.py
 @@ -1517,11 +1517,7 @@ def _adopt_live_compression_child(
@@ -446,7 +442,7 @@ index ea3f75acccb201216ade16c35947865bcacc1fa3..21234ebac469af9cf2ba7b6a3362519f
              else:
                  # Bind old_session_id first: it is the rollback key in the handler below.
 diff --git a/agent/conversation_loop.py b/agent/conversation_loop.py
-index 0c2e904a691ff8b1b444a31a97c29b86625d531d..27558ff4a37a26197fb77dd7bc210906b0f55b67 100644
+index 0c2e904a6..27558ff4a 100644
 --- a/agent/conversation_loop.py
 +++ b/agent/conversation_loop.py
 @@ -23,7 +23,10 @@ from agent.message_sanitization import _repair_tool_call_arguments, _sanitize_su
@@ -563,7 +559,7 @@ index 0c2e904a691ff8b1b444a31a97c29b86625d531d..27558ff4a37a26197fb77dd7bc210906
 
  def _stored_prompt_matches_runtime(agent, prompt: str) -> bool:
 diff --git a/agent/inline_tool_executors.py b/agent/inline_tool_executors.py
-index 4494b5214c79be59bea3be92100218cebe6682b8..e59de1eb9f11aea795c618ae9312fea0b670d45f 100644
+index 4494b5214..e59de1eb9 100644
 --- a/agent/inline_tool_executors.py
 +++ b/agent/inline_tool_executors.py
 @@ -255,8 +255,12 @@ def _scope_in_connected_mcp_servers(agent, result: Any) -> None:
@@ -593,7 +589,7 @@ index 4494b5214c79be59bea3be92100218cebe6682b8..e59de1eb9f11aea795c618ae9312fea0
          return call_with_arg_checks(
              registry.get_entry(name), coerce_tool_args(name, args), lambda checked: executor(agent, checked, ctx))
 diff --git a/agent/memory_manager_tools.py b/agent/memory_manager_tools.py
-index 2e14a28f8c86c60a1bc0272916e428d1681b0ab3..faae38e85caf28ebd5179edf87f303fd76b8e2e3 100644
+index 2e14a28f8..faae38e85 100644
 --- a/agent/memory_manager_tools.py
 +++ b/agent/memory_manager_tools.py
 @@ -91,6 +91,8 @@ def inject_memory_provider_tools(agent: Any) -> int:
@@ -615,7 +611,7 @@ index 2e14a28f8c86c60a1bc0272916e428d1681b0ab3..faae38e85caf28ebd5179edf87f303fd
              agent.valid_tool_names.add(schema["name"])
              existing_tool_names.add(schema["name"])
 diff --git a/agent/plugin_session_fork.py b/agent/plugin_session_fork.py
-index ced9b7a71b6d6540078e1342324f700aed5b4f79..da18dcd12ca1f670d233374e2212bf66fe02be81 100644
+index ced9b7a71..da18dcd12 100644
 --- a/agent/plugin_session_fork.py
 +++ b/agent/plugin_session_fork.py
 @@ -192,7 +192,7 @@ def start_session_fork(
@@ -695,7 +691,7 @@ index ced9b7a71b6d6540078e1342324f700aed5b4f79..da18dcd12ca1f670d233374e2212bf66
              # The ceiling is the user's own review bound (auxiliary.background_review), never the
              # fork's routing block: that is {} without ``task`` and the plugin's own defaults with one.
 diff --git a/agent/prompt_builder.py b/agent/prompt_builder.py
-index ee94a97c2a3aaf30e13c2ca4f57421c1c55f9b6f..793c51f4397d6a0e36883c489cbc8d276fbaa89b 100644
+index ee94a97c2..793c51f43 100644
 --- a/agent/prompt_builder.py
 +++ b/agent/prompt_builder.py
 @@ -341,6 +341,29 @@ KANBAN_GUIDANCE = (
@@ -729,7 +725,7 @@ index ee94a97c2a3aaf30e13c2ca4f57421c1c55f9b6f..793c51f4397d6a0e36883c489cbc8d27
      "# Tool-use enforcement\n"
      "You MUST use your tools to take action — do not describe what you would do or plan to do without actually doing "
 diff --git a/agent/prompt_refresh.py b/agent/prompt_refresh.py
-index b32fb759524792150f90d6d8eb08ed1d3e50d0c8..419a03adc9fb22207efee3e842437ccf79f38ebe 100644
+index b32fb7595..419a03adc 100644
 --- a/agent/prompt_refresh.py
 +++ b/agent/prompt_refresh.py
 @@ -17,6 +17,7 @@ from __future__ import annotations
@@ -886,7 +882,7 @@ index b32fb759524792150f90d6d8eb08ed1d3e50d0c8..419a03adc9fb22207efee3e842437ccf
 +    if epoch > seen or policy_changed:
 +        rebuild_for_refresh(agent, system_message, conversation_history, epoch, policy_changed=policy_changed)
 diff --git a/agent/runtime_scope.py b/agent/runtime_scope.py
-index 475c69a9f7156a031aef82c8299414fae5d19455..d6f5f7b7f3c008347d27b92dbb963d7d6cc82e72 100644
+index 475c69a9f..d6f5f7b7f 100644
 --- a/agent/runtime_scope.py
 +++ b/agent/runtime_scope.py
 @@ -84,6 +84,7 @@ def bind_state(
@@ -944,7 +940,7 @@ index 475c69a9f7156a031aef82c8299414fae5d19455..d6f5f7b7f3c008347d27b92dbb963d7d
 
 
 diff --git a/agent/runtime_session_store.py b/agent/runtime_session_store.py
-index 3a5a8c08ac2da43805e59cff0e248046f0eee6a2..264175bf734c6f137853197fb87433e08a118998 100644
+index 3a5a8c08a..264175bf7 100644
 --- a/agent/runtime_session_store.py
 +++ b/agent/runtime_session_store.py
 @@ -476,9 +476,12 @@ class RuntimeSessionStore(RuntimeSessionCompressionMixin, RuntimeSessionLifecycl
@@ -963,7 +959,7 @@ index 3a5a8c08ac2da43805e59cff0e248046f0eee6a2..264175bf734c6f137853197fb87433e0
      def patch_session_model_config(self, session_id, patch):
          self._session(session_id)
 diff --git a/agent/secret_scope.py b/agent/secret_scope.py
-index 7a83145c28a50f78f13a774bf80191dd25ac0ab9..e9d8eabba178f6c400beadb2030b6c2e2b57aa0d 100644
+index 7a83145c2..e9d8eabba 100644
 --- a/agent/secret_scope.py
 +++ b/agent/secret_scope.py
 @@ -388,11 +388,12 @@ def _parse_env_text(text: str) -> dict[str, str]:
@@ -1006,7 +1002,7 @@ index 7a83145c28a50f78f13a774bf80191dd25ac0ab9..e9d8eabba178f6c400beadb2030b6c2e
      secrets.update((k, resolved[k]) for k in templated if k in resolved)
 
 diff --git a/agent/side_question_lease.py b/agent/side_question_lease.py
-index 7b1bed4a0b9c3bee104ed2a41edf2056ce6bd809..7480071b9e92912f31929260653dab5f13d4a16f 100644
+index 7b1bed4a0..7480071b9 100644
 --- a/agent/side_question_lease.py
 +++ b/agent/side_question_lease.py
 @@ -83,17 +83,28 @@ def issue_side_question_token(agent: Any, messages: list[dict[str, Any]], turn_i
@@ -1050,7 +1046,7 @@ index 7b1bed4a0b9c3bee104ed2a41edf2056ce6bd809..7480071b9e92912f31929260653dab5f
      now = time.monotonic()
      with _lock:
 diff --git a/agent/side_question_request.py b/agent/side_question_request.py
-index 1b58424675bac7d50688a35fba578f6b0d608c7f..2a69a58aee6753fa99252a8ce6c592f771a12c8f 100644
+index 1b5842467..2a69a58ae 100644
 --- a/agent/side_question_request.py
 +++ b/agent/side_question_request.py
 @@ -49,6 +49,27 @@ class SideQuestionCapture:
@@ -1116,7 +1112,7 @@ index 1b58424675bac7d50688a35fba578f6b0d608c7f..2a69a58aee6753fa99252a8ce6c592f7
          if assistant_message is None:
              return None
 diff --git a/agent/system_prompt.py b/agent/system_prompt.py
-index e0c2987eea6a350d550a6df9bbe11c00f52a3b4b..a50e480f19cb8630d0a80008b9349087dd795013 100644
+index e0c2987ee..a50e480f1 100644
 --- a/agent/system_prompt.py
 +++ b/agent/system_prompt.py
 @@ -21,7 +21,7 @@ from agent.delegation_context import owned_kanban_task
@@ -1171,7 +1167,7 @@ index e0c2987eea6a350d550a6df9bbe11c00f52a3b4b..a50e480f19cb8630d0a80008b9349087
              # user-initiated capability change in an eternal session.
              parts.append(epoch_line(_agent_home(agent)))
 diff --git a/agent/tool_executor.py b/agent/tool_executor.py
-index 55cbaae263b4297a8b3676b546f35919155fcb5f..a4b44a74df6c50cb297789e5effd45e7032de39e 100644
+index 55cbaae26..a4b44a74d 100644
 --- a/agent/tool_executor.py
 +++ b/agent/tool_executor.py
 @@ -98,11 +98,12 @@ def _ensure_file_checkpoint(agent, function_name: str, function_args: dict, effe
@@ -1239,7 +1235,7 @@ index 55cbaae263b4297a8b3676b546f35919155fcb5f..a4b44a74df6c50cb297789e5effd45e7
                      cwd = function_args.get("workdir") or scope_terminal_cwd() or os.getcwd()
                      agent._checkpoint_mgr.ensure_checkpoint(cwd, f"before terminal: {command[:60]}")
 diff --git a/agent/turn_context.py b/agent/turn_context.py
-index a9627f246ae6717f3ac7a101119af1c86f3dd941..1643ed2997fca6ce8cd4b0219849ba0f0e7ee77a 100644
+index a9627f246..1643ed299 100644
 --- a/agent/turn_context.py
 +++ b/agent/turn_context.py
 @@ -615,6 +615,11 @@ def _refresh_mcp_tools_between_turns(agent: Any) -> None:
@@ -1255,7 +1251,7 @@ index a9627f246ae6717f3ac7a101119af1c86f3dd941..1643ed2997fca6ce8cd4b0219849ba0f
          # ``tools.mcp_tool`` (~0.4s); not in sys.modules => nothing to do.
          if not getattr(agent, "_skip_mcp_refresh", False) and "tools.mcp_tool" in sys.modules:
 diff --git a/agent/turn_explainers.py b/agent/turn_explainers.py
-index 3c291196ab24b28279650c78b40c9a4687631f92..8e19902e88b5e26758432fc4746fa150d6f1ddba 100644
+index 3c291196a..8e19902e8 100644
 --- a/agent/turn_explainers.py
 +++ b/agent/turn_explainers.py
 @@ -132,6 +132,12 @@ class TurnExplainersMixin:
@@ -1290,7 +1286,7 @@ index 3c291196ab24b28279650c78b40c9a4687631f92..8e19902e88b5e26758432fc4746fa150
              # Keep the FIRST error per path unless a later success replaces it.
              preview = _extract_error_preview(result)
 diff --git a/agent/turn_stop_gates.py b/agent/turn_stop_gates.py
-index 7ac100a13bb500d13a71a05283ac6bc9b0ebef5b..653b98a188c3e626e65b727149ef07c7501fd4b4 100644
+index 7ac100a13..653b98a18 100644
 --- a/agent/turn_stop_gates.py
 +++ b/agent/turn_stop_gates.py
 @@ -38,8 +38,10 @@ def _verify_on_stop_nudge(agent) -> Optional[str]:
@@ -1305,9 +1301,58 @@ index 7ac100a13bb500d13a71a05283ac6bc9b0ebef5b..653b98a188c3e626e65b727149ef07c7
              return build_verify_on_stop_nudge(
                  session_id=getattr(agent, "session_id", None),
                  changed_paths=getattr(agent, "_turn_file_mutation_paths", set()),
+diff --git a/apps/desktop/src/app/right-sidebar/terminal/buffer.ts b/apps/desktop/src/app/right-sidebar/terminal/buffer.ts
+index 9ef74ac82..e0c037248 100644
+--- a/apps/desktop/src/app/right-sidebar/terminal/buffer.ts
++++ b/apps/desktop/src/app/right-sidebar/terminal/buffer.ts
+@@ -1,5 +1,7 @@
+ import type { Terminal } from '@xterm/xterm'
+
++import type { HermesTerminalReadScope } from '@/global'
++
+ // Serialized view of the in-app terminal, handed to the agent's `read_terminal`
+ // tool. Line indices are absolute into xterm's buffer (0 = oldest scrollback
+ // line), so the agent can page with start_line/count against `total_lines`.
+@@ -23,11 +25,12 @@ type Reader = (opts: TerminalReadOptions) => TerminalReadResult
+ // (driven by the tab selection) decides which one the agent's `read_terminal`
+ // tool sees. Keying by id keeps switching race-free — a deactivating tab's
+ // cleanup can't null out the tab that just activated.
+-const readers = new Map<string, Reader>()
++const readers = new Map<string, { read: Reader; executorScope?: () => HermesTerminalReadScope | null }>()
+ let activeId: string | null = null
+
+ /** Register a live terminal's reader; returns an idempotent unregister. */
+-export function registerTerminalReader(id: string, reader: Reader): () => void {
++export function registerTerminalReader(id: string, read: Reader, executorScope?: () => HermesTerminalReadScope | null): () => void {
++  const reader = { read, executorScope }
+   readers.set(id, reader)
+
+   return () => {
+@@ -41,10 +44,19 @@ export function setActiveTerminalId(id: string | null): void {
+   activeId = id
+ }
+
+-export function readActiveTerminal(opts: TerminalReadOptions = {}): TerminalReadResult | null {
++export function readActiveTerminal(opts: TerminalReadOptions = {}, scope?: HermesTerminalReadScope): TerminalReadResult | null {
+   const reader = activeId === null ? null : readers.get(activeId)
+
+-  return reader ? reader(opts) : null
++  if (scope) {
++    const verified = reader?.executorScope?.()
++
++    if (!verified || verified.profile !== scope.profile || verified.connectionId !== scope.connectionId ||
++        verified.relayReadScope !== scope.relayReadScope) {
++      return null
++    }
++  }
++
++  return reader ? reader.read(opts) : null
+ }
+
+ export function makeTerminalReader(term: Terminal): Reader {
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.test.ts b/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.test.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..e9157c1b01d8fdde2eb38d8332174f45b80a7e41
+index 000000000..e9157c1b0
 --- /dev/null
 +++ b/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.test.ts
 @@ -0,0 +1,13 @@
@@ -1325,7 +1370,7 @@ index 0000000000000000000000000000000000000000..e9157c1b01d8fdde2eb38d8332174f45
 +  expect(parseOscCwd(9, '9;"C:\\ leading space\\directory"')).toBe('C:\\ leading space\\directory')
 +})
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.ts b/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.ts
-index ca0fc5e481d9ead47cfce36aad61b2ab4a25ed8c..01183000f12cb67f9ac3798bb15742177519dd08 100644
+index ca0fc5e48..01183000f 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.ts
 +++ b/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.ts
 @@ -21,13 +21,13 @@ export function parseOscCwd(code: 7 | 9, payload: string): string | null {
@@ -1354,7 +1399,7 @@ index ca0fc5e481d9ead47cfce36aad61b2ab4a25ed8c..01183000f12cb67f9ac3798bb1574217
      if (!value || value === lastObservedCwdRef.current) {
        return
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/rail-new-terminal.tsx b/apps/desktop/src/app/right-sidebar/terminal/rail-new-terminal.tsx
-index 7efa51c5840faefea80eb92742fb569c9dff5105..5c4e5938409e42703f4ee8d581654b5787364af6 100644
+index 7efa51c58..5c4e59384 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/rail-new-terminal.tsx
 +++ b/apps/desktop/src/app/right-sidebar/terminal/rail-new-terminal.tsx
 @@ -35,8 +35,10 @@ type GatewayChoice = Pick<DesktopRegistryConnection, 'id' | 'kind' | 'label'>
@@ -1370,7 +1415,7 @@ index 7efa51c5840faefea80eb92742fb569c9dff5105..5c4e5938409e42703f4ee8d581654b57
 
    createTerminal(sameHost ? undefined : '', gateway)
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/terminal-gateway.ts b/apps/desktop/src/app/right-sidebar/terminal/terminal-gateway.ts
-index 63a22e4462c8365123d20d97d26f86f172d8d5dd..4cd28962df42f87e1a087e5064e498b7d29f96f0 100644
+index 63a22e446..4cd28962d 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/terminal-gateway.ts
 +++ b/apps/desktop/src/app/right-sidebar/terminal/terminal-gateway.ts
 @@ -2,22 +2,21 @@ import { LOCAL_CONNECTION_ID } from '@hermes/shared'
@@ -1435,7 +1480,7 @@ index 63a22e4462c8365123d20d97d26f86f172d8d5dd..4cd28962df42f87e1a087e5064e498b7
 
  // New tabs record this gateway, and entering a session re-selects a tab in its
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/terminal-ownership.test.ts b/apps/desktop/src/app/right-sidebar/terminal/terminal-ownership.test.ts
-index aba0ce870aee0d19081edd1e4b145f063a65f5b1..07ac35467185d34d8f4ba491f0b643687c24aeba 100644
+index aba0ce870..07ac35467 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/terminal-ownership.test.ts
 +++ b/apps/desktop/src/app/right-sidebar/terminal/terminal-ownership.test.ts
 @@ -60,6 +60,64 @@ beforeEach(() => {
@@ -1504,10 +1549,15 @@ index aba0ce870aee0d19081edd1e4b145f063a65f5b1..07ac35467185d34d8f4ba491f0b64368
      const stores = await loadStores()
      stores.$connectionsRegistry.set(registryWith({ host: 'nas.example', id: 'nas' }))
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/terminal-session-attempt.ts b/apps/desktop/src/app/right-sidebar/terminal/terminal-session-attempt.ts
-index d033ab65e7dfc3be02b06e693117532d43a21446..f7267ef90522515277b830cecb80eb10365be262 100644
+index d033ab65e..8bf05623b 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/terminal-session-attempt.ts
 +++ b/apps/desktop/src/app/right-sidebar/terminal/terminal-session-attempt.ts
-@@ -5,7 +5,7 @@ import type { HermesTerminalSession } from '@/global'
+@@ -1,11 +1,11 @@
+ import type { Terminal } from '@xterm/xterm'
+ import type { RefObject } from 'react'
+
+-import type { HermesTerminalSession } from '@/global'
++import type { HermesTerminalReadScope, HermesTerminalSession } from '@/global'
  import { translateNow } from '@/i18n'
  import { hostHas } from '@/lib/host-capabilities'
 
@@ -1516,7 +1566,28 @@ index d033ab65e7dfc3be02b06e693117532d43a21446..f7267ef90522515277b830cecb80eb10
  import { $terminals, adoptTerminalGateway, markTerminalPersistent, removeExitedTerminal } from './terminals'
 
  type TerminalApi = Window['hermesDesktop']['terminal']
-@@ -297,7 +297,7 @@ export function createSessionAttemptController(
+@@ -70,6 +70,7 @@ export interface SessionAttemptController {
+   input: (data: string) => void
+   /** Whether the current shell is server-owned (replayed and resumed by the server). */
+   isPersistent: () => boolean
++  executorReadScope: () => HermesTerminalReadScope | null
+   /** Release the current attempt: unsubscribe, then detach or dispose its shell. */
+   release: () => void
+   start: () => void
+@@ -193,6 +194,12 @@ export function createSessionAttemptController(
+         restoreHistory()
+         attemptSessionId = session.id
+         sessionIdRef.current = session.id
++        if (terminalApi.executorReadScope?.(session.id)) {
++          // Finish clearing the previous attempt's output before the model
++          // may read this executor buffer.
++          ++replayWrites
++          term.write('\u001bc', () => { --replayWrites })
++        }
+         onStarted(session)
+
+         subscriptions.push(
+@@ -297,7 +304,7 @@ export function createSessionAttemptController(
          } else if (signal === 'expired') {
            resumeOnly = false
            armRetry(TERMINAL_EXIT_MESSAGES.expired)
@@ -1525,8 +1596,20 @@ index d033ab65e7dfc3be02b06e693117532d43a21446..f7267ef90522515277b830cecb80eb10
            // A browser host or an SSH gateway can come back (host offline,
            // tunnel still connecting): Enter tries again.
            armRetry(`Terminal failed to start: ${message}. Press Enter to retry.`)
+@@ -332,6 +339,11 @@ export function createSessionAttemptController(
+   }
+
+   return {
++    executorReadScope: () => {
++      const id = sessionIdRef.current
++
++      return id && !replayWrites && !isReplayingHistory() ? terminalApi.executorReadScope?.(id) ?? null : null
++    },
+     input,
+     isPersistent: () => persistent,
+     release: () => cleanupAttempt?.(),
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/terminals.test.ts b/apps/desktop/src/app/right-sidebar/terminal/terminals.test.ts
-index ce2ebf3832c0b116a2fcca2c09ac55b5d16460b7..0a98b5d074309ce6dbf6a9c3b64465729a796cf8 100644
+index ce2ebf383..0a98b5d07 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/terminals.test.ts
 +++ b/apps/desktop/src/app/right-sidebar/terminal/terminals.test.ts
 @@ -1,22 +1,108 @@
@@ -1641,7 +1724,7 @@ index ce2ebf3832c0b116a2fcca2c09ac55b5d16460b7..0a98b5d074309ce6dbf6a9c3b6446572
 
    it('restores user tabs, active tab, and history on module load', async () => {
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/terminals.ts b/apps/desktop/src/app/right-sidebar/terminal/terminals.ts
-index fcd894cc793605386ac45a03779673a829f8867a..a834643bd956ae2f9b2ad12f672e3426773a218f 100644
+index fcd894cc7..a834643bd 100644
 --- a/apps/desktop/src/app/right-sidebar/terminal/terminals.ts
 +++ b/apps/desktop/src/app/right-sidebar/terminal/terminals.ts
 @@ -1,11 +1,14 @@
@@ -1778,8 +1861,267 @@ index fcd894cc793605386ac45a03779673a829f8867a..a834643bd956ae2f9b2ad12f672e3426
      return
    }
 
+diff --git a/apps/desktop/src/app/right-sidebar/terminal/use-terminal-session.ts b/apps/desktop/src/app/right-sidebar/terminal/use-terminal-session.ts
+index 68d46dff2..21eea537b 100644
+--- a/apps/desktop/src/app/right-sidebar/terminal/use-terminal-session.ts
++++ b/apps/desktop/src/app/right-sidebar/terminal/use-terminal-session.ts
+@@ -32,7 +32,7 @@ import { bindTerminalDrop } from './terminal-drop'
+ import { prepareTerminalFontFamily } from './terminal-font'
+ import { bindTerminalActivity, bindTerminalClipboard } from './terminal-input-bindings'
+ import { createSessionAttemptController } from './terminal-session-attempt'
+-import type { TerminalStatus } from './terminal-session-attempt'
++import type { SessionAttemptController, TerminalStatus } from './terminal-session-attempt'
+ import { redrawAllTerminals, registerWebglRefresh } from './terminals'
+ import { useTerminalFontController } from './use-terminal-font'
+
+@@ -96,6 +96,7 @@ export function useTerminalSession({
+   const termRef = useRef<Terminal | null>(null)
+   const webglRef = useRef<WebglAddon | null>(null)
+   const sessionIdRef = useRef<string | null>(null)
++  const executorReadScopeRef = useRef<SessionAttemptController['executorReadScope'] | null>(null)
+   // Snapshot the revive buffer once: live snapshots feed updateTerminalReviveBuffer
+   // and would otherwise re-arm replay on every store-driven re-render.
+   const initialReviveBufferRef = useRef(reviveBuffer)
+@@ -291,6 +292,8 @@ export function useTerminalSession({
+         }
+       }
+     })
++    executorReadScopeRef.current = session.executorReadScope
++    cleanup.push(() => { executorReadScopeRef.current = null })
+
+     const initialReviveBuffer = initialReviveBufferRef.current ?? ''
+     const history = createReviveHistory(term, initialReviveBuffer, session.isPersistent)
+@@ -561,7 +564,7 @@ export function useTerminalSession({
+
+     const term = termRef.current
+
+-    return term ? registerTerminalReader(id, makeTerminalReader(term)) : undefined
++    return term ? registerTerminalReader(id, makeTerminalReader(term), () => executorReadScopeRef.current?.() ?? null) : undefined
+   }, [id, status])
+
+   // On (re)activation: a WebGL terminal doesn't paint while visibility:hidden, so
+diff --git a/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.test.ts b/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.test.ts
+index 073aaf282..5c7d905db 100644
+--- a/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.test.ts
++++ b/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.test.ts
+@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+ import { registerPreviewNav } from '@/app/chat/right-rail/preview-nav'
+ import { registerPreviewPageReader } from '@/app/chat/right-rail/preview-reader'
++import { registerTerminalReader, setActiveTerminalId } from '@/app/right-sidebar/terminal/buffer'
+ import { group } from '@/components/pane-shell/tree/model'
+ import { $layoutTree, noteActiveTreeGroup } from '@/components/pane-shell/tree/store'
+ import { createClientSessionState } from '@/lib/chat-runtime'
+ import { runTour } from '@/lib/tour'
+ import { $previewTabs, closeRightRail, openPreview, setPreviewTabPinned } from '@/store/preview'
+ import { hasOpenServerRequest, resetServerRequestsForTests } from '@/store/server-requests'
+-import { setActiveSessionId, setSelectedStoredSessionId, setSessions } from '@/store/session'
++import { forgetSessionOwnerHintsForSession, setActiveSessionId, setSelectedStoredSessionId, setSessionOwnerHint, setSessions } from '@/store/session'
+ import { $sessionStates, $sessionTiles, dropSessionState, publishSessionState } from '@/store/session-states'
+ import { $toursEnabled } from '@/store/tours'
+ import type { SessionInfo } from '@/types/hermes'
+@@ -47,13 +48,14 @@ const deps = {
+   upsertToolCall: () => undefined
+ } as ServerRequestContext['deps']
+
+-function deliver(method: string, params: Record<string, unknown>, activeSessionId: null | string, replayed?: boolean) {
++function deliver(method: string, params: Record<string, unknown>, activeSessionId: null | string,
++  replayed?: boolean, connectionId?: string) {
+   const respond = vi.fn()
+   const fail = vi.fn()
+   const decline = vi.fn()
+
+   const handled = handleServerRequest(
+-    { decline, fail, id: 'srq-1', method, params, profile: 'default', replayed, respond },
++    { connectionId, decline, fail, id: 'srq-1', method, params, profile: 'default', replayed, respond },
+     deps,
+     activeSessionId
+   )
+@@ -61,6 +63,107 @@ function deliver(method: string, params: Record<string, unknown>, activeSessionI
+   return { decline, fail, handled, respond }
+ }
+
++it('reads the selected Code buffer for its verified chat and refuses other terminal tabs', () => {
++  const host = document.documentElement.dataset
++  const previous = host.hermesDesktopHost
++  host.hermesDesktopHost = 'browser'
++  setActiveSessionId('session-code')
++  setSessionOwnerHint('session-code', { connectionId: 'local', profile: 'default' })
++  const code = vi.fn(() => ({
++    text: 'CODE_MARKER', start: 0, end: 1, total_lines: 1, viewport_rows: 24, cursor_row: 1
++  }))
++  const agent = vi.fn(() => { throw new Error('Agent buffer must never be serialized') })
++  let connectionId = 'local'
++  const unregisterCode = registerTerminalReader('code', code, () => ({ connectionId, profile: 'default' }))
++  const unregisterAgent = registerTerminalReader('agent', agent)
++  const read = (params = {}) =>
++    deliver('terminal.read', { owner_profile: 'default', session_id: 'session-code', ...params }, 'session-code', undefined, 'local')
++
++  try {
++    setActiveTerminalId('code')
++    expect(read().respond.mock.calls[0]?.[0]?.value).toContain('CODE_MARKER')
++    expect(read({ start: 0, count: 1 }).respond.mock.calls[0]?.[0]?.value).toContain('CODE_MARKER')
++    expect(code).toHaveBeenCalledWith({ start: 0, count: 1 })
++
++    expect(read({ owner_profile: undefined }).decline).toHaveBeenCalledOnce()
++    expect(read({ owner_profile: 'other' }).decline).toHaveBeenCalledOnce()
++
++    connectionId = 'saved-gateway'
++    const wrongGateway = read()
++    expect(wrongGateway.decline).toHaveBeenCalledOnce()
++    expect(wrongGateway.respond).not.toHaveBeenCalled()
++    expect(code).toHaveBeenCalledTimes(2)
++
++    setActiveTerminalId('agent')
++    const wrongTerminal = read({ start: 0, count: 100 })
++    expect(wrongTerminal.decline).toHaveBeenCalledOnce()
++    expect(wrongTerminal.respond).not.toHaveBeenCalled()
++    expect(agent).not.toHaveBeenCalled()
++  } finally {
++    unregisterCode()
++    unregisterAgent()
++    setActiveTerminalId(null)
++    setActiveSessionId(null)
++    forgetSessionOwnerHintsForSession('session-code')
++    if (previous === undefined) {
++      delete host.hermesDesktopHost
++    } else {
++      host.hermesDesktopHost = previous
++    }
++  }
++})
++
++it('reads the focused saved-gateway tile and refuses the background primary chat', () => {
++  const host = document.documentElement.dataset
++  const previous = host.hermesDesktopHost
++  host.hermesDesktopHost = 'browser'
++  setActiveSessionId('primary')
++  setSelectedStoredSessionId('stored-primary')
++  const owner = { connectionId: 'saved-gateway', profile: 'work', targetProfile: 'research' }
++  $sessionTiles.set([
++    { dir: 'right', ownerRoute: { connectionId: 'other', profile: 'research' }, runtimeId: 'background', storedSessionId: 'tile' },
++    { dir: 'right', ownerRoute: owner, runtimeId: 'tile', storedSessionId: 'stored-tile' }
++  ])
++  $layoutTree.set(group(['session-tile:stored-tile'], { active: 'session-tile:stored-tile', id: 'tile-group' }))
++  noteActiveTreeGroup('tile-group')
++  setActiveTerminalId('code')
++  const code = vi.fn(() => ({ text: 'SAVED_CODE_MARKER', start: 0, end: 1, total_lines: 1,
++    viewport_rows: 24, cursor_row: 1 }))
++  const unregister = registerTerminalReader('code', code, () => ({
++    connectionId: 'saved-gateway', profile: 'research', relayReadScope: 'original-dial'
++  }))
++  const read = (id: string, profile = 'research', replayed = false, connectionId = 'saved-gateway', dial = 'original-dial') =>
++    deliver('terminal.read', { owner_profile: profile, relay_read_scope: dial, session_id: id }, 'primary', replayed, connectionId)
++
++  try {
++    deps.sessionStateByRuntimeIdRef.current.set('tile', createClientSessionState('stored-tile'))
++    deps.sessionStateByRuntimeIdRef.current.set('other-runtime', createClientSessionState('stored-tile'))
++    expect(read('tile').respond.mock.calls[0]?.[0]?.value).toContain('SAVED_CODE_MARKER')
++    expect(read('primary').decline).toHaveBeenCalledOnce()
++    expect(read('other-runtime').decline).toHaveBeenCalledOnce()
++    expect(read('tile', 'work').decline).toHaveBeenCalledOnce()
++    expect(read('tile', 'research', true).decline).toHaveBeenCalledOnce()
++    expect(read('tile', 'research', false, 'local').decline).toHaveBeenCalledOnce()
++    expect(read('tile', 'research', false, 'saved-gateway', 'new-dial').decline).toHaveBeenCalledOnce()
++    expect(code).toHaveBeenCalledOnce()
++  } finally {
++    deps.sessionStateByRuntimeIdRef.current.delete('tile')
++    deps.sessionStateByRuntimeIdRef.current.delete('other-runtime')
++    unregister()
++    setActiveTerminalId(null)
++    noteActiveTreeGroup(null)
++    $layoutTree.set(null)
++    $sessionTiles.set([])
++    setSelectedStoredSessionId(null)
++    setActiveSessionId(null)
++    if (previous === undefined) {
++      delete host.hermesDesktopHost
++    } else {
++      host.hermesDesktopHost = previous
++    }
++  }
++})
++
+ describe('connection request routing', () => {
+   it('does not route connection operations through the server-request rail', () => {
+     const { handled, respond } = deliver(
+diff --git a/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.ts b/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.ts
+index cb24b7ebf..c429e829c 100644
+--- a/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.ts
++++ b/apps/desktop/src/app/session/hooks/use-message-stream/gateway-event/server-requests.ts
+@@ -1,4 +1,4 @@
+-import { JSON_RPC_INTERNAL_ERROR, type SetupBeat } from '@hermes/shared'
++import { JSON_RPC_INTERNAL_ERROR, LOCAL_CONNECTION_ID, type SetupBeat } from '@hermes/shared'
+
+ import {
+   hasLivePreviewSurface,
+@@ -17,6 +17,7 @@ import { pendingClarifyToolPayload } from '@/app/session/hooks/use-session-actio
+ import { translateNow } from '@/i18n'
+ import { restorePendingClarifyToolCall } from '@/lib/chat-messages'
+ import { hostHas } from '@/lib/host-capabilities'
++import { isBrowserHostedDesktop } from '@/lib/platform'
+ import type { PreviewActAction } from '@/lib/preview-act/act-in-page'
+ import type { TourAction, TourStep } from '@/lib/tour'
+ import { type AppearanceValues, applyAppearance, THEME_MODES } from '@/store/appearance-apply'
+@@ -33,8 +34,10 @@ import {
+   setVaultUnlockRequest
+ } from '@/store/prompts'
+ import { rememberServerRequest } from '@/store/server-requests'
+-import { $selectedStoredSessionId, $sessions, lineageAliases, sessionMatchesStoredId } from '@/store/session'
++import { $selectedStoredSessionId, $sessions, getSessionOwnerHint, lineageAliases, sessionMatchesStoredId } from '@/store/session'
++import { $focusedStoredSessionId } from '@/store/session-focus'
+ import {
++  $focusedRuntimeId,
+   $sessionStates,
+   $sessionTiles,
+   previewScopeForRuntime,
+@@ -521,9 +524,30 @@ const vaultUnlockPrompt: Handler = ctx => {
+
+ // ── Desktop-surface bridges (answered immediately, no card) ─────────────────
+
+-const terminalRead: Handler = ({ request }) => {
+-  // read_terminal tool: serialize the renderer's xterm buffer. Empty = no live pane.
++const terminalRead: Handler = ({ request }) =>
+   answerValue(request, readActiveTerminal({ count: num(request.params.count), start: num(request.params.start) }))
++
++function browserTerminalRead(request: ScopedServerRequest, sessionId: string) {
++  const focusedRuntimeId = $focusedRuntimeId.get()
++  const focusedStoredId = $focusedStoredSessionId.get()
++  const route = focusedStoredId && focusedStoredId !== $selectedStoredSessionId.get()
++    ? $sessionTiles.get().find(tile => tile.storedSessionId === focusedStoredId && tile.runtimeId === focusedRuntimeId)?.ownerRoute
++    : getSessionOwnerHint(focusedStoredId ?? focusedRuntimeId ?? '')
++  const profile = route?.targetProfile || route?.profile
++  const connectionId = request.connectionId
++  const relayReadScope = str(request.params.relay_read_scope) || undefined
++  const result =
++    !request.replayed && sessionId === focusedRuntimeId && connectionId && profile && route?.connectionId === connectionId &&
++    profile === request.params.owner_profile && (connectionId === LOCAL_CONNECTION_ID || relayReadScope)
++      ? readActiveTerminal({ count: num(request.params.count), start: num(request.params.start) },
++          { connectionId, profile, relayReadScope })
++      : null
++
++  if (result) {
++    answerValue(request, result)
++  } else {
++    request.decline?.('This window has no verified Code terminal for the chat.')
++  }
+ }
+
+ const previewRead: Handler = ({ request, sessionId }) => {
+@@ -931,6 +955,11 @@ export function handleServerRequest(
+   }
+
+   const sessionId = str(request.params.session_id)
++  if (request.method === 'terminal.read' && isBrowserHostedDesktop()) {
++    browserTerminalRead(request, sessionId)
++
++    return true
++  }
+
+   // Resolve a request's runtime session id to its stored id through the state
+   // cache the message stream maintains (rotation-aware: auto-compression
 diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts
-index 866183fe20f5024743aaff4928d671789a788353..da56a339153ad13a4ecfb82c5beeb793aa73d5b8 100644
+index 866183fe2..da56a3391 100644
 --- a/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts
 +++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts
 @@ -346,6 +346,14 @@ export function desktopReadCommandHandlers<C extends { arg: string }>(env: Deskt
@@ -1798,7 +2140,7 @@ index 866183fe20f5024743aaff4928d671789a788353..da56a339153ad13a4ecfb82c5beeb793
        }
      },
 diff --git a/apps/desktop/src/global.d.ts b/apps/desktop/src/global.d.ts
-index 27f9da1086b3ff9eff50ec748bb53230e711b882..9d114132073f1bdf4d545fad62fa2171bed7a540 100644
+index 27f9da108..de63c0c34 100644
 --- a/apps/desktop/src/global.d.ts
 +++ b/apps/desktop/src/global.d.ts
 @@ -33,6 +33,7 @@ export type DesktopMachineProfile = MachineProfile
@@ -1809,9 +2151,24 @@ index 27f9da1086b3ff9eff50ec748bb53230e711b882..9d114132073f1bdf4d545fad62fa2171
      hermesDesktop: {
        // Resolve a backend connection. Omit `profile` (or pass the primary) for
        // the window's backend; pass a named profile to dial/reuse that profile's
-@@ -846,7 +847,7 @@ export interface DesktopMarketplaceThemeResult {
+@@ -638,6 +639,7 @@ declare global {
+         /** Browser cleanup releases the viewer without terminating its shell. */
+         detach?: (id: string) => Promise<boolean>
+         closeSaved?: (restoreKey: string) => Promise<boolean>
++        executorReadScope?: (id: string) => HermesTerminalReadScope | null
+         onState?: (id: string, callback: (state: HermesTerminalState) => void) => () => void
+         onData: (id: string, callback: (payload: string, options?: { replay: boolean }) => void) => () => void
+         onExit: (id: string, callback: (payload: HermesTerminalExit) => void) => () => void
+@@ -845,8 +847,14 @@ export interface DesktopMarketplaceThemeResult {
+
  export type HermesTerminalState = 'open' | 'reconnecting' | 'disconnected'
 
++export interface HermesTerminalReadScope {
++  connectionId: string
++  profile: string
++  relayReadScope?: string
++}
++
  export interface HermesTerminalSession {
 -  /** Gateway the shell runs on (`local` = This device); Electron only. */
 +  /** Gateway the shell runs on (`local` = This device). */
@@ -1819,7 +2176,7 @@ index 27f9da1086b3ff9eff50ec748bb53230e711b882..9d114132073f1bdf4d545fad62fa2171
    cwd: string
    id: string
 diff --git a/apps/desktop/src/lib/browser-desktop-bridge-saved-connections.test.ts b/apps/desktop/src/lib/browser-desktop-bridge-saved-connections.test.ts
-index 108126f94499347b8fb5677c3447693960c99012..3a35cac992a1801bacd5a13c724c827734a9bf4a 100644
+index 108126f94..3a35cac99 100644
 --- a/apps/desktop/src/lib/browser-desktop-bridge-saved-connections.test.ts
 +++ b/apps/desktop/src/lib/browser-desktop-bridge-saved-connections.test.ts
 @@ -245,7 +245,7 @@ describe('a Webapp on a machine with saved gateway connections', () => {
@@ -1857,7 +2214,7 @@ index 108126f94499347b8fb5677c3447693960c99012..3a35cac992a1801bacd5a13c724c8277
      $connection.set({ ...onMini, connectionId: 'local' })
      await desktop.terminal.dispose(started.id)
 diff --git a/apps/desktop/src/lib/browser-desktop-bridge.ts b/apps/desktop/src/lib/browser-desktop-bridge.ts
-index be50af7483ecb9a5c8f9c8f0499a3d903539f1bb..3b8d86cf6625454340842e7c21fe7d249eb202fd 100644
+index be50af748..3b8d86cf6 100644
 --- a/apps/desktop/src/lib/browser-desktop-bridge.ts
 +++ b/apps/desktop/src/lib/browser-desktop-bridge.ts
 @@ -210,7 +210,12 @@ export function installBrowserDesktopBridge(): boolean {
@@ -1892,7 +2249,7 @@ index be50af7483ecb9a5c8f9c8f0499a3d903539f1bb..3b8d86cf6625454340842e7c21fe7d24
        // request already takes the tab to the login page.
        onSignedOut: () => {
 diff --git a/apps/desktop/src/lib/browser-terminal.test.ts b/apps/desktop/src/lib/browser-terminal.test.ts
-index 9e15ac72979b08e590c1279d23b924324277d510..cecf7ccd30f1bec56bc2829222ff13a70ce7bac3 100644
+index 9e15ac729..ed159e92d 100644
 --- a/apps/desktop/src/lib/browser-terminal.test.ts
 +++ b/apps/desktop/src/lib/browser-terminal.test.ts
 @@ -13,6 +13,7 @@ class Socket {
@@ -1933,10 +2290,26 @@ index 9e15ac72979b08e590c1279d23b924324277d510..cecf7ccd30f1bec56bc2829222ff13a7
    $connection.set(null)
    vi.useRealTimers()
    vi.unstubAllGlobals()
-@@ -78,6 +86,18 @@ afterEach(() => {
+@@ -78,6 +86,34 @@ afterEach(() => {
  })
 
  describe('persistent browser terminals', () => {
++  it('reports the executor and profile from live startup metadata', async () => {
++    window.__HERMES_TERMINAL_ENVIRONMENT__ = 'executor'
++    const api = install()
++    const unknown = await api.start({ restoreKey: 'missing-confirmation' })
++    expect(api.executorReadScope?.(unknown.id)).toBeNull()
++
++    Socket.reply = socket => socket.metadata({ environment: 'executor', profile: 'confirmed' })
++    const verified = await api.start({ restoreKey: 'verified' })
++    expect(api.executorReadScope?.(verified.id)).toEqual({ connectionId: 'local', profile: 'confirmed' })
++    Socket.instances[1].output(META + JSON.stringify({ environment: 'gateway', profile: 'other' }))
++    expect(api.executorReadScope?.(verified.id)?.profile).toBe('confirmed')
++
++    Socket.instances[1].close(1006)
++    expect(api.executorReadScope?.(verified.id)).toBeNull()
++  })
++
 +  it.each(['executor', null] as const)('skips independent cwd resolution for a local terminal in %s mode', async mode => {
 +    window.__HERMES_TERMINAL_ENVIRONMENT__ = mode
 +    const api = install()
@@ -1952,7 +2325,7 @@ index 9e15ac72979b08e590c1279d23b924324277d510..cecf7ccd30f1bec56bc2829222ff13a7
    it('consumes an empty replay frame without suppressing the first live output', async () => {
      const api = install()
      const session = await api.start({ cwd: '/original', restoreKey: 'empty-history' })
-@@ -221,6 +241,7 @@ describe('persistent browser terminals', () => {
+@@ -221,6 +257,7 @@ describe('persistent browser terminals', () => {
      Socket.reply = socket => socket.close(4410, 'Process exited')
      await expect(api.start({ restoreKey: 'tab-one', resumeOnly: true })).rejects.toMatchObject({ signal: 'exited' })
      expect(Socket.instances[1].url.searchParams.get('attach')).toBe('opaque-server-id')
@@ -1960,7 +2333,7 @@ index 9e15ac72979b08e590c1279d23b924324277d510..cecf7ccd30f1bec56bc2829222ff13a7
      expect(localStorage.length).toBe(0)
    })
 
-@@ -394,3 +415,206 @@ describe('host terminal after sign-out', () => {
+@@ -394,3 +431,206 @@ describe('host terminal after sign-out', () => {
      expect($desktopBoot.get().error).not.toBe(WEBAPP_LAUNCH_REQUIRED)
    })
  })
@@ -2168,9 +2541,17 @@ index 9e15ac72979b08e590c1279d23b924324277d510..cecf7ccd30f1bec56bc2829222ff13a7
 +  expect(startedGatewayShell).not.toHaveBeenCalled()
 +})
 diff --git a/apps/desktop/src/lib/browser-terminal.ts b/apps/desktop/src/lib/browser-terminal.ts
-index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61bce1fed2a 100644
+index 0884cc01e..9b50be2f9 100644
 --- a/apps/desktop/src/lib/browser-terminal.ts
 +++ b/apps/desktop/src/lib/browser-terminal.ts
+@@ -1,6 +1,6 @@
+ import { isGatewayReauthRequired, isStableOpen, LOCAL_CONNECTION_ID, reconnectBackoffDelayMs } from '@hermes/shared'
+
+-import type { HermesTerminalExit, HermesTerminalSession, HermesTerminalState } from '@/global'
++import type { HermesTerminalExit, HermesTerminalReadScope, HermesTerminalSession, HermesTerminalState } from '@/global'
+
+ import { readJson, writeJson } from './storage'
+
 @@ -8,12 +8,16 @@ type TerminalApi = Window['hermesDesktop']['terminal']
  type DataListener = Parameters<TerminalApi['onData']>[1]
 
@@ -2189,15 +2570,16 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
  interface BrowserTerminalOptions {
    basePath: string
    currentProfile: () => string | null
-@@ -31,6 +35,7 @@ interface TerminalState {
+@@ -31,6 +35,8 @@ interface TerminalState {
    profile: string | null
    connectionId: string
    terminalId?: string
 +  environment?: TerminalEnvironment
++  executorScope?: HermesTerminalReadScope
    cwd: string
    shell: string
    cols: number
-@@ -38,11 +43,14 @@ interface TerminalState {
+@@ -38,11 +44,14 @@ interface TerminalState {
    socket: WebSocket | null
    generation: number
    stopped: boolean
@@ -2212,7 +2594,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
    started?: Promise<HermesTerminalSession>
    pendingData: Array<{ data: string; replay: boolean }>
    dataListeners: Set<DataListener>
-@@ -63,7 +71,7 @@ const START_TIMEOUT = 10_000
+@@ -63,7 +72,7 @@ const START_TIMEOUT = 10_000
 
  // 4401 is what sign-out closes a tab's sockets with; no redial succeeds until the tab signs in again.
  const CLOSE_SIGNALS: Record<number, string> = {
@@ -2221,7 +2603,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
  }
 
  class TerminalConnectionError extends Error {
-@@ -86,7 +94,10 @@ function sendResumeSize(socket: WebSocket, state: TerminalState, trimmed?: boole
+@@ -86,7 +95,10 @@ function sendResumeSize(socket: WebSocket, state: TerminalState, trimmed?: boole
    socket.send(`\u001b[RESIZE:${state.cols};${state.rows}]`)
  }
 
@@ -2233,7 +2615,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
    const url = new URL(await websocketUrl(saved.profile, saved.connectionId ?? LOCAL_CONNECTION_ID))
    url.searchParams.set('attach', saved.terminalId)
    url.searchParams.set('action', 'close')
-@@ -133,11 +144,56 @@ interface DialContext {
+@@ -133,11 +145,64 @@ interface DialContext {
    stopSocket: (state: TerminalState) => void
    emitData: (state: TerminalState, data: string, replay?: boolean) => void
    setStatus: (state: TerminalState, status: HermesTerminalState) => void
@@ -2249,6 +2631,8 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
 +  terminalId?: string
 +  truncated?: boolean
 +  environment?: unknown
++  profile?: unknown
++  relay_read_scope?: unknown
 +  preparing?: boolean
 +  ackStartup?: boolean
 +}
@@ -2269,9 +2653,15 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
 +
 +  state.shell = meta.shell
 +  if (typeof meta.cwd === 'string') {state.cwd = meta.cwd}
++  state.executorScope = undefined
 +  if (typeof meta.terminalId !== 'string' || !meta.terminalId) {return false}
 +
 +  state.terminalId = meta.terminalId
++  const relayReadScope = typeof meta.relay_read_scope === 'string' && meta.relay_read_scope || undefined
++  if (meta.environment === 'executor' && typeof meta.profile === 'string' && meta.profile &&
++      (state.connectionId === LOCAL_CONNECTION_ID || relayReadScope)) {
++    state.executorScope = { connectionId: state.connectionId, profile: meta.profile, relayReadScope }
++  }
 +  if (state.restoreKey) {
 +    writeJson(context.storageKey(state.restoreKey), {
 +      terminalId: state.terminalId,
@@ -2291,7 +2681,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
  async function dialTerminal(state: TerminalState, context: DialContext): Promise<HermesTerminalSession> {
    const { stopSocket, emitData, setStatus, forget, finish, reconnect } = context
    stopSocket(state)
-@@ -155,6 +211,18 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+@@ -155,6 +220,18 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
 
    if (state.terminalId) {url.searchParams.set('attach', state.terminalId)}
    const resuming = Boolean(state.terminalId)
@@ -2310,7 +2700,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
    const socket = state.socket = new WebSocket(url)
    socket.binaryType = 'arraybuffer'
    const decoder = new TextDecoder()
-@@ -163,6 +231,15 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+@@ -163,6 +240,15 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
      let settled = false
      let handshakeComplete = false
      let replayNext = false
@@ -2326,7 +2716,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
      const current = () => state.generation === generation && !context.isPaused() && !state.stopped
 
      const fail = (error: Error) => {
-@@ -173,6 +250,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+@@ -173,6 +259,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
        reject(error)
      }
 
@@ -2334,7 +2724,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
      const timer = window.setTimeout(() => {
        fail(new TerminalConnectionError('Host terminal did not provide startup metadata'))
        socket.onclose = null
-@@ -192,43 +270,21 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+@@ -192,43 +279,21 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
 
        if (typeof event.data === 'string' && event.data.startsWith(META)) {
          try {
@@ -2389,7 +2779,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
            handshakeComplete = true
 
            // Resume query dimensions do not resize an existing server PTY.
-@@ -240,7 +296,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+@@ -240,7 +305,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
              settled = true
              window.clearTimeout(timer)
              state.cancelDial = undefined
@@ -2398,7 +2788,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
            }
          } catch (error) {
            fail(error instanceof Error ? error : new Error('Host terminal returned invalid startup metadata'))
-@@ -271,7 +327,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
+@@ -271,7 +336,7 @@ async function dialTerminal(state: TerminalState, context: DialContext): Promise
        const signal = CLOSE_SIGNALS[event.code] ?? 'disconnected'
        const exited = event.code === 4410 && event.reason === PROCESS_EXITED_REASON
 
@@ -2407,7 +2797,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
 
        if (!handshakeComplete) {
          fail(new TerminalConnectionError(event.reason || `Host terminal closed (${event.code})`, exited ? EXITED : signal))
-@@ -305,14 +361,20 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -305,14 +370,20 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
    const load = (key?: string): SavedTerminal | null => {
      const saved = key ? readJson<SavedTerminal>(storageKey(key)) : null
 
@@ -2433,7 +2823,12 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
      }
    }
 
-@@ -346,6 +408,7 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -342,10 +413,12 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+
+   const stopSocket = (state: TerminalState) => {
+     ++state.generation
++    state.executorScope = undefined
+     window.clearTimeout(state.retryTimer)
      settleOpen(state)
      state.cancelDial?.()
      state.cancelDial = undefined
@@ -2441,7 +2836,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
      const socket = state.socket
      state.socket = null
 
-@@ -407,6 +470,7 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -407,6 +480,7 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
 
      if (!state) {return false}
      state.stopped = true
@@ -2449,7 +2844,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
      stopSocket(state)
      terminals.delete(id)
 
-@@ -417,9 +481,16 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -417,9 +491,16 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
      const state = terminals.get(id)
 
      if (!state) {return false}
@@ -2468,7 +2863,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
      stopSocket(state)
 
      try {
-@@ -443,6 +514,7 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -443,6 +524,7 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
    const pause = () => {
      paused = true
      terminals.forEach(state => {
@@ -2476,7 +2871,23 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
        stopSocket(state)
 
        if (!state.stopped) {setStatus(state, 'reconnecting')}
-@@ -479,7 +551,7 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -473,13 +555,23 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+     cwd: async () => null,
+     detach,
+     dispose,
++    executorReadScope: id => {
++      const state = terminals.get(id)
++
++      if (!state?.executorScope || !state.terminalId || state.stopped || state.closing ||
++          state.status !== 'open' || state.socket?.readyState !== WebSocket.OPEN) {
++        return null
++      }
++
++      return state.executorScope
++    },
+     closeSaved: async restoreKey => {
+       const state = [...terminals.values()].find(state => state.restoreKey === restoreKey)
+
        if (state) {return dispose(state.id)}
        const saved = load(restoreKey)
 
@@ -2485,7 +2896,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
        forget({ restoreKey })
 
        return true
-@@ -536,21 +608,27 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -536,21 +628,27 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
          // StrictMode/remount can overlap startup before a capability is minted.
          // Serialize those starts so a single tab cannot spawn two shells.
          await existing.started?.catch(() => undefined)
@@ -2516,7 +2927,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
          cwd: startOptions?.cwd || '', shell: 'host-shell',
          cols: Math.max(2, Math.round(startOptions?.cols || 80)),
          rows: Math.max(2, Math.round(startOptions?.rows || 24)),
-@@ -560,13 +638,19 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
+@@ -560,13 +658,19 @@ export function createBrowserTerminal(options: BrowserTerminalOptions): Terminal
        }
 
        terminals.set(state.id, state)
@@ -2544,7 +2955,7 @@ index 0884cc01e0be99482de49a0b052afb5720a5886f..645053d4c4d47bc0f77df2477de2d61b
        try {
          return await state.started
 diff --git a/apps/desktop/src/plugins/hermes-bots/screen-pane-status-events.test.tsx b/apps/desktop/src/plugins/hermes-bots/screen-pane-status-events.test.tsx
-index 18f7f85acc7dae7364a2194f04384738536079ab..6bac5f80f2dbd96b862fbff3dcf856dc12d60107 100644
+index 18f7f85ac..6bac5f80f 100644
 --- a/apps/desktop/src/plugins/hermes-bots/screen-pane-status-events.test.tsx
 +++ b/apps/desktop/src/plugins/hermes-bots/screen-pane-status-events.test.tsx
 @@ -42,6 +42,9 @@ vi.mock('./i18n', () => ({
@@ -2589,7 +3000,7 @@ index 18f7f85acc7dae7364a2194f04384738536079ab..6bac5f80f2dbd96b862fbff3dcf856dc
 +  view.unmount()
 +})
 diff --git a/apps/desktop/src/plugins/hermes-bots/screen-pane.tsx b/apps/desktop/src/plugins/hermes-bots/screen-pane.tsx
-index b156e0a544d87085e1d51f39d4f1ba7564674e85..910c50ebc39ffb330f82bf22ab4fa95c8432c595 100644
+index b156e0a54..910c50ebc 100644
 --- a/apps/desktop/src/plugins/hermes-bots/screen-pane.tsx
 +++ b/apps/desktop/src/plugins/hermes-bots/screen-pane.tsx
 @@ -86,6 +86,17 @@ function ScreenNeedsHttps({ label }: { label: string }) {
@@ -2636,7 +3047,7 @@ index b156e0a544d87085e1d51f39d4f1ba7564674e85..910c50ebc39ffb330f82bf22ab4fa95c
              {t.screen.start}
            </Button>
 diff --git a/apps/desktop/src/plugins/hermes-bots/screen-portal-status-request.test.tsx b/apps/desktop/src/plugins/hermes-bots/screen-portal-status-request.test.tsx
-index e7f564c0d18d454e7ef6d718942c2ac37d75e063..7b68631388000387f915fc5b0d447eb7dfc15867 100644
+index e7f564c0d..7b6863138 100644
 --- a/apps/desktop/src/plugins/hermes-bots/screen-portal-status-request.test.tsx
 +++ b/apps/desktop/src/plugins/hermes-bots/screen-portal-status-request.test.tsx
 @@ -6,7 +6,7 @@
@@ -2687,7 +3098,7 @@ index e7f564c0d18d454e7ef6d718942c2ac37d75e063..7b68631388000387f915fc5b0d447eb7
 +  view.unmount()
 +})
 diff --git a/apps/desktop/src/plugins/hermes-bots/screen-portal.tsx b/apps/desktop/src/plugins/hermes-bots/screen-portal.tsx
-index 840fab136d39740c4b75c4c22c3d352bb1e73962..4b2aae2f21c8bf8403e071780cf1793daa8f5a85 100644
+index 840fab136..4b2aae2f2 100644
 --- a/apps/desktop/src/plugins/hermes-bots/screen-portal.tsx
 +++ b/apps/desktop/src/plugins/hermes-bots/screen-portal.tsx
 @@ -59,12 +59,8 @@ export function portalTone(
@@ -2713,8 +3124,55 @@ index 840fab136d39740c4b75c4c22c3d352bb1e73962..4b2aae2f21c8bf8403e071780cf1793d
      missing: t.screen.portalNotInstalled,
      unsupported: t.screen.portalUnsupported,
      unavailable: isManagedBackend(bot) ? t.screen.portalUnavailableManaged : t.screen.portalUnavailable,
+diff --git a/apps/desktop/src/store/gateway.test.ts b/apps/desktop/src/store/gateway.test.ts
+index 14758741b..2e64123cc 100644
+--- a/apps/desktop/src/store/gateway.test.ts
++++ b/apps/desktop/src/store/gateway.test.ts
+@@ -78,7 +78,8 @@ const {
+   ensureGatewayForProfile,
+   openGatewayForAgent,
+   pruneSecondaryGateways,
+-  setPrimaryGateway
++  setPrimaryGateway,
++  setPrimaryGatewayConnectionId
+ } = await import('./gateway')
+
+ function installDesktop(stub: Record<string, unknown>): void {
+@@ -435,6 +436,16 @@ describe('server→client request routing without a registry handler (#112791)',
+       expect.objectContaining({ id: 'srq-1', method: 'clarify', profile: 'work' })
+     )
+   })
++
++  it('tags a primary socket request with its own gateway while a secondary is in view', () => {
++    const onServerRequest = vi.fn()
++    configureGatewayRegistry({ activeConnectionId: () => 'other', onEvent: vi.fn(), onServerRequest } as never)
++    setPrimaryGatewayConnectionId('local')
++    const request = { fail: vi.fn(), id: 'srq-1', method: 'terminal.read', params: {}, respond: vi.fn() }
++
++    expect(dispatchPrimaryServerRequest(request, 'default')).toBe(true)
++    expect(onServerRequest).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'local' }))
++  })
+ })
+
+ describe('secondary reconnect backoff (#83134)', () => {
+diff --git a/apps/desktop/src/store/gateway.ts b/apps/desktop/src/store/gateway.ts
+index 8f82454ab..cc12bcff1 100644
+--- a/apps/desktop/src/store/gateway.ts
++++ b/apps/desktop/src/store/gateway.ts
+@@ -249,9 +249,9 @@ function dispatchServerRequest(request: ServerRequest, profile: string, connecti
+   return true
+ }
+
+-/** Fan a primary-socket server request into the registry handler with the active source tags. */
++/** Fan a primary-socket server request into the registry handler with its connection. */
+ export function dispatchPrimaryServerRequest(request: ServerRequest, profile: string): boolean {
+-  return dispatchServerRequest(request, profile, g.config?.activeConnectionId?.() ?? null)
++  return dispatchServerRequest(request, profile, primaryConnectionId())
+ }
+
+ /** Registry source currently served by the window primary socket, when known. */
 diff --git a/apps/shared/src/gateway-contract.generated.ts b/apps/shared/src/gateway-contract.generated.ts
-index 8ebfef5d9eb16b1d85f4f89e7aa954bc11b74722..7a3005df2ea5c7c5e330fe270524e71fa7725c12 100644
+index 8ebfef5d9..93af210cc 100644
 --- a/apps/shared/src/gateway-contract.generated.ts
 +++ b/apps/shared/src/gateway-contract.generated.ts
 @@ -4802,6 +4802,19 @@ export interface CanonicalShellExecParams {
@@ -2737,7 +3195,21 @@ index 8ebfef5d9eb16b1d85f4f89e7aa954bc11b74722..7a3005df2ea5c7c5e330fe270524e71f
  export interface PromptReceiptParams {
    session_id: string
    admission_id: string
-@@ -7250,7 +7263,11 @@ export interface CanonicalRpcMethods {
+@@ -5786,6 +5799,13 @@ export interface VaultCodeRequestParams {
+   site?: string | null
+   hint?: string | null
+ }
++export interface TerminalReadRequestParams {
++  session_id: string
++  start?: number | null
++  count?: number | null
++  owner_profile?: string | null
++  relay_read_scope?: string | null
++}
+ export interface ReadRangeRequestParams {
+   session_id: string
+   start?: number | null
+@@ -7250,7 +7270,11 @@ export interface CanonicalRpcMethods {
    'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
    /** One page of a stored conversation's display rows across its compression lineage (live rows and rows a compaction archived, each logical message once, and each compaction handoff as a `row_kind: 'compaction'` row at its position), from the oldest or the newest. Never attaches the caller. A page holds at most `limit` (1-500) rows, compaction rows included, plus up to 64 tool results of the call at its edge, and at most 2 MiB of JSON, cut between tool groups (a single larger row keeps only its role, kind, time, ids and the head of its text, and carries `truncated`). Oldest order: read on until a page is empty, then poll with the same `next_cursor` for the rows written since; `reset: true` means the rows the cursor covered changed shape, so the reply starts again from the first page. Latest order: read on until `next_cursor` is null; its cursor stays valid across later compactions and turns. A rotated lineage past `sessions.max_resume_messages` pages only its current segment (a cursor from before it crossed, or a latest-order cursor from before a compaction rotated that segment, answers `reset: true`). With `subagent_id`: a delegated child of the session (running: through the parent's roster; finished: through its stored row, when its ancestry reaches this conversation); a foreign or unknown child is `available: false`. Refusals: invalid_params (a cursor issued for another session, child or order, or not by this read), not_found, permission_denied, profile_mismatch. */
    'session.transcript': { params: StoredTranscriptParams; result: StoredTranscriptResult }
@@ -2750,7 +3222,7 @@ index 8ebfef5d9eb16b1d85f4f89e7aa954bc11b74722..7a3005df2ea5c7c5e330fe270524e71f
    'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
    /** Adopt a registered execution after verifying the live producer claim. */
    'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
-@@ -7311,6 +7328,8 @@ export const CANONICAL_RPC_METHODS = [
+@@ -7311,6 +7335,8 @@ export const CANONICAL_RPC_METHODS = [
    'session.stats',
    'session.steer',
    'session.transcript',
@@ -2759,8 +3231,17 @@ index 8ebfef5d9eb16b1d85f4f89e7aa954bc11b74722..7a3005df2ea5c7c5e330fe270524e71f
    'shell.exec',
    'worker.adopt',
    'worker.persist',
+@@ -7343,7 +7369,7 @@ export interface ServerRequestMap {
+   /** Masked sudo password for the terminal tool. */
+   sudo: { params: SudoRequestParams; result: ValueResult }
+   /** Read the visible in-app terminal buffer (JSON text answer). */
+-  'terminal.read': { params: ReadRangeRequestParams; result: ValueResult }
++  'terminal.read': { params: TerminalReadRequestParams; result: ValueResult }
+   /** Apply set_theme values in the window showing the session (JSON text answer). */
+   'theme.apply': { params: ThemeApplyRequestParams; result: ValueResult }
+   /** Show an accent or layout picker card in the chat and wait for the pick. */
 diff --git a/apps/shared/src/gateway-contract.openrpc.json b/apps/shared/src/gateway-contract.openrpc.json
-index 9fd571061706a41950469cbdafb527d2985e7d10..b221e16eea153e9c399f2e03adb9c11b48d600d1 100644
+index 9fd571061..11247dad5 100644
 --- a/apps/shared/src/gateway-contract.openrpc.json
 +++ b/apps/shared/src/gateway-contract.openrpc.json
 @@ -18696,6 +18696,12 @@
@@ -2865,7 +3346,76 @@ index 9fd571061706a41950469cbdafb527d2985e7d10..b221e16eea153e9c399f2e03adb9c11b
        "ShellExecParams": {
          "additionalProperties": false,
          "properties": {
-@@ -51316,9 +51404,45 @@
+@@ -46210,6 +46298,68 @@
+         "title": "TerminalOutputPayload",
+         "type": "object"
+       },
++      "TerminalReadRequestParams": {
++        "additionalProperties": false,
++        "properties": {
++          "session_id": {
++            "title": "Session Id",
++            "type": "string"
++          },
++          "start": {
++            "anyOf": [
++              {
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Start"
++          },
++          "count": {
++            "anyOf": [
++              {
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Count"
++          },
++          "owner_profile": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Owner Profile"
++          },
++          "relay_read_scope": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Relay Read Scope"
++          }
++        },
++        "required": [
++          "session_id"
++        ],
++        "title": "TerminalReadRequestParams",
++        "type": "object"
++      },
+       "TerminalResizeParams": {
+         "additionalProperties": false,
+         "properties": {
+@@ -51316,9 +51466,45 @@
          }
        }
      },
@@ -2912,8 +3462,17 @@ index 9fd571061706a41950469cbdafb527d2985e7d10..b221e16eea153e9c399f2e03adb9c11b
        "params": [
          {
            "name": "params",
+@@ -51561,7 +51747,7 @@
+         {
+           "name": "params",
+           "schema": {
+-            "$ref": "#/components/schemas/ReadRangeRequestParams"
++            "$ref": "#/components/schemas/TerminalReadRequestParams"
+           }
+         }
+       ],
 diff --git a/cli.py b/cli.py
-index 38c072ba4af4672dd0c45ee79d78ff3c6090286c..31ee7fc9315211b08725604fab2f40170d16871e 100644
+index 38c072ba4..31ee7fc93 100644
 --- a/cli.py
 +++ b/cli.py
 @@ -1255,12 +1255,18 @@ class HermesCLI(CLIBacktrackMixin, CLIInitMixin, CLITuiRuntimeMixin, CLIProcessN
@@ -2942,7 +3501,7 @@ index 38c072ba4af4672dd0c45ee79d78ff3c6090286c..31ee7fc9315211b08725604fab2f4017
              output = result.stdout.strip() or result.stderr.strip()
              if output:
 diff --git a/cron/scheduler.py b/cron/scheduler.py
-index b051eb5f0263c8c2578be7841e73822fdaa50680..e9747b1cc99d5c27658c7027622c4ff68497789d 100644
+index b051eb5f0..e9747b1cc 100644
 --- a/cron/scheduler.py
 +++ b/cron/scheduler.py
 @@ -3653,8 +3653,6 @@ def _launch_external_cron_worker(job: dict) -> bool:
@@ -2954,8 +3513,39 @@ index b051eb5f0263c8c2578be7841e73822fdaa50680..e9747b1cc99d5c27658c7027622c4ff6
          worker_env = strip_launch_profile_env(build_subprocess_env(
              scrub_secrets=multiplex_active,
              inherit_profile_home=True,
+diff --git a/gateway/local_desktop_ui.py b/gateway/local_desktop_ui.py
+index e074871e4..ccae9ecad 100644
+--- a/gateway/local_desktop_ui.py
++++ b/gateway/local_desktop_ui.py
+@@ -209,14 +209,25 @@ def _setup_beat(turn, agent, payload):
+
+ def _ask(turn, agent, method, params, timeout):
+     """One ``ValueResult`` server request to the session's attached viewers; "" when none answered."""
+-    from gateway.session_server_requests import ask_viewer
++    from gateway.session_server_requests import ask_viewer, may_settle
+     authority, session_id, _generation = turn._approval_owner
+     live = authority.sessions.get(session_id)
+     if live is None:
+         return ""
++    terminal_viewers = None
++    if method == "terminal.read":
++        from gateway.session_authorities import served_profile_name
++        registry = getattr(getattr(authority, "runner", None), "session_authorities", None)
++        profile = registry.profile_name(authority) if registry is not None else None
++        params = {**params, "owner_profile": profile or served_profile_name(authority.profile_id)}
++
++        def terminal_viewers():
++            return {authority.events.get(actor.transport_id) for actor in tuple(live.subscribers.values())
++                    if may_settle(authority, actor, session_id, live.event_stream)}
+     # Automatic window requests (reads, a preview click, the tour) are not handed to a reconnecting
+     # viewer again: a second delivery would repeat the action.
+     value = ask_viewer(live.event_stream, session_id, method, dict(params), timeout=timeout, replay=False,
++                       terminal_viewers=terminal_viewers,
+                        cancelled=lambda: bool(getattr(agent, "_interrupt_requested", False)))
+     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
 diff --git a/gateway/run.py b/gateway/run.py
-index 432af68e2973e30f6101d5aae93c8ae4b599cda7..d85ded311f612a0e2c05cab2572e116258600323 100644
+index 432af68e2..d85ded311 100644
 --- a/gateway/run.py
 +++ b/gateway/run.py
 @@ -44,7 +44,7 @@ from agent.interrupt_compat import request_hard_interrupt
@@ -2980,7 +3570,7 @@ index 432af68e2973e30f6101d5aae93c8ae4b599cda7..d85ded311f612a0e2c05cab2572e1162
          "container_memory": "TERMINAL_CONTAINER_MEMORY",
          "container_disk": "TERMINAL_CONTAINER_DISK",
 diff --git a/gateway/run_inbound_hooks.py b/gateway/run_inbound_hooks.py
-index 4805da9875ccbb82ad848c824afb88125228bf16..6fffd385ace7263d33d803351b4a85a18add7bd9 100644
+index 4805da987..6fffd385a 100644
 --- a/gateway/run_inbound_hooks.py
 +++ b/gateway/run_inbound_hooks.py
 @@ -199,6 +199,12 @@ class GatewayInboundHooksMixin:
@@ -2997,7 +3587,7 @@ index 4805da9875ccbb82ad848c824afb88125228bf16..6fffd385ace7263d33d803351b4a85a1
              proc = await asyncio.create_subprocess_shell(
                  exec_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
 diff --git a/gateway/session_commands.py b/gateway/session_commands.py
-index 02473d0ea985a245129d1098dfad570e50df8fd4..49a97218859e6ea5e905f85ee0a3e5f5051c9f1d 100644
+index 02473d0ea..49a972188 100644
 --- a/gateway/session_commands.py
 +++ b/gateway/session_commands.py
 @@ -192,7 +192,7 @@ def _runner_command(name):
@@ -3041,8 +3631,150 @@ index 02473d0ea985a245129d1098dfad570e50df8fd4..49a97218859e6ea5e905f85ee0a3e5f5
          return {'type': 'exec', 'output': _text(output)}
      if definition is None:
          def build():  # in the session's folder: its trusted project skills, as its catalog lists them
+diff --git a/gateway/session_controls.py b/gateway/session_controls.py
+index b3c5e0fd5..8538383ab 100644
+--- a/gateway/session_controls.py
++++ b/gateway/session_controls.py
+@@ -987,7 +987,7 @@ class AuthorityConnection:
+             # sibling connection that attached it.
+             return any(may_settle(connection.authority, connection.actor, session_id, events)
+                        for connection in (self, *self._siblings.values()))
+-        if not resolve(frame, session_ok=entitled):
++        if not resolve(frame, session_ok=entitled, transport=self.transport):
+             import logging
+             what = 'a server request this connection may not settle' if asked else 'unknown server request'
+             logging.getLogger(__name__).debug('dropping response for %s id=%r', what, frame.get('id'))
+diff --git a/gateway/session_server_requests.py b/gateway/session_server_requests.py
+index 7056aca55..7c8f5f0be 100644
+--- a/gateway/session_server_requests.py
++++ b/gateway/session_server_requests.py
+@@ -12,19 +12,22 @@ viewer's response frame.
+ from __future__ import annotations
+
+ import contextlib
++import json
+ import threading
+ import uuid
+
+ from tools.clarify_batch import settle_batch
++from tui_gateway.server_requests import TERMINAL_NOT_SHOWN_MESSAGE, answers_requests, is_terminal_read_decline
+
+ REQUEST_TIMEOUT_S = 120  # main: ``_ask("sudo", ..., timeout=120)``
+ _POLL_S = 0.25
+
+
+ class _Pending:
+-    __slots__ = ("event", "events", "locked", "method", "params", "qids", "replay", "result", "session_id", "value")
++    __slots__ = ("declined", "event", "events", "locked", "method", "params", "qids", "recipients", "replay",
++                 "result", "session_id", "value")
+
+-    def __init__(self, session_id, qids=None, events=None, method=None, params=None, replay=True):
++    def __init__(self, session_id, qids=None, events=None, method=None, params=None, replay=True, recipients=None):
+         self.event = threading.Event()
+         self.session_id = session_id
+         self.method = method
+@@ -32,6 +35,8 @@ class _Pending:
+         # for an automatic window request (a preview click), which a second delivery would run twice.
+         self.params = params or {}
+         self.replay = replay
++        self.recipients = recipients
++        self.declined = set()
+         # The live session's own event stream the request went out on: one per authority (profile) and
+         # session mount, so a viewer of another profile's same-named session can never settle it.
+         self.events = events
+@@ -75,7 +80,19 @@ def is_response_frame(frame) -> bool:
+             and frame["id"].startswith("srq-") and ("result" in frame or "error" in frame))
+
+
+-def resolve(frame, *, session_ok=lambda session_id, events: True) -> bool:
++def _settle_terminal_declines(request_id, pending):
++    if not pending.declined:
++        return False
++    attached = set(pending.events.fanout.transports())
++    if (pending.recipients & attached) - pending.declined:
++        return False
++    pending.value = json.dumps({"success": False, "error": TERMINAL_NOT_SHOWN_MESSAGE})
++    _open.pop(request_id)
++    pending.event.set()
++    return True
++
++
++def resolve(frame, *, session_ok=lambda session_id, events: True, transport=None) -> bool:
+     """Settle the open request *frame* answers; False when nothing (here) waits for that id.
+     ``session_ok(session_id, events)`` lets the caller refuse an answer from a connection not entitled
+     to that session: the caller's own authority must own ``events``, the stream the request was sent on
+@@ -84,6 +101,11 @@ def resolve(frame, *, session_ok=lambda session_id, events: True) -> bool:
+         pending = _open.get(frame["id"])
+         if pending is None or not session_ok(pending.session_id, pending.events):
+             return False
++        if pending.recipients is not None and is_terminal_read_decline(frame):
++            if transport in pending.recipients:
++                pending.declined.add(transport)
++                _settle_terminal_declines(frame["id"], pending)
++            return True
+         _open.pop(frame["id"], None)
+         locked = dict(pending.locked) if pending.qids is not None else None
+     result = frame.get("result") if "error" not in frame else None
+@@ -98,11 +120,13 @@ def resolve(frame, *, session_ok=lambda session_id, events: True) -> bool:
+
+
+ def ask_viewer(events, session_id, method, params, *, cancelled=lambda: False, timeout=REQUEST_TIMEOUT_S,
+-               replay=True) -> str:
++               replay=True, terminal_viewers=None) -> str:
+     """Send one one-string server→client request (``sudo``, ``secret``: ``ValueResult``) to the
+     session's attached viewers and wait for its ``value``; "" on skip, interrupt, timeout or no viewer.
+-    ``replay=False``: a reconnecting viewer is not handed it again (``open_requests``)."""
+-    pending = _ask(events, session_id, method, params, cancelled=cancelled, timeout=timeout, replay=replay)
++    ``replay=False``: a reconnecting viewer is not handed it again (``open_requests``).
++    ``terminal_viewers`` supplies the transports allowed to answer a live terminal read."""
++    pending = _ask(events, session_id, method, params, cancelled=cancelled, timeout=timeout, replay=replay,
++                   terminal_viewers=terminal_viewers)
+     return pending.value if pending is not None else ""
+
+
+@@ -168,14 +192,22 @@ def lock_answer(request_id, question_id, answer, *, session_ok=lambda session_id
+     return remaining
+
+
+-def _ask(events, session_id, method, params, *, cancelled, timeout, qids=None, replay=True):
+-    if not events.fanout.transports():
+-        return None
++def _ask(events, session_id, method, params, *, cancelled, timeout, qids=None, replay=True, terminal_viewers=None):
+     request_id = f"srq-{uuid.uuid4().hex[:12]}"
+-    pending = _Pending(session_id, qids, events, method, {"session_id": session_id, **params}, replay)
+-    with _lock:
+-        _open[request_id] = pending
+-    events.fanout.write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": pending.params})
++    # A viewer attaching during a terminal read must not receive a frame missing from the decline count.
++    with (events.lock if terminal_viewers is not None else contextlib.nullcontext()):
++        transports = events.fanout.transports()
++        if not transports:
++            return None
++        recipients = None
++        if terminal_viewers is not None:
++            allowed = terminal_viewers()
++            recipients = {peer for peer in transports if peer in allowed and answers_requests(peer)}
++        pending = _Pending(session_id, qids, events, method, {"session_id": session_id, **params}, replay,
++                           recipients=recipients)
++        with _lock:
++            _open[request_id] = pending
++        events.fanout.write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": pending.params})
+     waited = 0.0
+     reason = "timeout"
+     while not pending.event.wait(_POLL_S):
+@@ -183,6 +215,10 @@ def _ask(events, session_id, method, params, *, cancelled, timeout, qids=None, r
+         if cancelled():
+             reason = "interrupted"
+             break
++        if terminal_viewers is not None:
++            with _lock:
++                if _open.get(request_id) is pending and _settle_terminal_declines(request_id, pending):
++                    break
+         if timeout is not None and waited >= timeout:
+             break
+     with _lock:
 diff --git a/gateway/session_shell.py b/gateway/session_shell.py
-index 4d75c5a58f4be920365f3a56bb70d572b379d689..a644f1be29c6b9d2cacde38e37964971adf44fbd 100644
+index 4d75c5a58..a644f1be2 100644
 --- a/gateway/session_shell.py
 +++ b/gateway/session_shell.py
 @@ -1,18 +1,11 @@
@@ -3192,7 +3924,7 @@ index 4d75c5a58f4be920365f3a56bb70d572b379d689..a644f1be29c6b9d2cacde38e37964971
      stdout = redact_sensitive_text(result.stdout or '', force=True, redact_url_credentials=True)[-4000:]
      stderr = redact_sensitive_text(result.stderr or '', force=True, redact_url_credentials=True)[-2000:]
 diff --git a/gateway/session_terminal_cwd.py b/gateway/session_terminal_cwd.py
-index 61f7ef09acfe00291517b5ce118eb30e5b98db71..b6d6394f59795aa8e1fa6d2e3e46c3a391ef9a17 100644
+index 61f7ef09a..b6d6394f5 100644
 --- a/gateway/session_terminal_cwd.py
 +++ b/gateway/session_terminal_cwd.py
 @@ -1,17 +1,4 @@
@@ -3356,7 +4088,7 @@ index 61f7ef09acfe00291517b5ce118eb30e5b98db71..b6d6394f59795aa8e1fa6d2e3e46c3a3
      except Exception as exc:  # health: allow BLE001 -- runs after the policy commit: a failed save must not strand its publication
          logger.warning("Could not clear the saved terminal cwd of %s: %s", session_key, exc)
 diff --git a/gateway/session_tui_ops.py b/gateway/session_tui_ops.py
-index 24bcc3e19c68cdc38d35df0ef6e4974a45e0f87e..fe7dc540feaf202914fe02b09881a7b66f79e1de 100644
+index 24bcc3e19..fe7dc540f 100644
 --- a/gateway/session_tui_ops.py
 +++ b/gateway/session_tui_ops.py
 @@ -250,15 +250,23 @@ async def rollback(connection, ref, params, *, kind):
@@ -3397,7 +4129,7 @@ index 24bcc3e19c68cdc38d35df0ef6e4974a45e0f87e..fe7dc540feaf202914fe02b09881a7b6
          taken.append(checkpoint_taken_at(cwd, target))
          return mgr.restore(cwd, target, file_path=file_path or None,
 diff --git a/gateway/slash_commands.py b/gateway/slash_commands.py
-index cfe79f834025c1261f8ea29c6fa2450c61076edd..450894f6f1d4b647cd5a56b6ca64f145b6a1d1c9 100644
+index cfe79f834..450894f6f 100644
 --- a/gateway/slash_commands.py
 +++ b/gateway/slash_commands.py
 @@ -749,16 +749,14 @@ class GatewaySlashCommandsMixin(
@@ -3441,7 +4173,7 @@ index cfe79f834025c1261f8ea29c6fa2450c61076edd..450894f6f1d4b647cd5a56b6ca64f145
              return t("gateway.diff.failed", error=result.get("error") or t("gateway.diff.err_default"))
          return self._render_diff_result(result, stat_only)
 diff --git a/gateway/slash_commands_session.py b/gateway/slash_commands_session.py
-index b6840cf960706f944219e3f70bcedb8fe0a78ab1..d86ed8e83426c4aaa6dffeac456b87af26f99ed9 100644
+index b6840cf96..d86ed8e83 100644
 --- a/gateway/slash_commands_session.py
 +++ b/gateway/slash_commands_session.py
 @@ -778,14 +778,30 @@ class GatewaySessionCommandsMixin:
@@ -3482,7 +4214,7 @@ index b6840cf960706f944219e3f70bcedb8fe0a78ab1..d86ed8e83426c4aaa6dffeac456b87af
 
      async def _handle_compress_command(self, event: MessageEvent) -> str:
 diff --git a/hermes_cli/bang_shell.py b/hermes_cli/bang_shell.py
-index 454429f295f5ce5be754388f2e30f6a91846049d..5d75627bf751ee115b1e5919ddbeb9b4ad502f45 100644
+index 454429f29..5d75627bf 100644
 --- a/hermes_cli/bang_shell.py
 +++ b/hermes_cli/bang_shell.py
 @@ -97,13 +97,17 @@ def _bang_env() -> dict:
@@ -3505,7 +4237,7 @@ index 454429f295f5ce5be754388f2e30f6a91846049d..5d75627bf751ee115b1e5919ddbeb9b4
          run_cwd = None
      try:
 diff --git a/hermes_cli/banner.py b/hermes_cli/banner.py
-index 1a8b5402077807a9021037f805db67876ceea664..c540cc055385bc837438cefb3369b44153cdb9ab 100644
+index 1a8b54020..c540cc055 100644
 --- a/hermes_cli/banner.py
 +++ b/hermes_cli/banner.py
 @@ -13,6 +13,7 @@ from hermes_cli.source_check import _github_compare_behind
@@ -3581,7 +4313,7 @@ index 1a8b5402077807a9021037f805db67876ceea664..c540cc055385bc837438cefb3369b441
      # agent's platform set (e.g. `discord` on a CLI session) which must never surface in
      # "Available Tools". Restrict to enabled toolsets; an enabled toolset with unmet deps
 diff --git a/hermes_cli/cli_browser_gateway.py b/hermes_cli/cli_browser_gateway.py
-index 8414d5a8b3f4b91c428077cb71a2a8dc720368b5..7668b12f5ad8c2115abb9023ca6f48f2447e6c8b 100644
+index 8414d5a8b..7668b12f5 100644
 --- a/hermes_cli/cli_browser_gateway.py
 +++ b/hermes_cli/cli_browser_gateway.py
 @@ -53,6 +53,20 @@ def gateway_browser(cli, connection, word: str, rest: str) -> None:
@@ -3606,7 +4338,7 @@ index 8414d5a8b3f4b91c428077cb71a2a8dc720368b5..7668b12f5ad8c2115abb9023ca6f48f2
      """Validate a /browser connect URL: ``(cdp_url, port)`` or None after printing the error.
      A ``/devtools/browser/<id>`` path is kept verbatim; anything else is reduced to the origin."""
 diff --git a/hermes_cli/cli_commands_mixin.py b/hermes_cli/cli_commands_mixin.py
-index a6320d5e7a4fc3d7568fa92c15f057680f51a7be..89508b3863a998f5a0d540569cc905ab7d5f8deb 100644
+index a6320d5e7..89508b386 100644
 --- a/hermes_cli/cli_commands_mixin.py
 +++ b/hermes_cli/cli_commands_mixin.py
 @@ -40,7 +40,7 @@ from hermes_cli.cli_session_switch import (
@@ -3642,7 +4374,7 @@ index a6320d5e7a4fc3d7568fa92c15f057680f51a7be..89508b3863a998f5a0d540569cc905ab
          if not args:
              # No checkpoints for this dir → cross-project view (writes may sit under the session cwd).
 diff --git a/hermes_cli/cli_config_load.py b/hermes_cli/cli_config_load.py
-index cdffbab48993a0ecd53bc56db7a07c9bd3afdf54..8ac7d5baf4a4d6816c2e90db93945dcf6ceae5d0 100644
+index cdffbab48..8ac7d5baf 100644
 --- a/hermes_cli/cli_config_load.py
 +++ b/hermes_cli/cli_config_load.py
 @@ -86,7 +86,7 @@ _TERMINAL_ENV_MAPPINGS = {
@@ -3655,7 +4387,7 @@ index cdffbab48993a0ecd53bc56db7a07c9bd3afdf54..8ac7d5baf4a4d6816c2e90db93945dcf
          "docker_shm_size", "docker_mount_cwd_to_workspace", "docker_network", "docker_run_as_host_user",
          "docker_snap_compat",
 diff --git a/hermes_cli/cli_info_mixin.py b/hermes_cli/cli_info_mixin.py
-index 5fbca2899d86b8b9b783f86c46ab6653fa314317..8afbfe6a83214f99ef2586c44820df057519edbf 100644
+index 5fbca2899..8afbfe6a8 100644
 --- a/hermes_cli/cli_info_mixin.py
 +++ b/hermes_cli/cli_info_mixin.py
 @@ -11,6 +11,7 @@ import concurrent.futures
@@ -3767,7 +4499,7 @@ index 5fbca2899d86b8b9b783f86c46ab6653fa314317..8afbfe6a83214f99ef2586c44820df05
              self._console_print(f"[dim]{t('cli.shell.exited', code=str(exit_code))}[/]")
          return True
 diff --git a/hermes_cli/config.py b/hermes_cli/config.py
-index f27e0640fa0466e85a96da5ae942b7b824aff325..719196f1b0c546d8abab4e8b3ed8d084c69952bc 100644
+index f27e0640f..719196f1b 100644
 --- a/hermes_cli/config.py
 +++ b/hermes_cli/config.py
 @@ -1914,7 +1914,7 @@ TERMINAL_CONFIG_ENV_MAP = {
@@ -3803,7 +4535,7 @@ index f27e0640fa0466e85a96da5ae942b7b824aff325..719196f1b0c546d8abab4e8b3ed8d084
              count += 1
      return count
 diff --git a/hermes_cli/config_defaults.py b/hermes_cli/config_defaults.py
-index 6f8743bddc3f85355d430f86c79bc806730cddcd..54f9611874ade1e239070b7fa0e45c5ac1efa62e 100644
+index 6f8743bdd..54f961187 100644
 --- a/hermes_cli/config_defaults.py
 +++ b/hermes_cli/config_defaults.py
 @@ -425,12 +425,11 @@ DEFAULT_CONFIG = {
@@ -3848,7 +4580,7 @@ index 6f8743bddc3f85355d430f86c79bc806730cddcd..54f9611874ade1e239070b7fa0e45c5a
          # Visual theme: "default" | "midnight" | "ember" | "mono" | "cyberpunk" | "rose"
          "theme": "default",
 diff --git a/hermes_cli/config_effective.py b/hermes_cli/config_effective.py
-index c827e1e930d3690cb4657c4102f48c0b7ceb82e7..f4aa8d98bb03c0f0a9dd232dd18c6c76960dd0d2 100644
+index c827e1e93..f4aa8d98b 100644
 --- a/hermes_cli/config_effective.py
 +++ b/hermes_cli/config_effective.py
 @@ -31,9 +31,10 @@ _LAST_GOOD_USER_RAW: dict[str, dict[str, Any]] = {}
@@ -3918,7 +4650,7 @@ index c827e1e930d3690cb4657c4102f48c0b7ceb82e7..f4aa8d98bb03c0f0a9dd232dd18c6c76
          managed = managed_scope.load_managed_config()
          if managed:
 diff --git a/hermes_cli/config_runtime_keys.py b/hermes_cli/config_runtime_keys.py
-index 0a98c5dd4945c941cbd9560b922b8d544c912ca9..7d44b1a40bec7a922729e0f665a6b39f34e6de45 100644
+index 0a98c5dd4..7d44b1a40 100644
 --- a/hermes_cli/config_runtime_keys.py
 +++ b/hermes_cli/config_runtime_keys.py
 @@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
@@ -3930,7 +4662,7 @@ index 0a98c5dd4945c941cbd9560b922b8d544c912ca9..7d44b1a40bec7a922729e0f665a6b39f
 
 
 diff --git a/hermes_cli/doctor_tools.py b/hermes_cli/doctor_tools.py
-index b463586d196309ea23076dcf70dce446eefca2a6..08862f041ca6d5cf8fabe01b2a2b53fc05dbe44d 100644
+index b463586d1..08862f041 100644
 --- a/hermes_cli/doctor_tools.py
 +++ b/hermes_cli/doctor_tools.py
 @@ -214,12 +214,18 @@ def _check_docker_backend(terminal_env: str, running_in_container: bool, issues:
@@ -3963,7 +4695,7 @@ index b463586d196309ea23076dcf70dce446eefca2a6..08862f041ca6d5cf8fabe01b2a2b53fc
      # selected but unconfigured backend cannot look healthy.
      web_rows = []
 diff --git a/hermes_cli/env_loader.py b/hermes_cli/env_loader.py
-index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..421aaae03228178960b888e800e38298905f4286 100644
+index 4b1c5b9b3..421aaae03 100644
 --- a/hermes_cli/env_loader.py
 +++ b/hermes_cli/env_loader.py
 @@ -110,7 +110,7 @@ def _env_keys_defined_in_dotenv(path: Path) -> set[str]:
@@ -4426,7 +5158,7 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..421aaae03228178960b888e800e38298
      # A real fetch attempt happened (success OR error): mark the home so the 3-5 import-time calls per
      # startup don't re-fetch / re-print (error retries are opt-in via reset_secret_source_cache()).
 diff --git a/hermes_cli/gateway_chat_view.py b/hermes_cli/gateway_chat_view.py
-index e9ea49802b7f991223cb560d0673abd94bc99b15..d0727635f392886a8b24806fbb7fb6c23632b246 100644
+index e9ea49802..d0727635f 100644
 --- a/hermes_cli/gateway_chat_view.py
 +++ b/hermes_cli/gateway_chat_view.py
 @@ -2,6 +2,7 @@
@@ -4524,8 +5256,243 @@ index e9ea49802b7f991223cb560d0673abd94bc99b15..d0727635f392886a8b24806fbb7fb6c2
                          else:
                              # Same scrollback shape as the in-process CLI: the typed prompt line is
                              # erased on submit and the message lands as a `●` preview row.
+diff --git a/hermes_cli/gateway_connections_normalize.py b/hermes_cli/gateway_connections_normalize.py
+index 340523a3c..b00c5c8c0 100644
+--- a/hermes_cli/gateway_connections_normalize.py
++++ b/hermes_cli/gateway_connections_normalize.py
+@@ -463,13 +463,17 @@ def _same_url(a: Any, b: Any) -> bool:
+     return normalize_remote_base_url(a) == normalize_remote_base_url(b)
+
+
++_DIAL_FIELDS = ("kind", "url", "authMode", "org", "host", "user", "port", "keyPath", "remoteHermesPath",
++                "remoteProfile", "token", "headers")
++
++
++def dial_fingerprint(entry: dict) -> str:
++    """Compare saved dial fields without depending on a store revision or the entry's label."""
++    return json.dumps([entry.get(key) for key in _DIAL_FIELDS], sort_keys=True, default=str)
++
++
+ def connection_dial_fields_changed(before: dict, after: dict) -> bool:
+-    if before.get("kind") != after.get("kind"):
+-        return True
+-    for field in ("url", "authMode", "org", "host", "user", "port", "keyPath", "remoteHermesPath", "remoteProfile"):
+-        if before.get(field) != after.get(field):
+-            return True
+-    return before.get("token") != after.get("token") or before.get("headers") != after.get("headers")
++    return any(before.get(key) != after.get(key) for key in _DIAL_FIELDS)
+
+
+ def upsert_connection(registry: dict, entry: dict) -> dict:
+diff --git a/hermes_cli/gateway_connections_oauth.py b/hermes_cli/gateway_connections_oauth.py
+index d2088a348..030aa1a80 100644
+--- a/hermes_cli/gateway_connections_oauth.py
++++ b/hermes_cli/gateway_connections_oauth.py
+@@ -23,13 +23,14 @@ import hashlib
+ import secrets
+ import threading
+ import time
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from typing import Any, Optional
+ from urllib.parse import parse_qs, urlencode, urlparse
+
+ import httpx
+
+ from hermes_cli import gateway_connections as store
++from hermes_cli.gateway_connections_normalize import dial_fingerprint
+
+ NATIVE_FLOW_ID = "native_pkce"
+ CALLBACK_PATH = "/webapp/gateway-connections/oauth/callback"
+@@ -309,6 +310,8 @@ class Grant:
+     access_token: str
+     base_url: str
+     headers: dict
++    dial: str = field(repr=False)
++    principal: tuple[str, str] = field(repr=False)
+
+
+ def _snapshot(connection_id: str) -> dict:
+@@ -335,25 +338,28 @@ def ensure_access_token(connection_id: str, *, rejected_token: str = "") -> Gran
+             raise NotSignedIn("Sign in to this gateway first.")
+         forced = bool(rejected_token) and rejected_token == tokens.get("accessToken")
+         if not forced and not token_needs_refresh(tokens):
+-            return _grant(tokens, snap["headers"])
++            return _grant(tokens, snap)
+         if not tokens.get("refreshToken"):
+             store.write_tokens(connection_id, None)
+             raise NotSignedIn("The sign-in expired; sign in again.")
+-        return _refresh(connection_id, snap["headers"], tokens)
++        return _refresh(connection_id, snap, tokens)
+
+
+-def _grant(tokens: dict, headers: dict) -> Grant:
+-    return Grant(access_token=tokens["accessToken"], base_url=str(tokens["baseUrl"]).rstrip("/"), headers=dict(headers))
++def _grant(tokens: dict, snap: dict) -> Grant:
++    # Older gateways can omit an account id. In that case only the same token proves the same sign-in.
++    principal = (tokens.get("provider") or "", tokens.get("userId") or tokens["accessToken"])
++    return Grant(access_token=tokens["accessToken"], base_url=snap["url"], headers=dict(snap["headers"]),
++                 dial=dial_fingerprint(snap["entry"]), principal=principal)
+
+
+-def _refresh(connection_id: str, headers: dict, tokens: dict) -> Grant:
++def _refresh(connection_id: str, snap: dict, tokens: dict) -> Grant:
+     # The refresh token goes only to the gateway that issued it (the snapshot hands out a set
+     # only while the entry still names that URL).
+     base_url = str(tokens["baseUrl"]).rstrip("/")
+     try:
+         response = _post_json(_endpoint(base_url, "/auth/native/refresh"),
+                               {"refresh_token": tokens["refreshToken"], "provider": tokens.get("provider") or ""},
+-                              headers)
++                              snap["headers"])
+     except httpx.HTTPError as exc:
+         raise OAuthSignInError(f"Could not reach {base_url} to renew the sign-in: {exc}") from exc
+     if response.status_code == 401:
+@@ -369,13 +375,13 @@ def _refresh(connection_id: str, headers: dict, tokens: dict) -> Grant:
+     if current["tokens"].get("accessToken") != tokens.get("accessToken"):
+         # A sign-in (Desktop's or a browser's) replaced the tokens meanwhile: it wins, with the
+         # address it was issued by.
+-        return _grant(current["tokens"], current["headers"])
++        return _grant(current["tokens"], current)
+     try:
+         store.write_tokens(connection_id, rotated, issued_by=base_url)
+     except (store.ConnectionStoreError, store.NoSuchConnection) as exc:
+         # Re-pointed or removed while the remote answered: this rotation belongs to neither host.
+         raise NotSignedIn("The connection changed while renewing its sign-in; sign in again.") from exc
+-    return Grant(access_token=rotated["accessToken"], base_url=base_url, headers=dict(headers))
++    return _grant(rotated, snap)
+
+
+ def _drop_if_unchanged(connection_id: str, tokens: dict) -> None:
+diff --git a/hermes_cli/gateway_connections_reach.py b/hermes_cli/gateway_connections_reach.py
+index 8ae1334bd..8d22bd0e7 100644
+--- a/hermes_cli/gateway_connections_reach.py
++++ b/hermes_cli/gateway_connections_reach.py
+@@ -19,17 +19,27 @@ session token as ``?token=`` (``connection-config.ts::buildGatewayWsUrl``) and n
+
+ from __future__ import annotations
+
++from dataclasses import dataclass, field
+ from typing import Optional
+
+ import httpx
+
+ from hermes_cli import gateway_connections as store
+ from hermes_cli import gateway_connections_oauth as oauth
++from hermes_cli.gateway_connections_normalize import dial_fingerprint
+
+ SESSION_TOKEN_HEADER = "X-Hermes-Session-Token"
+ _TICKET_TIMEOUT_S = 8.0
+
+
++@dataclass(frozen=True)
++class ResolvedDial:
++    base_url: str
++    headers: dict[str, str] = field(repr=False)
++    dial: str = field(repr=False)
++    principal: tuple[str, str] | None = field(default=None, repr=False)
++
++
+ def _entry(connection_id: str) -> dict:
+     entry = next((c for c in store.read_registry()["connections"] if c["id"] == connection_id), None)
+     if entry is None:
+@@ -37,12 +47,13 @@ def _entry(connection_id: str) -> dict:
+     return entry
+
+
+-def _remote_target(entry: dict, rejected_token: str) -> tuple[str, dict[str, str]]:
++def _remote_target(entry: dict, rejected_token: str) -> ResolvedDial:
+     if entry.get("authMode") == "oauth":
+         # The token comes back with the address it was issued by and that read's extra headers:
+         # one snapshot, never this entry's (possibly older) URL paired with a newer sign-in.
+         grant = oauth.ensure_access_token(entry["id"], rejected_token=rejected_token)
+-        return grant.base_url, {**grant.headers, "Authorization": f"Bearer {grant.access_token}"}
++        return ResolvedDial(grant.base_url, {**grant.headers, "Authorization": f"Bearer {grant.access_token}"},
++                            grant.dial, grant.principal)
+     snap = store.dial_snapshot(entry["id"])
+     if snap["url"] is None or snap["entry"].get("kind") not in ("remote", "cloud") \
+             or snap["entry"].get("authMode") == "oauth":
+@@ -50,21 +61,26 @@ def _remote_target(entry: dict, rejected_token: str) -> tuple[str, dict[str, str
+     headers = dict(snap["headers"])
+     if snap["token"]:
+         headers[SESSION_TOKEN_HEADER] = snap["token"]
+-    return snap["url"], headers
++    return ResolvedDial(snap["url"], headers, dial_fingerprint(snap["entry"]))
+
+
+-def _ssh_target(entry: dict, _rejected_token: str) -> tuple[str, dict[str, str]]:
++def _ssh_target(entry: dict, _rejected_token: str) -> ResolvedDial:
+     from hermes_cli import gateway_connections_ssh as ssh
+
+     tunnel = ssh.ensure_tunnel(entry)
+-    return tunnel.base_url, {SESSION_TOKEN_HEADER: tunnel.token}
++    return ResolvedDial(tunnel.base_url, {SESSION_TOKEN_HEADER: tunnel.token}, dial_fingerprint(entry))
+
+
+ _BY_KIND = {"remote": _remote_target, "cloud": _remote_target, "ssh": _ssh_target}
+
+
+ def resolve_target(connection_id: str, *, rejected_token: str = "") -> tuple[str, dict[str, str]]:
+-    """``(base_url, headers)`` to reach *connection_id* as a normal client of that gateway.
++    target = resolve_dial_target(connection_id, rejected_token=rejected_token)
++    return target.base_url, target.headers
++
++
++def resolve_dial_target(connection_id: str, *, rejected_token: str = "") -> ResolvedDial:
++    """Return the credentials and identity of the saved dial used to reach the gateway.
+
+     Raises :class:`store.NoSuchConnection` (404), :class:`store.ConnectionStoreError` (400: the
+     local entry, or a remote with no URL), :class:`oauth.NotSignedIn` (the user must sign in),
+@@ -84,21 +100,24 @@ def _post_ticket(base_url: str, headers: dict[str, str]) -> httpx.Response:
+         return client.post(f"{base_url}/api/auth/ws-ticket", headers=headers)
+
+
+-def mint_ws_ticket(connection_id: str, *, for_base_url: Optional[str] = None) -> Optional[str]:
++def mint_ws_ticket(connection_id: str, *, for_base_url: Optional[str] = None,
++                   for_dial: Optional[ResolvedDial] = None) -> Optional[str]:
+     """The remote's one-use socket ticket for an oauth-mode *connection_id*; ``None`` for the auth
+     modes whose socket carries the session token instead. One forced rotation on a 401.
+
+     With *for_base_url* (the address the socket will dial), a ticket is minted only by that
+     gateway: an entry re-pointed meanwhile is refused rather than handing one host's ticket to
+-    another."""
++    another. ``for_dial`` pins the saved authentication and routing fields as well."""
+     entry = _entry(connection_id)
++    if for_dial is not None and dial_fingerprint(entry) != for_dial.dial:
++        raise oauth.OAuthSignInError("The connection changed while connecting; try again.")
+     if entry.get("kind") not in ("remote", "cloud") or entry.get("authMode") != "oauth":
+         return None
+-    base_url, headers = _ticket_target(connection_id, "", for_base_url)
++    base_url, headers = _ticket_target(connection_id, "", for_base_url, for_dial)
+     response = _post_ticket(base_url, headers)
+     if response.status_code == 401:
+         rejected = headers["Authorization"].removeprefix("Bearer ")
+-        base_url, headers = _ticket_target(connection_id, rejected, for_base_url or base_url)
++        base_url, headers = _ticket_target(connection_id, rejected, for_base_url or base_url, for_dial)
+         response = _post_ticket(base_url, headers)
+     if response.status_code != 200:
+         raise oauth.OAuthSignInError(f"{base_url} refused a socket ticket ({response.status_code}).")
+@@ -108,11 +127,14 @@ def mint_ws_ticket(connection_id: str, *, for_base_url: Optional[str] = None) ->
+     return ticket
+
+
+-def _ticket_target(connection_id: str, rejected_token: str, for_base_url: Optional[str]) -> tuple[str, dict[str, str]]:
+-    base_url, headers = resolve_target(connection_id, rejected_token=rejected_token)
+-    if for_base_url is not None and base_url != for_base_url.rstrip("/"):
++def _ticket_target(connection_id: str, rejected_token: str, for_base_url: Optional[str],
++                   for_dial: Optional[ResolvedDial]) -> tuple[str, dict[str, str]]:
++    target = resolve_dial_target(connection_id, rejected_token=rejected_token)
++    if for_base_url is not None and target.base_url != for_base_url.rstrip("/"):
+         raise oauth.OAuthSignInError("The connection changed address while connecting; try again.")
+-    return base_url, headers
++    if for_dial is not None and (target.dial != for_dial.dial or target.principal != for_dial.principal):
++        raise oauth.OAuthSignInError("The connection changed while connecting; try again.")
++    return target.base_url, target.headers
+
+
+ def forget(connection_id: str) -> None:
 diff --git a/hermes_cli/gateway_connections_ssh_transport.py b/hermes_cli/gateway_connections_ssh_transport.py
-index c446e30c2f72a9a88963adfcf8bb0aaf3f7520bf..9a9d426eeb2c803ba4b844f80dd2913f436e6152 100644
+index c446e30c2..9a9d426ee 100644
 --- a/hermes_cli/gateway_connections_ssh_transport.py
 +++ b/hermes_cli/gateway_connections_ssh_transport.py
 @@ -180,19 +180,21 @@ class SshEndpoint:
@@ -4568,8 +5535,40 @@ index c446e30c2f72a9a88963adfcf8bb0aaf3f7520bf..9a9d426eeb2c803ba4b844f80dd2913f
              "--", endpoint.target, remote_command]
 
 
+diff --git a/hermes_cli/gateway_connections_watch.py b/hermes_cli/gateway_connections_watch.py
+index 63ce250c6..ec7b24eec 100644
+--- a/hermes_cli/gateway_connections_watch.py
++++ b/hermes_cli/gateway_connections_watch.py
+@@ -11,7 +11,6 @@ from __future__ import annotations
+
+ import asyncio
+ import contextlib
+-import json
+ import logging
+ import os
+ from contextlib import asynccontextmanager
+@@ -19,17 +18,14 @@ from pathlib import Path
+ from typing import AsyncIterator, Optional
+
+ from hermes_cli import gateway_connections as store
++from hermes_cli.gateway_connections_normalize import dial_fingerprint
+
+ _log = logging.getLogger(__name__)
+ POLL_INTERVAL_S = 1.5
+-#: What decides where and how an entry dials (``connection_dial_fields_changed``).
+-_DIAL_FIELDS = ("kind", "url", "authMode", "org", "host", "user", "port", "keyPath", "remoteHermesPath",
+-                "remoteProfile", "token", "headers")
+
+
+ def fingerprints(registry: dict) -> dict[str, str]:
+-    return {c["id"]: json.dumps([c.get(k) for k in _DIAL_FIELDS], sort_keys=True, default=str)
+-            for c in registry["connections"]}
++    return {entry["id"]: dial_fingerprint(entry) for entry in registry["connections"]}
+
+
+ def _stamp(path: Path) -> Optional[tuple[int, int, int]]:
 diff --git a/hermes_cli/gateway_rollback.py b/hermes_cli/gateway_rollback.py
-index b821de6acca62d049b2d526c11831f218a894e85..b932d4d273ffec6259365070b18ffd934a088029 100644
+index b821de6ac..b932d4d27 100644
 --- a/hermes_cli/gateway_rollback.py
 +++ b/hermes_cli/gateway_rollback.py
 @@ -10,7 +10,7 @@ from __future__ import annotations
@@ -4593,7 +5592,7 @@ index b821de6acca62d049b2d526c11831f218a894e85..b932d4d273ffec6259365070b18ffd93
 
 diff --git a/hermes_cli/managed_operator_shell.py b/hermes_cli/managed_operator_shell.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..c50973725023dbab07a7a4045c6b229a7a5d0ad7
+index 000000000..c50973725
 --- /dev/null
 +++ b/hermes_cli/managed_operator_shell.py
 @@ -0,0 +1,211 @@
@@ -4809,7 +5808,7 @@ index 0000000000000000000000000000000000000000..c50973725023dbab07a7a4045c6b229a
 +        argv, receipt, process.returncode, stdout.decode("utf-8", "replace"), stderr.decode("utf-8", "replace"),
 +    )
 diff --git a/hermes_cli/managed_scope.py b/hermes_cli/managed_scope.py
-index 19cda7208107c9eee4379786da9427cf1568aff5..0c6b3b6ee0ef2bf6897d7ac9050f148e67639156 100644
+index 19cda7208..0c6b3b6ee 100644
 --- a/hermes_cli/managed_scope.py
 +++ b/hermes_cli/managed_scope.py
 @@ -34,6 +34,9 @@ _CACHE_LOCK = threading.Lock()
@@ -4968,7 +5967,7 @@ index 19cda7208107c9eee4379786da9427cf1568aff5..0c6b3b6ee0ef2bf6897d7ac9050f148e
          return config
 
 diff --git a/hermes_cli/pty_session.py b/hermes_cli/pty_session.py
-index dbd22186e5be9cb24456bdeb5edbc7b38bea6b43..1e3dda72c8564cfbce21731ded17cfa5848d1a1f 100644
+index dbd22186e..1e3dda72c 100644
 --- a/hermes_cli/pty_session.py
 +++ b/hermes_cli/pty_session.py
 @@ -243,6 +243,7 @@ class PtySession:
@@ -4989,7 +5988,7 @@ index dbd22186e5be9cb24456bdeb5edbc7b38bea6b43..1e3dda72c8564cfbce21731ded17cfa5
                      return False
                  # Metadata-bearing host clients treat exactly the next binary
 diff --git a/hermes_cli/ssh_workspace_fs.py b/hermes_cli/ssh_workspace_fs.py
-index 0bc7ac4d0fb1a9e515b12a7db0cd482becda51b2..65c80f67e85958d7c32b10fb82938604c951630e 100644
+index 0bc7ac4d0..65c80f67e 100644
 --- a/hermes_cli/ssh_workspace_fs.py
 +++ b/hermes_cli/ssh_workspace_fs.py
 @@ -32,6 +32,7 @@ class _SshFsConfig:
@@ -5036,7 +6035,7 @@ index 0bc7ac4d0fb1a9e515b12a7db0cd482becda51b2..65c80f67e85958d7c32b10fb82938604
          except Exception as exc:
              raise SshWorkspaceFsError("ECONN", "Could not connect to the SSH workspace") from exc
 diff --git a/hermes_cli/subcommands/computer_use_screen.py b/hermes_cli/subcommands/computer_use_screen.py
-index 711ec82420119740d656909736cda68fc55e1397..b5defc5b69951360ae18a1a5c6e1a3b26132d6cb 100644
+index 711ec8242..b5defc5b6 100644
 --- a/hermes_cli/subcommands/computer_use_screen.py
 +++ b/hermes_cli/subcommands/computer_use_screen.py
 @@ -62,6 +62,9 @@ def _screen_stop(args) -> int:
@@ -5050,7 +6049,7 @@ index 711ec82420119740d656909736cda68fc55e1397..b5defc5b69951360ae18a1a5c6e1a3b2
          print("Bot Desktop screens run on Linux gateway hosts only.")
          return 1
 diff --git a/hermes_cli/web_host_terminal.py b/hermes_cli/web_host_terminal.py
-index 95bf57939230287f09ba366ec1535b87e5d97488..dc75310f479564c06a331bd1fc4df2fb320eee98 100644
+index 95bf57939..dc75310f4 100644
 --- a/hermes_cli/web_host_terminal.py
 +++ b/hermes_cli/web_host_terminal.py
 @@ -3,10 +3,16 @@
@@ -5330,7 +6329,7 @@ index 95bf57939230287f09ba366ec1535b87e5d97488..dc75310f479564c06a331bd1fc4df2fb
 +fi
 +'''
 diff --git a/hermes_cli/web_host_terminal_sessions.py b/hermes_cli/web_host_terminal_sessions.py
-index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5652dad59 100644
+index c3c4bf911..ca1b022c0 100644
 --- a/hermes_cli/web_host_terminal_sessions.py
 +++ b/hermes_cli/web_host_terminal_sessions.py
 @@ -11,7 +11,7 @@ from __future__ import annotations
@@ -5342,23 +6341,27 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
  import json
  from pathlib import Path
  import re
-@@ -24,6 +24,7 @@ from hermes_cli.pty_session import (
+@@ -24,8 +24,9 @@ from hermes_cli.pty_session import (
      _VIEWER_SEND_ERRORS, _VIEWER_SEND_TIMEOUT_SECONDS, WS_CLOSE_VIEWER_STALLED,
      WS_CLOSE_VIEWER_STALLED_REASON, PtySession, PtySessionRegistry, RegistryFull, _close_ws, run_reaper,
  )
 +from hermes_cli.web_host_terminal import ExecutorTerminalError
  from hermes_cli.web_host_terminal import META_PREFIX
- from hermes_constants import assert_named_profile_home_live, get_hermes_home
+-from hermes_constants import assert_named_profile_home_live, get_hermes_home
++from hermes_constants import assert_named_profile_home_live, get_hermes_home, profile_name_for_home
 
-@@ -73,6 +74,7 @@ class HostOwner:
+ # No survival across backend restart. Disconnects retain a bounded ANSI tail.
+ RETENTION_SECONDS = 15 * 60
+@@ -73,6 +74,8 @@ class HostOwner:
      home: Path
      shell: str
      cwd: str
 +    environment: str = field(default="gateway", kw_only=True)
++    admitted_profile: str | None = field(default=None, kw_only=True)
 
      def current(self) -> bool:
          """Blocking filesystem reads (home, tombstone): call off-loop."""
-@@ -110,7 +112,6 @@ def _request_home(profile: str | None) -> Path:
+@@ -110,7 +113,6 @@ def _request_home(profile: str | None) -> Path:
          if requested and requested.lower() != "current" else get_hermes_home()
      ).resolve()
 
@@ -5366,7 +6369,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
  class HostTerminalRegistry(PtySessionRegistry):
      # The most exited shells remembered at once: a tab that redials after the reaper took its
      # shell still learns that it exited (``resolve``).
-@@ -134,10 +135,23 @@ class HostTerminalRegistry(PtySessionRegistry):
+@@ -134,10 +136,26 @@ class HostTerminalRegistry(PtySessionRegistry):
          raise RegistryFull()
 
      async def create(self, ws: WebSocket, identity: tuple[str, str]):
@@ -5379,19 +6382,22 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
 +        if getattr(ws.state, "ssh_terminal", None) is None:
 +            from hermes_cli.web_host_terminal import prepare, environment
 +            def request_live_home():
-+                home = _request_home(ws.query_params.get("profile"))
++                requested = (ws.query_params.get("profile") or "").strip()
++                home = _request_home(requested)
 +                if not _home_live(home):
 +                    raise TerminalExpired()
-+                return home
++                profile = (requested if requested and requested.lower() != "current"
++                           else profile_name_for_home(get_hermes_home()))
++                return home, profile
 +
-+            home = await asyncio.to_thread(request_live_home)
++            home, profile = await asyncio.to_thread(request_live_home)
 +            # Remote preparation must never hold the PTY registry's spawn lock.
 +            prepared = await prepare(home, ws.query_params.get("cwd"), mode=environment(ws.app),
 +                                     ssh_config=getattr(ws.app.state, "executor_ssh_config", ""))
 
          def spawn():
              nonlocal owner
-@@ -145,11 +159,10 @@ class HostTerminalRegistry(PtySessionRegistry):
+@@ -145,11 +163,11 @@ class HostTerminalRegistry(PtySessionRegistry):
                  from hermes_cli.web_host_terminal_ssh import prepare_shell
                  owner, argv, cwd, env = prepare_shell(ws, identity)
              else:
@@ -5401,11 +6407,12 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
 -                argv, cwd, env, shell = resolve_argv(home=home, requested_cwd=ws.query_params.get("cwd"))
 -                owner = HostOwner(identity, home, shell, cwd)
 +                argv, cwd, env, shell, terminal_cwd = prepared
-+                owner = HostOwner(identity, home, shell, terminal_cwd, environment=environment(ws.app))
++                owner = HostOwner(identity, home, shell, terminal_cwd, environment=environment(ws.app),
++                                  admitted_profile=profile)
              bridge = PtyBridge.spawn(
                  argv, cwd=cwd, env=env,
                  cols=query_dimension(ws.query_params.get("cols"), 80, 2000),
-@@ -162,9 +175,12 @@ class HostTerminalRegistry(PtySessionRegistry):
+@@ -162,9 +180,12 @@ class HostTerminalRegistry(PtySessionRegistry):
          session, _ = await self.attach_or_spawn(token, spawn=spawn)
          assert owner is not None  # spawn completed
          self.owners[token] = owner
@@ -5420,15 +6427,19 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
          return session, owner
 
      async def resolve(self, token: str, ws: WebSocket, identity: tuple[str, str], *, closing=False):
-@@ -281,6 +297,7 @@ async def host_terminal_lifespan(app):
+@@ -280,7 +301,11 @@ async def host_terminal_lifespan(app):
+
 
  def _metadata(token, owner, registry, *, reconnected, truncated):
++    placement = {}
++    if type(owner) is HostOwner:
++        placement = {"environment": owner.environment, "profile": owner.admitted_profile}
      return META_PREFIX + json.dumps({
-+        **({"environment": owner.environment} if type(owner) is HostOwner else {}),
++        **placement,
          "shell": owner.shell, "terminalId": token, "cwd": owner.cwd,
          "reconnected": reconnected, "retentionSeconds": registry._ttl,
          "truncated": truncated,
-@@ -300,9 +317,18 @@ async def _admit(ws: WebSocket, registry: HostTerminalRegistry):
+@@ -300,9 +325,18 @@ async def _admit(ws: WebSocket, registry: HostTerminalRegistry):
      """
      token = ws.query_params.get("attach")
      action = ws.query_params.get("action")
@@ -5449,7 +6460,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      if token is not None and not TOKEN_RE.fullmatch(token):
          raise TerminalExpired()
      if action == "close" and token not in registry._sessions:
-@@ -316,6 +342,9 @@ async def _admit(ws: WebSocket, registry: HostTerminalRegistry):
+@@ -316,6 +350,9 @@ async def _admit(ws: WebSocket, registry: HostTerminalRegistry):
          await registry.remove(token)
          await _send_closed(ws, token)
          return None
@@ -5459,7 +6470,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      return session, owner
 
 
-@@ -392,7 +421,14 @@ async def _queue_frame(ws: WebSocket, inbox: asyncio.Queue, ended: asyncio.Futur
+@@ -392,7 +429,14 @@ async def _queue_frame(ws: WebSocket, inbox: asyncio.Queue, ended: asyncio.Futur
      await inbox.put(msg)
 
 
@@ -5475,7 +6486,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      """Queue inbound frames. The last item is None, or the error that ended reading
      (re-raised by ``_pump_input`` so the route's handlers still see it). ``ended`` gets the same
      item as soon as reading ends, before it is queued, or None as soon as a full inbox finds the
-@@ -401,7 +437,11 @@ async def _read_frames(ws: WebSocket, inbox: asyncio.Queue, ended: asyncio.Futur
+@@ -401,7 +445,11 @@ async def _read_frames(ws: WebSocket, inbox: asyncio.Queue, ended: asyncio.Futur
      end = None
      try:
          while (msg := await ws.receive()).get("type") != "websocket.disconnect":
@@ -5488,7 +6499,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      except RuntimeError:  # a superseding/drain task already closed us
          pass
      # health: allow BLE001 -- forwarded, not swallowed: _pump_input re-raises it, and a reader that died unqueued would hang the pump
-@@ -486,7 +526,7 @@ async def _resize(session: PtySession, ws: WebSocket, size: tuple[int, int], und
+@@ -486,7 +534,7 @@ async def _resize(session: PtySession, ws: WebSocket, size: tuple[int, int], und
 
 
  async def _pump_input(ws: WebSocket, registry: HostTerminalRegistry, token: str,
@@ -5497,7 +6508,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      """Forward keystrokes and resizes while ``ws`` is the attached viewer.
 
      Keystrokes reach the shell only inside ``owner.admit``, so input sent after the
-@@ -504,9 +544,12 @@ async def _pump_input(ws: WebSocket, registry: HostTerminalRegistry, token: str,
+@@ -504,9 +552,12 @@ async def _pump_input(ws: WebSocket, registry: HostTerminalRegistry, token: str,
      buffers input itself, so Windows writes land at once and keep the bridge's deadline.
      """
      from hermes_cli.web_server_chat import _RESIZE_RE
@@ -5513,7 +6524,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      undo = None
      try:
          # No Ctrl-L/redraw input: arbitrary foreground shell programs own stdin.
-@@ -548,29 +591,74 @@ async def _pump_input(ws: WebSocket, registry: HostTerminalRegistry, token: str,
+@@ -548,29 +599,74 @@ async def _pump_input(ws: WebSocket, registry: HostTerminalRegistry, token: str,
              await reader
 
 
@@ -5591,7 +6602,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
      except TerminalDenied:
          await ws.close(code=4403, reason="Terminal belongs to another identity or profile")
      except TerminalExited:
-@@ -585,5 +673,12 @@ async def host_terminal(ws: WebSocket) -> None:
+@@ -585,5 +681,12 @@ async def host_terminal(ws: WebSocket) -> None:
      except (OSError, RuntimeError) as exc:
          await _pty_fail(ws, exc, surface="Terminal")
      finally:
@@ -5606,7 +6617,7 @@ index c3c4bf911bc90c697272c00fc8831465449e05c1..bc8fa6b57f881b6320f2db541493c2b5
 +            else:
 +                await registry.remove(session.key)
 diff --git a/hermes_cli/web_host_terminal_ssh.py b/hermes_cli/web_host_terminal_ssh.py
-index f6fdd5331bf1007481b29916eea2aa1ca9903ab1..d3459bebcf4f7c9098165aa71b611db578b7f539 100644
+index f6fdd5331..d3459bebc 100644
 --- a/hermes_cli/web_host_terminal_ssh.py
 +++ b/hermes_cli/web_host_terminal_ssh.py
 @@ -61,7 +61,7 @@ def prepare_shell(ws: WebSocket, identity: tuple[str, str]):
@@ -5619,7 +6630,7 @@ index f6fdd5331bf1007481b29916eea2aa1ca9903ab1..d3459bebcf4f7c9098165aa71b611db5
      owner.admit(lambda: None)
      # The remote profile is an attachment scope, never a home resolved on this host.
 diff --git a/hermes_cli/web_routers/display.py b/hermes_cli/web_routers/display.py
-index 054fa77347ea27ad7b94c522072da3b0c46ebe58..7183ea2426fc64745a49b8909f51b262c4ce4110 100644
+index 054fa7734..7183ea242 100644
 --- a/hermes_cli/web_routers/display.py
 +++ b/hermes_cli/web_routers/display.py
 @@ -23,6 +23,7 @@ from __future__ import annotations
@@ -5691,7 +6702,7 @@ index 054fa77347ea27ad7b94c522072da3b0c46ebe58..7183ea2426fc64745a49b8909f51b262
          await ws.close(code=_CLOSE_DESKTOP_GONE, reason="Bot Desktop is not running")
          return
 diff --git a/hermes_cli/web_routers/files.py b/hermes_cli/web_routers/files.py
-index 08df7512c09b5d310f3a33d0e845e8d4e084ee64..fee943e95c22ff055be851959c841ce98821e88a 100644
+index 08df7512c..fee943e95 100644
 --- a/hermes_cli/web_routers/files.py
 +++ b/hermes_cli/web_routers/files.py
 @@ -425,6 +425,7 @@ def _fs_backend(profile: Optional[str] = None):
@@ -5702,8 +6713,150 @@ index 08df7512c09b5d310f3a33d0e845e8d4e084ee64..fee943e95c22ff055be851959c841ce9
      }.items():
          if not terminal.get(key) and profile_env.get(env_name):
              terminal[key] = profile_env[env_name]
+diff --git a/hermes_cli/web_routers/webapp_relay_proxy.py b/hermes_cli/web_routers/webapp_relay_proxy.py
+index fdf800944..0d905bd1b 100644
+--- a/hermes_cli/web_routers/webapp_relay_proxy.py
++++ b/hermes_cli/web_routers/webapp_relay_proxy.py
+@@ -13,15 +13,19 @@ being sent to this gateway's sign-in.
+ Sockets. A relayed socket opens only with this gateway's one-use ``relay`` ticket (``?relay_ticket=``,
+ minted by ``POST /api/webapp/socket-ticket?socket=relay``) for the same identity, and is tracked with
+ the browser's other sockets, so signing out here closes it. The socket's credential at the other
+-gateway is minted here per dial (its session token, or a one-use ticket). Frames pass through as they
+-are; each side's close reaches the other, and removing the connection closes it.
++gateway is minted here per dial (its session token, or a one-use ticket). Terminal placement metadata
++and terminal read requests carry an opaque tag for the actual dial. Each side's close reaches the
++other, and removing the connection closes it.
+ """
+ from __future__ import annotations
+
+ import asyncio
+ import contextlib
++import hmac
+ import http.cookiejar
++import json
+ import logging
++import secrets
+ import threading
+ import urllib.parse
+ import weakref
+@@ -234,6 +238,28 @@ async def relay_http(request: Request, connection_id: str, path: str):
+
+ _live_lock = threading.Lock()
+ _live: dict[int, tuple[weakref.ref, asyncio.AbstractEventLoop, str]] = {}
++_terminal_read_key = secrets.token_bytes(32)
++
++
++def _terminal_read_frame(path: str, message: str, scope: str) -> str:
++    from hermes_cli.web_host_terminal import META_PREFIX
++
++    terminal = path == "api/host-terminal" and message.startswith(META_PREFIX)
++    if not terminal and (path != "api/ws" or '"terminal.read"' not in message):
++        return message
++    try:
++        frame = json.loads(message.removeprefix(META_PREFIX) if terminal else message)
++    except ValueError:
++        return message
++    if not isinstance(frame, dict):
++        return message
++    if terminal and frame.get("terminalId"):
++        frame["relay_read_scope"] = scope
++        return META_PREFIX + json.dumps(frame)
++    if frame.get("method") == "terminal.read" and isinstance(frame.get("params"), dict):
++        frame["params"]["relay_read_scope"] = scope
++        return json.dumps(frame)
++    return message
+
+
+ def close_gateway_sockets(gateway_id: str) -> int:
+@@ -301,12 +327,19 @@ async def relay_ws(ws: WebSocket, connection_id: str, path: str) -> None:
+
+     admitted = _admit_browser(ws)
+     try:
++        dial = reach.current_dial(connection_id) if admitted is not None else None
+         if admitted is not None and path == "api/host-terminal":
+             if await serve_ssh_terminal(ws, connection_id, admitted):
+                 return
+         row = await _resolve(ws.app.state, connection_id) if admitted is not None else None
+         target = _target(ws.scope, connection_id, drop_query=_CREDENTIAL_QUERY) if row else None
++        if row is not None and row.dial != dial:
++            await ws.close(code=4404, reason="Gateway changed")
++            return
+         credential = await reach.socket_credential(row, f"/{path}") if target else None
++        if credential is not None and reach.current_dial(connection_id) != dial:
++            await ws.close(code=4404, reason="Gateway changed")
++            return
+     except (reach.Unreachable, httpx.HTTPError, ValueError) as exc:
+         _log.info("Gateway relay socket to %s refused before dialing: %s", connection_id, exc)
+         await ws.close(code=4403)
+@@ -315,7 +348,6 @@ async def relay_ws(ws: WebSocket, connection_id: str, path: str) -> None:
+         await ws.close(code=4401)
+         return
+     track(ws, admitted)
+-    named = reach.entry_url(connection_id)
+     parts = urllib.parse.urlsplit(row.base_url)
+     joiner = "&" if "?" in target else "?"
+     url = (f"{'wss' if parts.scheme == 'https' else 'ws'}://{parts.netloc}{parts.path}{target}"
+@@ -330,25 +362,29 @@ async def relay_ws(ws: WebSocket, connection_id: str, path: str) -> None:
+         _log.info("Gateway relay socket to %s%s refused: %s", row.base_url, path, type(exc).__name__)
+         await ws.close(code=4403)
+         return
+-    await ws.accept(subprotocol=upstream.subprotocol)
+-    with _live_lock:
+-        _live[id(ws)] = (weakref.ref(ws), asyncio.get_running_loop(), connection_id)
+-    # Remove forgets the entry, then closes its live sockets; one removed during the dial missed this one.
+-    if reach.entry_url(connection_id) != named:
+-        with _live_lock:
+-            _live.pop(id(ws), None)
+-        with contextlib.suppress(OSError):
+-            await upstream.close()
+-        await _close(ws, 4404, "Gateway removed")
+-        return
+     try:
+-        await _pump(ws, upstream)
++        await ws.accept(subprotocol=upstream.subprotocol)
++        with _live_lock:
++            _live[id(ws)] = (weakref.ref(ws), asyncio.get_running_loop(), connection_id)
++        # An edit during the dial missed this socket when it closed the live sockets.
++        try:
++            current_dial = reach.current_dial(connection_id)
++        except reach.Unreachable as exc:
++            await _close(ws, 4403, str(exc))
++            return
++        if current_dial != dial:
++            await _close(ws, 4404, "Gateway removed" if current_dial is None else "Gateway changed")
++            return
++        scope = hmac.digest(_terminal_read_key, json.dumps([row.dial, row.principal]).encode(), "sha256").hex()
++        await _pump(ws, upstream, path, scope)
+     finally:
+         with _live_lock:
+             _live.pop(id(ws), None)
++        with contextlib.suppress(OSError):
++            await upstream.close()
+
+
+-async def _pump(ws: WebSocket, upstream) -> None:
++async def _pump(ws: WebSocket, upstream, path: str, scope: str) -> None:
+     from websockets.exceptions import ConnectionClosed
+
+     async def browser_to_gateway() -> None:
+@@ -369,7 +405,7 @@ async def _pump(ws: WebSocket, upstream) -> None:
+                 if isinstance(message, bytes):
+                     await ws.send_bytes(message)
+                 else:
+-                    await ws.send_text(message)
++                    await ws.send_text(_terminal_read_frame(path, message, scope))
+         except ConnectionClosed:
+             pass
+         await _close(ws, _sendable(upstream.close_code), upstream.close_reason or "")
+@@ -381,6 +417,4 @@ async def _pump(ws: WebSocket, upstream) -> None:
+         for task in tasks:
+             if not task.done():
+                 task.cancel()
+-        with contextlib.suppress(OSError):
+-            await upstream.close()
+         await asyncio.gather(*tasks, return_exceptions=True)
 diff --git a/hermes_cli/web_server_app.py b/hermes_cli/web_server_app.py
-index 6b5183c343c46bdf06b3386a3bef25036a39e0f4..d0c2600e190b4030ec24cd6b642ec54e64a4a0eb 100644
+index 6b5183c34..d0c2600e1 100644
 --- a/hermes_cli/web_server_app.py
 +++ b/hermes_cli/web_server_app.py
 @@ -238,6 +238,17 @@ async def http_lifespan(app: FastAPI):
@@ -5725,7 +6878,7 @@ index 6b5183c343c46bdf06b3386a3bef25036a39e0f4..d0c2600e190b4030ec24cd6b642ec54e
      async with lifespan(app):
          yield
 diff --git a/hermes_cli/web_server_dashboard.py b/hermes_cli/web_server_dashboard.py
-index bb7522bdb73e83edddc56141be389276684f1479..6b837bd22c7cad38e55e91c108995f8b4454a088 100644
+index bb7522bdb..6b837bd22 100644
 --- a/hermes_cli/web_server_dashboard.py
 +++ b/hermes_cli/web_server_dashboard.py
 @@ -230,12 +230,15 @@ def mount_spa(application: FastAPI):
@@ -5744,8 +6897,94 @@ index bb7522bdb73e83edddc56141be389276684f1479..6b837bd22c7cad38e55e91c108995f8b
              f"{surface_js}"
              f"window.__HERMES_DASHBOARD_PROFILE__={serving_profile_js};"
              f"</script>"
+diff --git a/hermes_cli/webapp_relay_target.py b/hermes_cli/webapp_relay_target.py
+index f23b6e85e..231e3f28d 100644
+--- a/hermes_cli/webapp_relay_target.py
++++ b/hermes_cli/webapp_relay_target.py
+@@ -21,12 +21,14 @@ import httpx
+ from hermes_cli import gateway_connections as store
+ from hermes_cli import gateway_connections_oauth as oauth
+ from hermes_cli import gateway_connections_reach as reach
++from hermes_cli.gateway_connections_normalize import dial_fingerprint
+ from hermes_cli.gateway_connections_ssh_transport import SshReachError
+
+ #: The socket that opens only with a ticket of its own (``web_session_sockets.HOST_TERMINAL_SOCKET``).
+ _OWN_TICKET_PATHS = {"/api/host-terminal": "host-terminal"}
+ #: What resolving a saved connection can refuse with: a reason the browser is shown.
+-_REACH_ERRORS = (store.ConnectionStoreError, oauth.NotSignedIn, oauth.OAuthSignInError, SshReachError)
++_REACH_ERRORS = (store.ConnectionStoreBusy, store.ConnectionStoreError, oauth.NotSignedIn, oauth.OAuthSignInError,
++                 SshReachError)
+ _POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="gateway-reach")
+ _resolving: dict[tuple[str, str], Future] = {}
+ _resolving_lock = threading.Lock()
+@@ -37,11 +39,9 @@ class Unreachable(LookupError):
+
+
+ @dataclass(frozen=True)
+-class Target:
+-    connection_id: str
+-    label: str
+-    base_url: str
+-    headers: dict[str, str] = field(default_factory=dict)
++class Target(reach.ResolvedDial):
++    connection_id: str = field(kw_only=True)
++    label: str = field(kw_only=True)
+
+     @property
+     def bearer(self) -> str:
+@@ -52,25 +52,31 @@ def _entry(connection_id: str) -> Optional[dict]:
+     return next((c for c in store.read_registry()["connections"] if c["id"] == connection_id), None)
+
+
+-def entry_url(connection_id: str) -> Optional[str]:
+-    """What *connection_id* names now (its URL, or its SSH host), or None once it is removed."""
+-    entry = _entry(connection_id)
+-    return (entry.get("url") or entry.get("host") or entry["id"]) if entry else None
++def current_dial(connection_id: str) -> Optional[str]:
++    """Saved dial fields of this entry, or None once it is removed."""
++    try:
++        entry = _entry(connection_id)
++    except store.ConnectionStoreBusy as exc:
++        raise Unreachable("The saved gateways could not be read while connecting.") from exc
++    return dial_fingerprint(entry) if entry else None
+
+
+ def _resolve(connection_id: str, rejected_token: str) -> Optional[Target]:
+-    entry = _entry(connection_id)
+-    if entry is None or entry["kind"] == "local":
+-        return None
+     try:
+-        base_url, headers = reach.resolve_target(connection_id, rejected_token=rejected_token)
++        entry = _entry(connection_id)
++        if entry is None or entry["kind"] == "local":
++            return None
++        target = reach.resolve_dial_target(connection_id, rejected_token=rejected_token)
+     except store.NoSuchConnection:
+         return None
+     except _REACH_ERRORS as exc:
+         raise Unreachable(str(exc)) from exc
+-    if not any(k in headers for k in ("Authorization", reach.SESSION_TOKEN_HEADER)):
++    if current_dial(connection_id) != target.dial:
++        raise Unreachable(f"{entry['label']} changed while connecting. Try again.")
++    if not any(k in target.headers for k in ("Authorization", reach.SESSION_TOKEN_HEADER)):
+         raise Unreachable(f"{entry['label']} has no saved credential. Edit it in Settings → Gateways.")
+-    return Target(connection_id=connection_id, label=entry["label"], base_url=base_url, headers=headers)
++    return Target(target.base_url, target.headers, target.dial, target.principal,
++                  connection_id=connection_id, label=entry["label"])
+
+
+ def _submit(fn, *args) -> Future:
+@@ -109,7 +115,7 @@ def _socket_credential(target: Target, path: str) -> tuple[str, str]:
+             raise Unreachable(f"{target.label} did not issue a {own} ticket ({response.status_code}).")
+         return "ticket", ticket
+     try:
+-        ticket = reach.mint_ws_ticket(target.connection_id, for_base_url=target.base_url)
++        ticket = reach.mint_ws_ticket(target.connection_id, for_base_url=target.base_url, for_dial=target)
+     except _REACH_ERRORS as exc:
+         raise Unreachable(str(exc)) from exc
+     if ticket:
 diff --git a/model_tools.py b/model_tools.py
-index 10d1cc9e0881b1823dfbbd52096652ce19d24b3d..23b69623d7b46d520a0d049bb3e25ed2e146f8e3 100644
+index 10d1cc9e0..23b69623d 100644
 --- a/model_tools.py
 +++ b/model_tools.py
 @@ -24,6 +24,9 @@ from tools.registry import (
@@ -5935,7 +7174,7 @@ index 10d1cc9e0881b1823dfbbd52096652ce19d24b3d..23b69623d7b46d520a0d049bb3e25ed2
 +    permitted = None if include_denied else discovery_tool_filter(managed_policy)
 +    return registry.check_tool_availability(quiet=quiet, permitted=permitted)
 diff --git a/persistence/conversation/sessions.py b/persistence/conversation/sessions.py
-index 5e99f38cd11c5ce81e1dc1bfc5036dce4ca3d3bc..31d5d0a948e94e912a4e4a78f25b4f5307a6329e 100644
+index 5e99f38cd..31d5d0a94 100644
 --- a/persistence/conversation/sessions.py
 +++ b/persistence/conversation/sessions.py
 @@ -17,6 +17,8 @@ from ..authority.vocabulary import OwnerRule
@@ -5960,7 +7199,7 @@ index 5e99f38cd11c5ce81e1dc1bfc5036dce4ca3d3bc..31d5d0a948e94e912a4e4a78f25b4f53
 
      def request_prompt_refresh(self, session_id: Optional[SessionId] = None) -> int:
 diff --git a/persistence/sqlite/conversation/_store/compression.py b/persistence/sqlite/conversation/_store/compression.py
-index ad8b577dcbeac1a92160f280e05dd1f398954410..32d8b4ac04afef63399dc00683c0aef877036dc1 100644
+index ad8b577dc..32d8b4ac0 100644
 --- a/persistence/sqlite/conversation/_store/compression.py
 +++ b/persistence/sqlite/conversation/_store/compression.py
 @@ -58,7 +58,7 @@ _CHAIN_CAP = 1000
@@ -5973,7 +7212,7 @@ index ad8b577dcbeac1a92160f280e05dd1f398954410..32d8b4ac04afef63399dc00683c0aef8
 
  def _walk_compression_chain(session_id: str, step) -> list[str]:
 diff --git a/persistence/sqlite/conversation/_store/sessions.py b/persistence/sqlite/conversation/_store/sessions.py
-index 75ab3a3adfc1b6959faa264b6bd95895a781380a..d8ac283a4e7854bb9fa9e5310d44ec8fe0739c56 100644
+index 75ab3a3ad..d8ac283a4 100644
 --- a/persistence/sqlite/conversation/_store/sessions.py
 +++ b/persistence/sqlite/conversation/_store/sessions.py
 @@ -638,17 +638,29 @@ def update_session_meta(
@@ -6013,7 +7252,7 @@ index 75ab3a3adfc1b6959faa264b6bd95895a781380a..d8ac283a4e7854bb9fa9e5310d44ec8f
      """Persist the session's ``tools[]`` pin (JSON-serializable) so a rebuilt AIAgent sends the
      same bytes; ``None`` clears. The array repeats across sessions like a system prompt does, so it
 diff --git a/persistence/sqlite/conversation/sessions.py b/persistence/sqlite/conversation/sessions.py
-index 5f5696a2312c0aeb3ea17b0baf470e950dbeb529..334bceeb25250b3cee0dab7a084053b180a8e599 100644
+index 5f5696a23..334bceeb2 100644
 --- a/persistence/sqlite/conversation/sessions.py
 +++ b/persistence/sqlite/conversation/sessions.py
 @@ -567,10 +567,11 @@ class SQLiteSessionRepository:
@@ -6031,7 +7270,7 @@ index 5f5696a2312c0aeb3ea17b0baf470e950dbeb529..334bceeb25250b3cee0dab7a084053b1
      def request_prompt_refresh(self, session_id: Optional[SessionId] = None) -> int:
          holder = self._store.holder()
 diff --git a/persistence/sqlite/workers/_context.py b/persistence/sqlite/workers/_context.py
-index 084be7d26c049b52eea635dc05075a948849f46b..c979924b40709c327cadddf2f651098689e30472 100644
+index 084be7d26..c979924b4 100644
 --- a/persistence/sqlite/workers/_context.py
 +++ b/persistence/sqlite/workers/_context.py
 @@ -24,14 +24,19 @@ def worker_context(holder, conn, session_id, payload):
@@ -6075,7 +7314,7 @@ index 084be7d26c049b52eea635dc05075a948849f46b..c979924b40709c327cadddf2f6510986
      if encoded is not None and len(encoded) > 4 * 1024 * 1024:
          raise AuthorityRefusal('invalid_params')
 diff --git a/persistence/sqlite/workers/executions.py b/persistence/sqlite/workers/executions.py
-index b2652e9a3513843487093eee7a53f5fc68def859..2de641043d44e3ae73b33b75b3b63ee468635c9a 100644
+index b2652e9a3..2de641043 100644
 --- a/persistence/sqlite/workers/executions.py
 +++ b/persistence/sqlite/workers/executions.py
 @@ -254,9 +254,11 @@ class SQLiteWorkerExecutionRepository:
@@ -6094,7 +7333,7 @@ index b2652e9a3513843487093eee7a53f5fc68def859..2de641043d44e3ae73b33b75b3b63ee4
      def patch_session_sidecars(self, *, epoch: AuthorityEpoch, execution_id: WorkerExecutionId, session_id: SessionId, generation: ExecutionGeneration, sequence: int, patch: Mapping[str, JsonValue]) -> None:
          payload = {'patch': dict(patch) if isinstance(patch, Mapping) else patch}
 diff --git a/persistence/workers/sessions.py b/persistence/workers/sessions.py
-index ccd8dade0145f2876f36e9b6e053c7d069427b1b..3078de7c8520ad228454411a0477038f8755c4aa 100644
+index ccd8dade0..3078de7c8 100644
 --- a/persistence/workers/sessions.py
 +++ b/persistence/workers/sessions.py
 @@ -181,8 +181,8 @@ class WorkerSessionVerbs(Protocol):
@@ -6119,7 +7358,7 @@ index ccd8dade0145f2876f36e9b6e053c7d069427b1b..3078de7c8520ad228454411a0477038f
 
      def latest_conversation_role(self, *, epoch: AuthorityEpoch, execution_id: WorkerExecutionId, session_id: SessionId, generation: ExecutionGeneration, sequence: int) -> str | None:
 diff --git a/plugins/computer_use/cua/__init__.py b/plugins/computer_use/cua/__init__.py
-index 230fc073d4c6c52f46b5808ecf3faea914a3ba49..34f2a9abcd2b38f96742d8dabcd3551a82957aa2 100644
+index 230fc073d..34f2a9abc 100644
 --- a/plugins/computer_use/cua/__init__.py
 +++ b/plugins/computer_use/cua/__init__.py
 @@ -19,13 +19,19 @@ class CuaDriverProvider(ComputerUseProvider):
@@ -6144,7 +7383,7 @@ index 230fc073d4c6c52f46b5808ecf3faea914a3ba49..34f2a9abcd2b38f96742d8dabcd3551a
 
 
 diff --git a/run_agent.py b/run_agent.py
-index c17cf33c124eff7aa8d225fd8e574a620bdf6bd8..63317f34f559d0e29cb4082656aefd66e135cc3e 100644
+index c17cf33c1..63317f34f 100644
 --- a/run_agent.py
 +++ b/run_agent.py
 @@ -315,8 +315,10 @@ class AIAgent(
@@ -6213,7 +7452,7 @@ index c17cf33c124eff7aa8d225fd8e574a620bdf6bd8..63317f34f559d0e29cb4082656aefd66
      for tool_name in sorted(all_tools):
          print(f"  📌 {tool_name} (from {get_toolset_for_tool(tool_name)})")
 diff --git a/tools/approval.py b/tools/approval.py
-index 7e619c6a9178679029b7a64654781908b0fc58b9..0a8c63f3513ad82248966d0563c60fda448507e7 100644
+index 7e619c6a9..0a8c63f35 100644
 --- a/tools/approval.py
 +++ b/tools/approval.py
 @@ -1204,13 +1204,20 @@ def _presence(approval_callback=None) -> tuple:
@@ -6257,7 +7496,7 @@ index 7e619c6a9178679029b7a64654781908b0fc58b9..0a8c63f3513ad82248966d0563c60fda
      session_key = get_current_session_key()
      if is_approved(session_key, pattern_key):
 diff --git a/tools/bot_desktop/browser.py b/tools/bot_desktop/browser.py
-index ec5ae4c4f70d9b01e17a54479599e72cdd6df75a..6b041f4800ca797d462df847ad1830fb65eb67d1 100644
+index ec5ae4c4f..6b041f480 100644
 --- a/tools/bot_desktop/browser.py
 +++ b/tools/bot_desktop/browser.py
 @@ -90,10 +90,10 @@ def dock_argv(exe: str, user_data_dir: str, *, sandbox_bypass: Optional[bool] =
@@ -6274,7 +7513,7 @@ index ec5ae4c4f70d9b01e17a54479599e72cdd6df75a..6b041f4800ca797d462df847ad1830fb
 
 
 diff --git a/tools/bot_desktop/install.py b/tools/bot_desktop/install.py
-index b233c25f53623714b392350e6d21a7ba8d3263c8..aee8080814e787a2e08ea65355098b3bdd233813 100644
+index b233c25f5..aee808081 100644
 --- a/tools/bot_desktop/install.py
 +++ b/tools/bot_desktop/install.py
 @@ -80,6 +80,17 @@ def release(key: str) -> None:
@@ -6305,7 +7544,7 @@ index b233c25f53623714b392350e6d21a7ba8d3263c8..aee8080814e787a2e08ea65355098b3b
              raise RuntimeError("Bot Desktop runs on Linux gateway hosts only")
          cmd = runtime.install_command()
 diff --git a/tools/bot_desktop/lease.py b/tools/bot_desktop/lease.py
-index 362590ebb652305d99846272b2352a583b92b92b..a1b7140c6382d8652fd50711d41c69e990e5094a 100644
+index 362590ebb..a1b7140c6 100644
 --- a/tools/bot_desktop/lease.py
 +++ b/tools/bot_desktop/lease.py
 @@ -24,9 +24,10 @@ import logging
@@ -6332,7 +7571,7 @@ index 362590ebb652305d99846272b2352a583b92b92b..a1b7140c6382d8652fd50711d41c69e9
 +    with _locked(_path(profile_key)):
 +        yield assert_agent_may_act(profile_key)
 diff --git a/tools/bot_desktop/placement.py b/tools/bot_desktop/placement.py
-index 3fca08dc5a003372f2d97c19975a08bfeaa800db..d3caf710edd445da9201d2c997611dc7188b46bd 100644
+index 3fca08dc5..d3caf710e 100644
 --- a/tools/bot_desktop/placement.py
 +++ b/tools/bot_desktop/placement.py
 @@ -43,6 +43,32 @@ def _setting() -> str:
@@ -6395,7 +7634,7 @@ index 3fca08dc5a003372f2d97c19975a08bfeaa800db..d3caf710edd445da9201d2c997611dc7
          return Placement(GATEWAY, backend)
      if backend in _STREAM_BACKENDS:
 diff --git a/tools/bot_desktop/runtime.py b/tools/bot_desktop/runtime.py
-index 8939ab0918165a5bdaa801ae8c88a3b64568d79c..07bb4b2f53fecf97f31e001d5edf0521171e3596 100644
+index 8939ab091..07bb4b2f5 100644
 --- a/tools/bot_desktop/runtime.py
 +++ b/tools/bot_desktop/runtime.py
 @@ -389,7 +389,7 @@ def ensure_started_for_tool() -> None:
@@ -6722,7 +7961,7 @@ index 8939ab0918165a5bdaa801ae8c88a3b64568d79c..07bb4b2f53fecf97f31e001d5edf0521
 
  def _stop_locked(sd: Path) -> bool:
 diff --git a/tools/bot_desktop/sandbox_host.py b/tools/bot_desktop/sandbox_host.py
-index dcc97c622bd7d1b029a67ba0aca489f78273f439..f37d8e854fe3b81460c34e70fd2814a37812c548 100644
+index dcc97c622..f37d8e854 100644
 --- a/tools/bot_desktop/sandbox_host.py
 +++ b/tools/bot_desktop/sandbox_host.py
 @@ -5,8 +5,9 @@ gateway host and this module via ``placement()``; callers keep using ``runtime.s
@@ -7127,7 +8366,7 @@ index dcc97c622bd7d1b029a67ba0aca489f78273f439..f37d8e854fe3b81460c34e70fd2814a3
 
 
 diff --git a/tools/bot_desktop/thumbnail.py b/tools/bot_desktop/thumbnail.py
-index 2ae3ffa2154f2dc04cee0bb017adb30889a27e0e..db38deb654c76f44d0fa96f75ba2ec75ad71e267 100644
+index 2ae3ffa21..db38deb65 100644
 --- a/tools/bot_desktop/thumbnail.py
 +++ b/tools/bot_desktop/thumbnail.py
 @@ -12,7 +12,7 @@ import os
@@ -7170,7 +8409,7 @@ index 2ae3ffa2154f2dc04cee0bb017adb30889a27e0e..db38deb654c76f44d0fa96f75ba2ec75
      from PIL import ImageGrab  # Pillow is a hard dependency; import lazily to keep status calls cheap
 
 diff --git a/tools/bot_mode_dm.py b/tools/bot_mode_dm.py
-index 03ca1c529f279228ea60e588c8435db98232b69a..ee4ae0077adfc7858acb46bf956c09be62a1b614 100644
+index 03ca1c529..ee4ae0077 100644
 --- a/tools/bot_mode_dm.py
 +++ b/tools/bot_mode_dm.py
 @@ -148,7 +148,15 @@ def ensure_message_agent_tool(agent: Any) -> bool:
@@ -7198,7 +8437,7 @@ index 03ca1c529f279228ea60e588c8435db98232b69a..ee4ae0077adfc7858acb46bf956c09be
              valid.add(MESSAGE_AGENT_TOOL_NAME)
          return True
 diff --git a/tools/bot_mode_probe.py b/tools/bot_mode_probe.py
-index dfdcd1de221ad9b616e8cb6faf1bc93aefa06d8e..935dccf92d2dab3688ae0c24263f207d32e56d48 100644
+index dfdcd1de2..935dccf92 100644
 --- a/tools/bot_mode_probe.py
 +++ b/tools/bot_mode_probe.py
 @@ -27,6 +27,15 @@ _BOT_MODE_PROTOCOL_VERSION = 3
@@ -7218,7 +8457,7 @@ index dfdcd1de221ad9b616e8cb6faf1bc93aefa06d8e..935dccf92d2dab3688ae0c24263f207d
  def strip_legacy_protocol(text: str) -> str:
      """SOUL text without the plugin-era "## Messaging other agents" section (idempotent)."""
 diff --git a/tools/browser_cdp_tool.py b/tools/browser_cdp_tool.py
-index d40c8f5735962b046f4658cb40711f1767c43cc7..ff1d9c479983a43e6e714e29a964e0600903611c 100644
+index d40c8f573..ff1d9c479 100644
 --- a/tools/browser_cdp_tool.py
 +++ b/tools/browser_cdp_tool.py
 @@ -376,6 +376,13 @@ def browser_cdp(method: str, params: Optional[dict[str, Any]] = None, target_id:
@@ -7236,7 +8475,7 @@ index d40c8f5735962b046f4658cb40711f1767c43cc7..ff1d9c479983a43e6e714e29a964e060
 
      if frame_id:
 diff --git a/tools/browser_dialog_tool.py b/tools/browser_dialog_tool.py
-index 33441d74072fe13f67557881e35785d2944f2045..f0c2f2eef5f5aa587601df76ce123c6b50e5f411 100644
+index 33441d740..f0c2f2eef 100644
 --- a/tools/browser_dialog_tool.py
 +++ b/tools/browser_dialog_tool.py
 @@ -70,6 +70,13 @@ def browser_dialog(
@@ -7254,7 +8493,7 @@ index 33441d74072fe13f67557881e35785d2944f2045..f0c2f2eef5f5aa587601df76ce123c6b
      if supervisor is None:
          return json.dumps({
 diff --git a/tools/browser_launcher.py b/tools/browser_launcher.py
-index 9262d0ae94ecdfd61ecfc081ce102d6e3795230e..437473c8d2975204a3b1e26b7e87ff25770ede24 100644
+index 9262d0ae9..437473c8d 100644
 --- a/tools/browser_launcher.py
 +++ b/tools/browser_launcher.py
 @@ -227,6 +227,15 @@ def _configured_chromium_args() -> list[str]:
@@ -7314,7 +8553,7 @@ index 9262d0ae94ecdfd61ecfc081ce102d6e3795230e..437473c8d2975204a3b1e26b7e87ff25
      record = None if browser.ephemeral else _record_path(browser)
      if record is None:
 diff --git a/tools/browser_session.py b/tools/browser_session.py
-index dca23f445b49f53775e418012e765903ed80509d..68338493329777b77724e75a004da8673835a45a 100644
+index dca23f445..683384933 100644
 --- a/tools/browser_session.py
 +++ b/tools/browser_session.py
 @@ -48,6 +48,9 @@ BROWSER_ORPHAN_REAP_INTERVAL = 300
@@ -7424,7 +8663,7 @@ index dca23f445b49f53775e418012e765903ed80509d..68338493329777b77724e75a004da867
          logger.info("Browser endpoint changed during session creation for %s; recreating", key)
          _lifecycle.release_session_backend(key, session_info)
 diff --git a/tools/browser_session_cdp.py b/tools/browser_session_cdp.py
-index 442f2ad89c3014f0145b7450a2cdf8bef962d132..07292a930c6db28531db9f8bc4d5fa89684ab6c4 100644
+index 442f2ad89..07292a930 100644
 --- a/tools/browser_session_cdp.py
 +++ b/tools/browser_session_cdp.py
 @@ -104,7 +104,10 @@ def get_cdp_override_raw() -> str:
@@ -7439,7 +8678,7 @@ index 442f2ad89c3014f0145b7450a2cdf8bef962d132..07292a930c6db28531db9f8bc4d5fa89
 
 
 diff --git a/tools/browser_session_lifecycle.py b/tools/browser_session_lifecycle.py
-index 8f5ebdaf3a0c5ee6de218fa102ddd6796340b348..c67d5663e8b7410abf1b6250c6a7099b5270641f 100644
+index 8f5ebdaf3..c67d5663e 100644
 --- a/tools/browser_session_lifecycle.py
 +++ b/tools/browser_session_lifecycle.py
 @@ -97,10 +97,14 @@ def _forget_session_tracking(cache_key: str, *, activity: bool = True, session:
@@ -7509,7 +8748,7 @@ index 8f5ebdaf3a0c5ee6de218fa102ddd6796340b348..c67d5663e8b7410abf1b6250c6a7099b
          release_session_backend(cache_key, session_info)
          logger.debug("Closed browser session %s", cache_key)
 diff --git a/tools/browser_session_real_profile.py b/tools/browser_session_real_profile.py
-index b516bcf7909904c7e577f14aad1648f382ca391a..92733f241239505d7988bd8245ddfdd65735ac19 100644
+index b516bcf79..92733f241 100644
 --- a/tools/browser_session_real_profile.py
 +++ b/tools/browser_session_real_profile.py
 @@ -126,7 +126,14 @@ def real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
@@ -7528,7 +8767,7 @@ index b516bcf7909904c7e577f14aad1648f382ca391a..92733f241239505d7988bd8245ddfdd6
          return _consent_revoked()
      # Lightpanda cannot load a Chromium profile; checked before default-browser detection so a host with no
 diff --git a/tools/browser_session_sandbox.py b/tools/browser_session_sandbox.py
-index 7945604238e629d32f8be2d30fdfaeb5798748a4..402fd5bdd6ba682c3f0e4df87adfe01a3f76b364 100644
+index 794560423..402fd5bdd 100644
 --- a/tools/browser_session_sandbox.py
 +++ b/tools/browser_session_sandbox.py
 @@ -8,24 +8,35 @@ stream; Chromium's DevTools accepts any loopback ``Host`` header, port included.
@@ -7987,7 +9226,7 @@ index 7945604238e629d32f8be2d30fdfaeb5798748a4..402fd5bdd6ba682c3f0e4df87adfe01a
          logger.debug("sandbox browser stop for pid %s exited %s", pid, proc.returncode)
 +    return True
 diff --git a/tools/browser_supervisor.py b/tools/browser_supervisor.py
-index 4b532ee567b3c35ba70b8c936df3b6947c4a6ae1..03c4ba47c22f6e7cc7849d0a04b689a5dbd7e1aa 100644
+index 4b532ee56..03c4ba47c 100644
 --- a/tools/browser_supervisor.py
 +++ b/tools/browser_supervisor.py
 @@ -106,6 +106,7 @@ class CDPSupervisor(DialogSupervisionMixin, FrameTrackingMixin):
@@ -8128,7 +9367,7 @@ index 4b532ee567b3c35ba70b8c936df3b6947c4a6ae1..03c4ba47c22f6e7cc7849d0a04b689a5
              supervisor.stop()
 
 diff --git a/tools/browser_url_policy.py b/tools/browser_url_policy.py
-index 058d013a47b49b7c0264e67844d9c1e389b8ff4e..766a03604103cfe7b49d4aff6f34db16e7bf420f 100644
+index 058d013a4..766a03604 100644
 --- a/tools/browser_url_policy.py
 +++ b/tools/browser_url_policy.py
 @@ -123,7 +123,7 @@ def _url_policy_error(url: str, *, auto_local: bool = False) -> Optional[dict]:
@@ -8141,7 +9380,7 @@ index 058d013a47b49b7c0264e67844d9c1e389b8ff4e..766a03604103cfe7b49d4aff6f34db16
      blocked = check_website_access(url)
      if blocked:
 diff --git a/tools/browser_use_cli.py b/tools/browser_use_cli.py
-index d1a91145ef6d64188fbfb4d00732714813f1f509..93b9bb37d742eb9936bb6d828dc155eb0119a6b9 100644
+index d1a91145e..93b9bb37d 100644
 --- a/tools/browser_use_cli.py
 +++ b/tools/browser_use_cli.py
 @@ -43,6 +43,7 @@ _SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -8578,7 +9817,7 @@ index d1a91145ef6d64188fbfb4d00732714813f1f509..93b9bb37d742eb9936bb6d828dc155eb
      # else's schema carries zero extra surface. The caller memoizes on config.yaml mtime,
 diff --git a/tools/browser_use_executor.py b/tools/browser_use_executor.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..409a41c3b0c90bbc5ada566830019832b3ef5d59
+index 000000000..409a41c3b
 --- /dev/null
 +++ b/tools/browser_use_executor.py
 @@ -0,0 +1,390 @@
@@ -8974,7 +10213,7 @@ index 0000000000000000000000000000000000000000..409a41c3b0c90bbc5ada566830019832
 +        return tool_error(redact_sensitive_text(str(error), force=True))
 diff --git a/tools/browser_use_executor_runner.py b/tools/browser_use_executor_runner.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..e02a56219f457c5e49028aa1cd76420099234f18
+index 000000000..e02a56219
 --- /dev/null
 +++ b/tools/browser_use_executor_runner.py
 @@ -0,0 +1,125 @@
@@ -9104,7 +10343,7 @@ index 0000000000000000000000000000000000000000..e02a56219f457c5e49028aa1cd764200
 +            proc.wait()  # health: allow HX006 -- SIGKILL already sent to this child group; reap only, never drain inherited pipes
 +        admin.restart_daemon()
 diff --git a/tools/browser_vault_tool.py b/tools/browser_vault_tool.py
-index 95564c357d4aafc600edc344e1df3b28fb4d9de8..023d0764a78921edb6743c3a208f380e927cf7be 100644
+index 95564c357..023d0764a 100644
 --- a/tools/browser_vault_tool.py
 +++ b/tools/browser_vault_tool.py
 @@ -50,6 +50,13 @@ def _check_vault_available() -> bool:
@@ -9243,7 +10482,7 @@ index 95564c357d4aafc600edc344e1df3b28fb4d9de8..023d0764a78921edb6743c3a208f380e
          # changed tab or document itself. Never retried on another browser.
          from tools.browser_vault_preview import run_preview_vault
 diff --git a/tools/computer_use/cua_backend.py b/tools/computer_use/cua_backend.py
-index cbdc7f500915f0729039fb74847ed91157ac0f6e..7f044ffca574eebd7ea0f5f1faa8c93a8afd4b55 100644
+index cbdc7f500..7f044ffca 100644
 --- a/tools/computer_use/cua_backend.py
 +++ b/tools/computer_use/cua_backend.py
 @@ -27,7 +27,7 @@ from tools.computer_use.cua_backend_driver import (
@@ -9323,7 +10562,7 @@ index cbdc7f500915f0729039fb74847ed91157ac0f6e..7f044ffca574eebd7ea0f5f1faa8c93a
              logger.exception("cua-driver %s call failed", name)
              return ActionResult(ok=False, action=name, message=f"cua-driver error: {e}")
 diff --git a/tools/computer_use/cua_backend_session.py b/tools/computer_use/cua_backend_session.py
-index 42cb16f866131903b9041a49af2f6b750eded4e2..73e00c6e27371cee530f2f42a74018bae211290f 100644
+index 42cb16f86..73e00c6e2 100644
 --- a/tools/computer_use/cua_backend_session.py
 +++ b/tools/computer_use/cua_backend_session.py
 @@ -12,13 +12,21 @@ import json
@@ -9531,7 +10770,7 @@ index 42cb16f866131903b9041a49af2f6b750eded4e2..73e00c6e27371cee530f2f42a74018ba
                  return _outcome_unknown(name, e, "transport_outcome_unknown")
              result = self._bridge.run(self._call_tool_async(name, args), timeout=timeout)
 diff --git a/tools/computer_use/tool.py b/tools/computer_use/tool.py
-index c9c1e540196c14de698a9b616b4b75fd586deea8..b0726ef9414472ca8a2af2ccf9dcee90e1f2be9f 100644
+index c9c1e5401..b0726ef94 100644
 --- a/tools/computer_use/tool.py
 +++ b/tools/computer_use/tool.py
 @@ -191,12 +191,15 @@ def _scoped_sid(session_id: str) -> str:
@@ -9705,7 +10944,7 @@ index c9c1e540196c14de698a9b616b4b75fd586deea8..b0726ef9414472ca8a2af2ccf9dcee90
                                  "gateway is present to approve it."),
      )
 diff --git a/tools/connectors/operation.py b/tools/connectors/operation.py
-index f25e1590c7e14e814a7f0eeaed544f381e1bb8c0..8694754a63b35294cad99e686ec034c06fbf6065 100644
+index f25e1590c..8694754a6 100644
 --- a/tools/connectors/operation.py
 +++ b/tools/connectors/operation.py
 @@ -242,12 +242,17 @@ class ConnectionOperation:
@@ -9736,7 +10975,7 @@ index f25e1590c7e14e814a7f0eeaed544f381e1bb8c0..8694754a63b35294cad99e686ec034c0
                  target["tools_listing"] = listing
          return result
 diff --git a/tools/connectors/search.py b/tools/connectors/search.py
-index 7844a85314c3737d27dedda5d7cfdd31fe934fba..9f364eff0b8fb0f8aaca8fe8fd5b6ef116d817fb 100644
+index 7844a8531..9f364eff0 100644
 --- a/tools/connectors/search.py
 +++ b/tools/connectors/search.py
 @@ -105,12 +105,12 @@ def connector_entries_by_group(
@@ -9755,7 +10994,7 @@ index 7844a85314c3737d27dedda5d7cfdd31fe934fba..9f364eff0b8fb0f8aaca8fe8fd5b6ef1
      try:
          if connector_describe is None:
 diff --git a/tools/environments/local.py b/tools/environments/local.py
-index a53a5f021196c65e2937542a30f9e4bc579b9e65..2c88511456b4d65d711fb423e48cde39f68c16af 100644
+index a53a5f021..2c8851145 100644
 --- a/tools/environments/local.py
 +++ b/tools/environments/local.py
 @@ -416,15 +416,10 @@ def build_subprocess_env(
@@ -9900,7 +11139,7 @@ index a53a5f021196c65e2937542a30f9e4bc579b9e65..2c88511456b4d65d711fb423e48cde39
 
  def _make_run_env(env: dict) -> dict:
 diff --git a/tools/environments/ssh.py b/tools/environments/ssh.py
-index 5fbf4f03ac3364c195a84b127a7b993b71cf4e28..32a3883eaa74e6d7fbc6199f4df584173a230456 100644
+index 5fbf4f03a..32a3883ea 100644
 --- a/tools/environments/ssh.py
 +++ b/tools/environments/ssh.py
 @@ -88,6 +88,15 @@ def _open_control_dir() -> tuple[Path, bool]:
@@ -10003,7 +11242,7 @@ index 5fbf4f03ac3364c195a84b127a7b993b71cf4e28..32a3883eaa74e6d7fbc6199f4df58417
              with contextlib.suppress(OSError):
                  socket.unlink()
 diff --git a/tools/environments/streams.py b/tools/environments/streams.py
-index d18e65acc741ee2d781d98587fee46fffb5de8b9..0187fcee9e4b399e43f4fa64ec446e6198b26c14 100644
+index d18e65acc..0187fcee9 100644
 --- a/tools/environments/streams.py
 +++ b/tools/environments/streams.py
 @@ -25,6 +25,12 @@ from tools.environments.base import BaseEnvironment
@@ -10036,7 +11275,7 @@ index d18e65acc741ee2d781d98587fee46fffb5de8b9..0187fcee9e4b399e43f4fa64ec446e61
          return env._build_ssh_command()
      return _plugin_exec_prefix(env, user=user, interactive=interactive)
 diff --git a/tools/file_tools_paths.py b/tools/file_tools_paths.py
-index 8c5c96f6367938f72cab4b732060a868ed9c8dce..1c447e7875e02e06af3e272b0171b9ac1956ff43 100644
+index 8c5c96f63..1c447e787 100644
 --- a/tools/file_tools_paths.py
 +++ b/tools/file_tools_paths.py
 @@ -113,6 +113,15 @@ def container_backend_for_task(task_id: str = "default") -> str | None:
@@ -10056,7 +11295,7 @@ index 8c5c96f6367938f72cab4b732060a868ed9c8dce..1c447e7875e02e06af3e272b0171b9ac
      """Normalize path syntax without following host symlinks: container paths are
      meaningful inside the sandbox, and a host-side ``/workspace`` symlink must not rewrite them."""
 diff --git a/tools/file_tools_read_tracking.py b/tools/file_tools_read_tracking.py
-index 64366ae045e0c129da214d29a9afa3eaec3b2c74..772048c3a6500568dfb3070d0abfc7278b00a2a6 100644
+index 64366ae04..772048c3a 100644
 --- a/tools/file_tools_read_tracking.py
 +++ b/tools/file_tools_read_tracking.py
 @@ -502,7 +502,10 @@ def _mark_verification_stale(task_id: str, resolved_paths: list[str],
@@ -10071,7 +11310,7 @@ index 64366ae045e0c129da214d29a9afa3eaec3b2c74..772048c3a6500568dfb3070d0abfc727
          cwd = (next((c for c in parents if project_facts_for(c)), None)
                 or _authoritative_workspace_root(task_id) or parents[0])
 diff --git a/tools/hosted_tool_policy.py b/tools/hosted_tool_policy.py
-index 4e4d1e287db50f1a832caffb0d8b315e9fb2cf31..94d6148bd0d1a0cd0726f7a61d5df1a8d408265e 100644
+index 4e4d1e287..94d6148bd 100644
 --- a/tools/hosted_tool_policy.py
 +++ b/tools/hosted_tool_policy.py
 @@ -1,11 +1,11 @@
@@ -10169,7 +11408,7 @@ index 4e4d1e287db50f1a832caffb0d8b315e9fb2cf31..94d6148bd0d1a0cd0726f7a61d5df1a8
 
  def host_feature_enabled(feature: str) -> bool:
 diff --git a/tools/mcp_tool_agent.py b/tools/mcp_tool_agent.py
-index 56957d007eae7364d99063dd88f9afc2702800aa..a4e988a6e3d3a28a93cb1ac7abca095305f1eae0 100644
+index 56957d007..a4e988a6e 100644
 --- a/tools/mcp_tool_agent.py
 +++ b/tools/mcp_tool_agent.py
 @@ -15,6 +15,9 @@ logger = logging.getLogger("tools.mcp_tool")
@@ -10504,7 +11743,7 @@ index 56957d007eae7364d99063dd88f9afc2702800aa..a4e988a6e3d3a28a93cb1ac7abca0953
          tools_list.append({"type": "function", "function": schema})
          name_set.add(name)
 diff --git a/tools/registry.py b/tools/registry.py
-index 525cad5a0fb8c6fa5bd8b469da46c3050046d9db..ce187b4189a073d76867ce4820ef67c2ca934da5 100644
+index 525cad5a0..ce187b418 100644
 --- a/tools/registry.py
 +++ b/tools/registry.py
 @@ -646,9 +646,10 @@ class ToolRegistry:
@@ -10565,7 +11804,7 @@ index 525cad5a0fb8c6fa5bd8b469da46c3050046d9db..ce187b4189a073d76867ce4820ef67c2
          for ts in sorted(groups):
              if self._toolset_has_exposable_tools(ts, entries):
 diff --git a/tools/terminal_scope.py b/tools/terminal_scope.py
-index 28c7f9eb0f77f6e54610cb9d5097ac95fb0f854d..7456dfd4fcb9d75f9a4c51bf5376b4d41ab857a9 100644
+index 28c7f9eb0..7456dfd4f 100644
 --- a/tools/terminal_scope.py
 +++ b/tools/terminal_scope.py
 @@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
@@ -10738,7 +11977,7 @@ index 28c7f9eb0f77f6e54610cb9d5097ac95fb0f854d..7456dfd4fcb9d75f9a4c51bf5376b4d4
          logger.warning("terminal policy unavailable: %s", exc)
          return TerminalPolicyRefusal(str(exc))
 diff --git a/tools/terminal_tool.py b/tools/terminal_tool.py
-index 39a032a2fdba10c872b0ea40a734942d85a1ab50..e932cde9b0468e5f45fb8030f5378ea2e71245e5 100644
+index 39a032a2f..e932cde9b 100644
 --- a/tools/terminal_tool.py
 +++ b/tools/terminal_tool.py
 @@ -930,6 +930,7 @@ def _get_env_config() -> dict[str, Any]:
@@ -10750,7 +11989,7 @@ index 39a032a2fdba10c872b0ea40a734942d85a1ab50..e932cde9b0468e5f45fb8030f5378ea2
          # terminal.persistent_shell; local has its own knob. Both default on.
          "ssh_persistent": _tenv_bool(
 diff --git a/tools/terminal_tool_backends.py b/tools/terminal_tool_backends.py
-index 2a54e7e1460736226b46b8b8c169d9e54f3c6166..d35a058aba6ce2a4f606540770c1072446e10cfc 100644
+index 2a54e7e14..d35a058ab 100644
 --- a/tools/terminal_tool_backends.py
 +++ b/tools/terminal_tool_backends.py
 @@ -53,7 +53,7 @@ _SUPPORTED_VERCEL_RUNTIMES = ("node24", "node22", "python3.13")
@@ -10772,7 +12011,7 @@ index 2a54e7e1460736226b46b8b8c169d9e54f3c6166..d35a058aba6ce2a4f606540770c10724
 
  def _stamp_sandbox_home(env_obj, provider, cwd) -> None:
 diff --git a/tools/terminal_tool_result.py b/tools/terminal_tool_result.py
-index 970bfd6a2548464dd52c65778e6e3bd73c1557ee..0a4a74d102c232011cd3a85133ae3ace887deaa9 100644
+index 970bfd6a2..0a4a74d10 100644
 --- a/tools/terminal_tool_result.py
 +++ b/tools/terminal_tool_result.py
 @@ -7,6 +7,7 @@ notes/hints, spill redaction, verification evidence) + exit-code tables. Lazy
@@ -10806,7 +12045,7 @@ index 970bfd6a2548464dd52c65778e6e3bd73c1557ee..0a4a74d102c232011cd3a85133ae3ace
              returncode, output, result.get("pipeline_status"))),
          ("approval", approval_note or None),
 diff --git a/tools/tool_search.py b/tools/tool_search.py
-index ea4edbf0fca694cddf35c453befc8a557b88c5bc..84b252ba0228f2f46d3185cb9fc50d4a08c46206 100644
+index ea4edbf0f..84b252ba0 100644
 --- a/tools/tool_search.py
 +++ b/tools/tool_search.py
 @@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -10937,7 +12176,7 @@ index ea4edbf0fca694cddf35c453befc8a557b88c5bc..84b252ba0228f2f46d3185cb9fc50d4a
          remote_fn = remote_schemas.get(name)
          if fn is not None:
 diff --git a/tools/tool_search_catalog.py b/tools/tool_search_catalog.py
-index 15d3b39301252a64fa7a5f13adb08d099050c989..6008afd89603ebae8ae33d0aa8ea1563b4e8a3ac 100644
+index 15d3b3930..6008afd89 100644
 --- a/tools/tool_search_catalog.py
 +++ b/tools/tool_search_catalog.py
 @@ -4,12 +4,13 @@ defs plus the budgeted, byte-stable catalog listing embedded in the bridge."""
@@ -11016,7 +12255,7 @@ index 15d3b39301252a64fa7a5f13adb08d099050c989..6008afd89603ebae8ae33d0aa8ea1563
          return None, "none"
 
 diff --git a/tools/tool_search_validation.py b/tools/tool_search_validation.py
-index 5d3cf1ebe05bacad4c777dd4036d213532b076f0..3af7bc3f44cae0a96d252d4e3083498f664f75b6 100644
+index 5d3cf1ebe..3af7bc3f4 100644
 --- a/tools/tool_search_validation.py
 +++ b/tools/tool_search_validation.py
 @@ -82,6 +82,9 @@ def validate_deferred_call_args(name: str, args: dict[str, Any]) -> Optional[str
@@ -11042,7 +12281,7 @@ index 5d3cf1ebe05bacad4c777dd4036d213532b076f0..3af7bc3f44cae0a96d252d4e3083498f
          candidates = []
      hint = (f" Did you mean {', '.join(repr(c) for c in candidates)}?" if candidates
 diff --git a/toolsets.py b/toolsets.py
-index 588cb0f11784c964499f23726dd9d8e69662b8b1..ed47f457d362883799588f4463c97c7ae4bc9708 100644
+index 588cb0f11..ed47f457d 100644
 --- a/toolsets.py
 +++ b/toolsets.py
 @@ -459,9 +459,38 @@ def session_disabled_toolsets(
@@ -11087,8 +12326,35 @@ index 588cb0f11784c964499f23726dd9d8e69662b8b1..ed47f457d362883799588f4463c97c7a
 
 
  def agent_tool_drops(agent: Any) -> frozenset:
+diff --git a/tui_gateway/agent_callbacks.py b/tui_gateway/agent_callbacks.py
+index 136a3edf5..0e72b3f97 100644
+--- a/tui_gateway/agent_callbacks.py
++++ b/tui_gateway/agent_callbacks.py
+@@ -146,9 +146,19 @@ def _agent_cbs(sid: str) -> dict:
+     def _read_block(method: str, timeout: int):
+         # read_terminal / read_preview (desktop GUI): server request like clarify; the preview
+         # read gets longer since a URL tab extracts text from a live page.
+-        return lambda start=None, count=None: _ask(
+-            method, sid, {k: v for k, v in (("start", start), ("count", count)) if v is not None},
+-            timeout=timeout)
++        def read(start=None, count=None):
++            params = {key: value for key, value in (("start", start), ("count", count)) if value is not None}
++            if method == "terminal.read":
++                from gateway.session_authorities import served_profile_name
++                with _sessions_lock:
++                    session = _sessions.get(sid)
++                    if session is None:
++                        return ""
++                    profile_home = session.get("profile_home") or _launch_home()
++                params["owner_profile"] = served_profile_name(profile_home)
++            return _ask(method, sid, params, timeout=timeout)
++
++        return read
+
+     callbacks = {
+         "tool_start_callback": lambda tc_id, name, args: _on_tool_start(sid, tc_id, name, args),
 diff --git a/tui_gateway/checkpoints.py b/tui_gateway/checkpoints.py
-index db7c80c494b731ba9a39b4b03b8a5b46a45c4d12..d16ab0d0a692c9d432939e138038b53b8e34ece9 100644
+index db7c80c49..d16ab0d0a 100644
 --- a/tui_gateway/checkpoints.py
 +++ b/tui_gateway/checkpoints.py
 @@ -52,7 +52,7 @@ def _resolve_checkpoint_hash(mgr, cwd: str, ref: str) -> str:
@@ -11111,8 +12377,26 @@ index db7c80c494b731ba9a39b4b03b8a5b46a45c4d12..d16ab0d0a692c9d432939e138038b53b
              return None
          since = undo_span_start((target_message or {}).get("timestamp"), kept_history)
          return undo_hint_payload(mgr, cwd, since, task_id=None)
+diff --git a/tui_gateway/contracts/server_requests.py b/tui_gateway/contracts/server_requests.py
+index ad84cc1cc..bde092a4d 100644
+--- a/tui_gateway/contracts/server_requests.py
++++ b/tui_gateway/contracts/server_requests.py
+@@ -258,7 +258,12 @@ class ReadRangeRequestParams(ServerRequestParams):
+     count: int | None = None
+
+
+-server_request("terminal.read", params=ReadRangeRequestParams, result=ValueResult,
++class TerminalReadRequestParams(ReadRangeRequestParams):
++    owner_profile: str | None = None
++    relay_read_scope: str | None = None
++
++
++server_request("terminal.read", params=TerminalReadRequestParams, result=ValueResult,
+                doc="Read the visible in-app terminal buffer (JSON text answer).")
+ server_request("preview.read", params=ReadRangeRequestParams, result=ValueResult,
+                doc="Read the in-app browser preview's text (JSON text answer).")
 diff --git a/tui_gateway/contracts/tools_commands.py b/tui_gateway/contracts/tools_commands.py
-index d672daeefbf3e97faa1a987db88f42a79ecd6d1f..c762a4bdb084b62549de59c981fb808c53a71020 100644
+index d672daeef..c762a4bdb 100644
 --- a/tui_gateway/contracts/tools_commands.py
 +++ b/tui_gateway/contracts/tools_commands.py
 @@ -8,10 +8,12 @@ known to emit plus ``extra="allow"`` so a new upstream key never trips the stric
@@ -11163,7 +12447,7 @@ index d672daeefbf3e97faa1a987db88f42a79ecd6d1f..c762a4bdb084b62549de59c981fb808c
 
  class CliExecParams(Params):
 diff --git a/tui_gateway/methods_browser.py b/tui_gateway/methods_browser.py
-index 33e5da9335fde0ec5b8b789103724f1fc8b407f4..e1452ac8a6c2f9c0910266aa75794609d0e6f2c8 100644
+index 33e5da933..e1452ac8a 100644
 --- a/tui_gateway/methods_browser.py
 +++ b/tui_gateway/methods_browser.py
 @@ -95,8 +95,14 @@ def _reap_profile_browsers() -> None:
@@ -11182,7 +12466,7 @@ index 33e5da9335fde0ec5b8b789103724f1fc8b407f4..e1452ac8a6c2f9c0910266aa75794609
      if raw_url is not None and not isinstance(raw_url, str):
          return _err(rid, 4015, f"browser url must be a string, got {type(raw_url).__name__}")
 diff --git a/tui_gateway/methods_display.py b/tui_gateway/methods_display.py
-index bfd4f8691c97ac230aa1e539f7cb66c8e4a7ce84..2a85de7aa93d898b19a7ed207051fbd66e2689e0 100644
+index bfd4f8691..2a85de7aa 100644
 --- a/tui_gateway/methods_display.py
 +++ b/tui_gateway/methods_display.py
 @@ -155,11 +155,17 @@ def _(rid, params: dict) -> dict:
@@ -11230,7 +12514,7 @@ index bfd4f8691c97ac230aa1e539f7cb66c8e4a7ce84..2a85de7aa93d898b19a7ed207051fbd6
          return _err(rid, _DISPLAY_ERR, "no supported package manager (apt-get, dnf, pacman) on this host")
      profile_key = hermes_home_key()
 diff --git a/tui_gateway/methods_tools.py b/tui_gateway/methods_tools.py
-index c3f95d21fa281be3849568f2393dbc88d91f16a5..c4be266051f33024025c90bcaa12954f7a065b5c 100644
+index c3f95d21f..c4be26605 100644
 --- a/tui_gateway/methods_tools.py
 +++ b/tui_gateway/methods_tools.py
 @@ -481,6 +481,8 @@ def _dispatch_quick(rid, params, session, name, arg):
@@ -11339,7 +12623,7 @@ index c3f95d21fa281be3849568f2393dbc88d91f16a5..c4be266051f33024025c90bcaa12954f
      """Rebind this module's helpers + handlers onto ``server`` and register the handlers."""
      bind_module(globals(), server, skip=("_",))
 diff --git a/tui_gateway/server.py b/tui_gateway/server.py
-index 3df83a2ef41703a8ae998333e00a70d7cf78db06..d56cf815a2c9e2bcf536547d8bca63e1c39ecc4b 100644
+index 3df83a2ef..d56cf815a 100644
 --- a/tui_gateway/server.py
 +++ b/tui_gateway/server.py
 @@ -1107,6 +1107,8 @@ def _live_session_agent_db(session: dict | None):
@@ -11376,8 +12660,54 @@ index 3df83a2ef41703a8ae998333e00a70d7cf78db06..d56cf815a2c9e2bcf536547d8bca63e1
          except Exception:
              logger.warning("failed to persist live session system prompt for session %s", session_key, exc_info=True)
          finally:
+diff --git a/tui_gateway/server_requests.py b/tui_gateway/server_requests.py
+index 7d089f8ad..cf9ebe955 100644
+--- a/tui_gateway/server_requests.py
++++ b/tui_gateway/server_requests.py
+@@ -131,6 +131,7 @@ _clients: Callable[[str], list] = lambda sid: []
+ NOT_SHOWN_CODE = 4404
+ NOT_SHOWN_MESSAGE = ("No Hermes Desktop window is showing this chat, so its preview, terminal and tour are out "
+                      "of reach. Ask the user to open this chat in the Desktop app, then retry.")
++TERMINAL_NOT_SHOWN_MESSAGE = "No window has a readable terminal for this chat. Open the chat and select its terminal."
+
+ # Client transports that sent ``client.capabilities {server_requests: true}`` (identity set: StdioTransport
+ # has __slots__ and cannot be weak-referenced; ws.py forgets a peer on disconnect).
+@@ -272,6 +273,12 @@ def _is_not_shown(frame: dict) -> bool:
+     return isinstance(error, dict) and error.get("code") == NOT_SHOWN_CODE
+
+
++def is_terminal_read_decline(frame: dict) -> bool:
++    error = frame.get("error")
++    # A TUI or older viewer can answer requests without implementing the terminal reader.
++    return isinstance(error, dict) and error.get("code") in (NOT_SHOWN_CODE, -32601)
++
++
+ def _decline(rid: str, transport: Any) -> bool:
+     """One client's "no window here shows this session". Settles only once every answering client
+     attached to the session declined: a bystander window must not beat the owner (#113348), and with
+@@ -291,7 +298,8 @@ def _decline(rid: str, transport: Any) -> bool:
+         if not clients or not clients <= req.declined:
+             return True
+         _open.pop(rid, None)
+-        req.result = {"value": json.dumps({"success": False, "error": NOT_SHOWN_MESSAGE})}
++        message = TERMINAL_NOT_SHOWN_MESSAGE if req.method == "terminal.read" else NOT_SHOWN_MESSAGE
++        req.result = {"value": json.dumps({"success": False, "error": message})}
+         req.answered = True
+     if req.on_result is not None:
+         req.on_result(req.result)
+@@ -311,7 +319,9 @@ def resolve_response(frame: dict, transport: Any = None) -> bool:
+     if pinned is not None and pinned.transport is not None and pinned.transport is not transport:
+         logger.debug("server request %s: response from a client it was not sent to dropped", rid)
+         return False
+-    if _is_not_shown(frame) and (pinned is None or pinned.transport is None):
++    if (pinned is None or pinned.transport is None) and (
++        _is_not_shown(frame) or (pinned is not None and pinned.method == "terminal.read" and is_terminal_read_decline(frame))
++    ):
+         return _decline(rid, transport)
+     with _lock:
+         req = _open.get(rid)
 diff --git a/tui_gateway/session_registry.py b/tui_gateway/session_registry.py
-index 7578264fabfffbf5fe6d6aebadc24539249c548a..0988264c7b262ba3eec694038bd8a807ed2a5ca1 100644
+index 7578264fa..0988264c7 100644
 --- a/tui_gateway/session_registry.py
 +++ b/tui_gateway/session_registry.py
 @@ -426,11 +426,19 @@ def _any_live_session_claims_key(target: str) -> bool:
@@ -11405,7 +12735,7 @@ index 7578264fabfffbf5fe6d6aebadc24539249c548a..0988264c7b262ba3eec694038bd8a807
 
  # ── Methods: session ─────────────────────────────────────────────────
 diff --git a/tui_gateway/ws.py b/tui_gateway/ws.py
-index 860ffbb6105d629682c274e4c05065aac9c8900f..dda8cd5ffeeff04887516aeee8a6995873dfe2b5 100644
+index 860ffbb61..dda8cd5ff 100644
 --- a/tui_gateway/ws.py
 +++ b/tui_gateway/ws.py
 @@ -7,8 +7,9 @@ from __future__ import annotations
@@ -11522,7 +12852,7 @@ index 860ffbb6105d629682c274e4c05065aac9c8900f..dda8cd5ffeeff04887516aeee8a69958
              await _dispatch_one(req)
              return
 diff --git a/ui-tui/src/app/backtrackStore.ts b/ui-tui/src/app/backtrackStore.ts
-index b37c7d741c76e60cc37fdb5830b808ab55a3fcf2..49af7506a9dd13c4271111b61830441f4c4964b7 100644
+index b37c7d741..49af7506a 100644
 --- a/ui-tui/src/app/backtrackStore.ts
 +++ b/ui-tui/src/app/backtrackStore.ts
 @@ -10,6 +10,7 @@
@@ -11543,7 +12873,7 @@ index b37c7d741c76e60cc37fdb5830b808ab55a3fcf2..49af7506a9dd13c4271111b61830441f
    }
 
 diff --git a/ui-tui/src/app/interfaces.ts b/ui-tui/src/app/interfaces.ts
-index e072aa32b421acae43220f74642db71b46d434f9..a20a3d158e214c7f56bf112ef5d697c199d527f5 100644
+index e072aa32b..a20a3d158 100644
 --- a/ui-tui/src/app/interfaces.ts
 +++ b/ui-tui/src/app/interfaces.ts
 @@ -499,6 +499,7 @@ export interface UseComposerStateResult {
@@ -11555,7 +12885,7 @@ index e072aa32b421acae43220f74642db71b46d434f9..a20a3d158e214c7f56bf112ef5d697c1
    countPrompts: () => number
    die: () => void
 diff --git a/ui-tui/src/app/useInputHandlers.ts b/ui-tui/src/app/useInputHandlers.ts
-index 4b1eccc65e5ae466f64d5e3e16fd6576b746c503..9c04d3ae2b430224fbebd949c1f1df130cce61e7 100644
+index 4b1eccc65..9c04d3ae2 100644
 --- a/ui-tui/src/app/useInputHandlers.ts
 +++ b/ui-tui/src/app/useInputHandlers.ts
 @@ -948,6 +948,10 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
@@ -11570,7 +12900,7 @@ index 4b1eccc65e5ae466f64d5e3e16fd6576b746c503..9c04d3ae2b430224fbebd949c1f1df13
            appendMessage: actions.appendMessage,
            gw: gateway.gw,
 diff --git a/ui-tui/src/app/useMainApp.ts b/ui-tui/src/app/useMainApp.ts
-index 1c38846c2cd9cc7b8b80ab36adf0e28714e90434..d1db3d3db06f90a7bd2a5fd1b3c28fa341f7314c 100644
+index 1c38846c2..d1db3d3db 100644
 --- a/ui-tui/src/app/useMainApp.ts
 +++ b/ui-tui/src/app/useMainApp.ts
 @@ -965,7 +965,7 @@ export function useMainApp(gw: GatewayClient) {
@@ -11591,7 +12921,7 @@ index 1c38846c2cd9cc7b8b80ab36adf0e28714e90434..d1db3d3db06f90a7bd2a5fd1b3c28fa3
        die,
        dispatchSubmission,
 diff --git a/ui-tui/src/app/useSubmission.ts b/ui-tui/src/app/useSubmission.ts
-index 2bb276581db8d54c1f69422fcd4c79a27587f461..3812d956772500878db38063c457f131259dd684 100644
+index 2bb276581..3812d9567 100644
 --- a/ui-tui/src/app/useSubmission.ts
 +++ b/ui-tui/src/app/useSubmission.ts
 @@ -1,5 +1,5 @@
@@ -11917,7 +13247,7 @@ index 2bb276581db8d54c1f69422fcd4c79a27587f461..3812d956772500878db38063c457f131
 
  export interface UseSubmissionOptions {
 diff --git a/ui-tui/src/app/userMessages.ts b/ui-tui/src/app/userMessages.ts
-index 862082942208d00f9b210db3a73992d5e60b26e8..bfb281621793f91d0b4bdfd206d4dd3e377543cc 100644
+index 862082942..bfb281621 100644
 --- a/ui-tui/src/app/userMessages.ts
 +++ b/ui-tui/src/app/userMessages.ts
 @@ -167,6 +167,12 @@ export const describeRpcError = (err: unknown): string => {
@@ -11961,7 +13291,7 @@ index 862082942208d00f9b210db3a73992d5e60b26e8..bfb281621793f91d0b4bdfd206d4dd3e
 
  // slash.exec answers 4018 with exactly these texts when it does NOT own the
 diff --git a/ui-tui/src/i18n/en/userMessages.ts b/ui-tui/src/i18n/en/userMessages.ts
-index bf9a1b3b5291d7118d1c9089c27616361f821960..2434e4d1c6b74ac535fdbc66ffcc00201f31a17a 100644
+index bf9a1b3b5..2434e4d1c 100644
 --- a/ui-tui/src/i18n/en/userMessages.ts
 +++ b/ui-tui/src/i18n/en/userMessages.ts
 @@ -37,6 +37,7 @@ export const userMessagesEn = {
@@ -11973,7 +13303,7 @@ index bf9a1b3b5291d7118d1c9089c27616361f821960..2434e4d1c6b74ac535fdbc66ffcc0020
        shellBackendRefused: (backend: string) =>
          `!commands run on the gateway host, but this session's terminal backend is ${backend}, so the command was not run. Ask the agent to run it instead; the agent's terminal runs inside ${backend}.`,
 diff --git a/ui-tui/src/lib/pendingInputs.ts b/ui-tui/src/lib/pendingInputs.ts
-index fa2f4ed7f83cadd16b082a78a2058460f1c7d208..94a3fb736f1752dde5bc714607d5b93548861ba1 100644
+index fa2f4ed7f..94a3fb736 100644
 --- a/ui-tui/src/lib/pendingInputs.ts
 +++ b/ui-tui/src/lib/pendingInputs.ts
 @@ -16,6 +16,7 @@ import { join } from 'node:path'
@@ -11998,7 +13328,7 @@ index fa2f4ed7f83cadd16b082a78a2058460f1c7d208..94a3fb736f1752dde5bc714607d5b935
      .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
  }
 diff --git a/ui-tui/src/lib/text.ts b/ui-tui/src/lib/text.ts
-index 9197a7e7e5cdd7d22e53d687320fc345c7c1e5a0..34b68ed0e88e004f61935dffd3d66ca4f4bd93a9 100644
+index 9197a7e7e..34b68ed0e 100644
 --- a/ui-tui/src/lib/text.ts
 +++ b/ui-tui/src/lib/text.ts
 @@ -53,7 +53,7 @@ export const compactPreview = (s: string, max: number) => {
@@ -12011,7 +13341,7 @@ index 9197a7e7e5cdd7d22e53d687320fc345c7c1e5a0..34b68ed0e88e004f61935dffd3d66ca4
    return !one
      ? ''
 diff --git a/ui-tui/src/protocol/paste.ts b/ui-tui/src/protocol/paste.ts
-index 9eae137cea455d3414c37390ee53153d5ef24418..bd3f476f96124977cf740a08f2f5c9479c27e162 100644
+index 9eae137ce..bd3f476f9 100644
 --- a/ui-tui/src/protocol/paste.ts
 +++ b/ui-tui/src/protocol/paste.ts
 @@ -1 +1,20 @@

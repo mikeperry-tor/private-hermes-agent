@@ -141,6 +141,14 @@ def check():
     def preview_callback(*args, **kwargs):
         preview_calls.append((args, kwargs))
         return json.dumps({'success': True, 'text': 'fixture preview'})
+
+    terminal_result = {}
+    terminal_requests = []
+
+    def terminal_callback(**kwargs):
+        terminal_requests.append(kwargs)
+        return json.dumps(terminal_result)
+
     agent = SimpleNamespace(
         session_id='fixture', valid_tool_names=names | blocked, quiet_mode=False,
         enabled_toolsets=config['toolsets'], disabled_toolsets=[],
@@ -148,7 +156,7 @@ def check():
         read_preview_callback=preview_callback if native else forbidden,
         drive_preview_callback=preview_callback if native else forbidden,
         read_window_below_callback=forbidden,
-        read_terminal_callback=lambda **kw: json.dumps({'text': 'fixture terminal'}),
+        read_terminal_callback=terminal_callback,
     )
     for name in sorted(blocked):
         # Late scoped/plugin registrations remain subject to managed dispatch.
@@ -193,12 +201,19 @@ def check():
     else:
         assert not events and not preview_calls
 
-    # The same native paths still reach an available GUI callback.
-    ref = _ToolCallRef('read_terminal', {}, 'fixture', 'fixture-call', [])
-    assert decoded(_resolve_sequential_dispatch(agent, ref, []).execute({}))['text'] == 'fixture terminal'
-    assert decoded(invoke_tool(agent, 'read_terminal', {}, 'fixture',
-                              pre_tool_block_checked=True, skip_tool_request_middleware=True,
-                              skip_tool_execution_middleware=True))['text'] == 'fixture terminal'
+    # The tool forwards row ranges and preserves the renderer's refusal.
+    code_output = {'text': 'fixture Code terminal'}
+    refusal = {'error': 'No window has a readable terminal for this chat.', 'success': False}
+    for response in (code_output, refusal):
+        terminal_result.clear()
+        terminal_result.update(response)
+        args = {'start_line': 0, 'count': 40}
+        ref = _ToolCallRef('read_terminal', args, 'fixture', 'fixture-call', [])
+        assert decoded(_resolve_sequential_dispatch(agent, ref, []).execute(args)) == response
+        assert decoded(invoke_tool(agent, 'read_terminal', args, 'fixture',
+                                  pre_tool_block_checked=True, skip_tool_request_middleware=True,
+                                  skip_tool_execution_middleware=True)) == response
+    assert terminal_requests == [{'start': 0, 'count': 40}] * 4
     assert saved.read_bytes() == original_config, 'operator config was modified'
     print(f"PASS: desktop/browser policy and native dispatch mode={PRIVATE_HERMES_EXTERNAL_CONTENT!r} computer_use={PRIVATE_HERMES_COMPUTER_USE}")
 

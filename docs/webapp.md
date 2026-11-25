@@ -388,9 +388,11 @@ chat's last executor directory or starts in `/workspace`. In either mode, saved
 `quick_commands` of type `exec` run in the executor when invoked from
 `make chat`. The model's terminal tool uses the executor in both modes.
 
-When the model has the `read_terminal` tool, it can read visible output and
-scrollback from the selected terminal tab, including an **Agent** terminal.
-Keep secrets out of its output.
+The model's `read_terminal` tool reads visible output and scrollback from the
+selected **Code** terminal when its gateway and profile match the focused chat.
+The WebApp refuses reads from **Agent** terminals and tabs whose placement it
+cannot verify. You can still select terminal output and use **Add to chat** to
+share it yourself.
 
 - **Working directory:** Code terminals start in `/workspace` (or the requested
   executor directory, or parent directory for a file path). Missing paths,

@@ -58,11 +58,11 @@ When a new Hermes release still needs candidate patches:
    upstream has adopted all candidate changes, remove
    `0001-upstream-candidates.patch` and its build input.
 3. Export the diff from the new release base to the combined replay head as
-   `0001-upstream-candidates.patch`, excluding upstream Python tests, website
-   files, contributor metadata, and Electron-only files. Record the base commit
-   and replay head in the patch header, then rebase the downstream deployment
-   and privacy patches (`0002`+) on top and verify the full series against the
-   packaged source.
+   `0001-upstream-candidates.patch`. Exclude upstream Python and TUI tests,
+   website files, contributor metadata, and Electron-only files. Keep renderer
+   tests used by `make hermes-ui-test`. Record the base commit and replay head in
+   the upgrade plan, then rebase the downstream deployment and privacy patches
+   (`0002`+) and verify the full series against the packaged source.
 4. Record the carried topics, overlap resolutions, and test results in the
    upgrade plan. Push the combined replay to `stack-patches/<release>/combined`
    and keep the active submission branches intact for open PRs.

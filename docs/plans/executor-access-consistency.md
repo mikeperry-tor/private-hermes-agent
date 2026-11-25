@@ -559,16 +559,38 @@ to match the final image. Recheck the documented reason for the empty Hermes
   Python tests before the final TUI-only change. The submission TUI passed
   123 focused tests and type-checking with Node 26.12.1 and pnpm 12.15.0.
   The build of replay `259412299` matched the 12 changed shell Python modules
-  and passed Node syntax checks for both installed TUI entrypoints. The
+  and passed Node syntax checks for both installed TUI entrypoints. The final
+  shell package built successfully and carries matching TUI bundles. The
   disposable OpenSSH fixture on Docker Desktop verified the executor UID,
   literal directories, independent output streams, exit status, invalid
   directory refusal, foreground cancellation, and host-key refusal and
   recovery. Full `make chat` placement and engine checks remain open.
+  The test VM's SSH forward at port 2222 refused the connection. Docker
+  Desktop was serving the operator's project on the fixed stack networks.
 - Independent shell reviews traced the gateway's route and profile checks,
   process cleanup, and placement errors. Follow-up changes protect shell syntax
   in collapsed paste chips, keep renderer updates with the submitting chat,
   keep restored shell drafts for operator review, and share the saved SSH cwd
   with model tools while its project binding holds.
+- The WebApp terminal reader is on the local PR4b topic at
+  `9fe9764f0c360aa02efb44716acdfe607ee4da79`. The release topic is
+  `96adab1f9c9dfb6755e8cfe3bf2ebe4b28fea54b` and the combined replay is
+  `de311262cab1760d4b6c63c0c8dd91d3a34be60d`. The native tests passed 147
+  Python checks, the renderer type check, and 104 renderer tests. Independent
+  review confirmed the focused chat, socket placement, and saved gateway
+  checks after fixes for same-address routing edits, OAuth account changes,
+  and competing answers from other viewers. The desktop tool matrix passed
+  all four content modes with computer use enabled and disabled. The combined
+  release passed the same 147 Python tests. The Docker Desktop ARM64 package
+  built with matching TUI entrypoints. `make hermes-ui-test` passed the
+  renderer type check and 271 tests against the packaged WebApp. The real
+  browser fixture for terminal reads still needs to run against the test stack.
+- The SSH file-state design review found host filesystem reads in overwrite
+  protection, read tracking, and the path checks for credentials, device
+  files, instruction files, and skills. The next change uses executor file
+  state to establish a complete read baseline and refuses writes when SSH
+  cannot establish the target state. Managed write roots and shared file
+  permissions remain in the workspace topic.
 
 ### Completion checks
 
