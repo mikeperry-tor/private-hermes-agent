@@ -37,6 +37,7 @@ def main():
         'exec node node_modules/vitest/vitest.mjs run --project ui "$@"', 'vitest',
         'src/lib/private-image-download.test.ts', 'src/lib/browser-image-copy.test.ts',
         'src/lib/browser-desktop-bridge-ownership-download.test.ts',
+        'src/lib/browser-session-workspace-files.test.tsx',
         'src/plugins/hermes-bots/screen-pane-status-events.test.tsx',
         'src/plugins/hermes-bots/screen-portal-status-request.test.tsx',
         'src/lib/browser-terminal.test.ts', 'src/lib/browser-desktop-bridge-saved-connections.test.ts',

@@ -40,6 +40,7 @@ def policy(env):
         "terminal": terminal,
         "webapp": {"terminal_environment": MODES[mode], "executor_ssh_config": SSH_CONFIG},
         "context_references": {"fetch_urls": False},
+        "cron": {"ssh_scripts_base": "/workspace/cron"},
         "tools": {"disabled": disabled},
         "bot_desktop": {"executor_only": True},
         "computer_use": {"backend": "cua", "permission_mode": "standard"},

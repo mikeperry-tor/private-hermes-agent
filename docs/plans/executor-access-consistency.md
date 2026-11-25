@@ -1,10 +1,8 @@
 # Use the SSH executor for chat shells and project work
 
-Status: in progress. The wrapper passes applied project destinations to both
-clients. The candidate package places classic and TUI operator shells,
-restricts WebApp model reads to verified Code terminals, and refuses SSH
-checkpoints. The `make chat` lifecycle checks, grant consumers, structured
-edits, project operations, scheduled work, and final qualification remain open.
+Status: in progress. The integrated Hermes v0.23.3 candidate routes project
+work and scheduled scripts through the managed SSH executor. Final release
+checks, native submission topics, and combined review remain open.
 
 - Wrapper branch: `executor-access-consistency`. Compare the complete change
   with `a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The plan under review
@@ -759,14 +757,41 @@ full context review and runtime checks for `/init` and remapped projects
 remain open.
 
 The chat-scoped WebApp files draft passed 200 Python tests with ten Windows
-skips and 107 renderer tests. The tests cover two chats with different bytes
-at the same relative path and a download ticket after the chat moves. Real
-browser qualification is pending.
+skips and 107 renderer tests. An authenticated Chromium fixture on Docker
+Desktop ARM64 created two sessions with different `note.txt` files. In both
+Code and Agent modes, it verified each session's text, download, HEAD response,
+and editor save. An SSH outage refused the read with a same-named Hermes file
+in place. The focused Python suite checks download tickets after a move.
 
-Executor-backed discovery, Git actions, delegation, and optional workspace
-guards remain open. The Linux cron supervisor passed a focused fixture for
-timeout, cancellation, and cleanup of a detached descendant. The scheduled
-job lifecycle, delivery, and upgrade fixture remain open.
+The integrated release replay `07db65a34cfae9fbdee238c8c1bed2d0fb10a936`
+uses the v0.23.3 source and the reviewed shell and picker replay. Its tree
+passed `scripts/check` (22 checks). An earlier integrated snapshot passed 346
+focused Python tests with 14 skips. `make hermes-ui-test` passed TypeScript
+checking and 285 renderer tests. Docker on Debian ARM64 passed `make test`
+against the earlier integrated image.
+
+The pinned OpenSSH cron fixture created a script-only job through the model
+tool, ran it as `runner` in the selected share, and verified cancellation,
+timeout, descendant cleanup, and recovery of the same saved job after an SSH
+outage. Code and Agent modes passed. The scheduled restart, named profile
+upgrade, and delivery fixtures remain open.
+
+The authenticated Git fixture verified status, file diff, stage and unstage,
+branch switching, worktree creation and removal, and refusal outside the
+applied roots. The OpenSSH skill fixture verified catalog and slash lookup,
+nested skill names, one inline helper run as `runner`, and refusal to register
+project-requested profile credentials. These are Docker Desktop ARM64 probes.
+
+The follow-up release replay is `c11f741446c39f3a18012463ade8fae8edf728f2`.
+The focused Python suite passed 372 tests with eight Windows skips. The full
+upstream test run and the final cross-engine lifecycle runs are in progress.
+
+Independent reviews traced the integrated workspace, file, delegation, skills,
+cron, Git, and media paths. Follow-up changes bind picker listings to applied
+grants, preserve exact POSIX paths, scope same-name previews by session, keep
+delegated child cwd checkpoints, validate both cron scripts, and bind local
+media approvals to owning interfaces. Recheck the follow-up changes before
+the final combined review.
 
 ### Speech output topic
 

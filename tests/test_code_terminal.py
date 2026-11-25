@@ -36,6 +36,7 @@ class ManagedPolicyTests(unittest.TestCase):
                 for field in ("ssh_host", "ssh_port", "ssh_user", "ssh_key", "ssh_config"):
                     self.assertEqual(env[f"TERMINAL_{field.upper()}"], config["terminal"][field])
                 self.assertEqual(config["context_references"], {"fetch_urls": False})
+                self.assertEqual(config["cron"], {"ssh_scripts_base": "/workspace/cron"})
                 self.assertTrue(config["bot_desktop"]["executor_only"])
                 self.assertTrue(config["browser"]["require_sandbox"])
 

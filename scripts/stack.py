@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path, PurePosixPath
+import shlex
 import subprocess
 import sys
 from deployment import (ROOT, check_bind_sources, check_engine, compose, compose_base, compose_files,
@@ -117,7 +118,7 @@ def executor_roots(mounts):
     return ['/workspace', *sorted(map(str, mounts))]
 
 
-def start_chat():
+def start_chat(chat_args=()):
     command = maintenance_compose()
     check_engine()
     gateway = running_service(command, 'hermes')
@@ -138,7 +139,7 @@ def start_chat():
         raise RuntimeError(unavailable)
     command = ['env', *(f'{name}={applied[name]}' for name in CHAT_SETTINGS),
                f'{EXECUTOR_ROOTS}={json.dumps(mounted)}', *command]
-    arguments = ['run', '--rm', '--no-deps', 'hermes', 'chat']
+    arguments = ['run', '--rm', '--no-deps', 'hermes', 'chat', *chat_args]
     model, networked = inspect_launch(command, parse_launch(arguments))
     if networked:
         prepare_launch(command, model)
@@ -151,7 +152,7 @@ def main_unlocked():
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.action == 'chat':
-        start_chat()
+        start_chat([*shlex.split(os.environ.get('PRIVATE_HERMES_CHAT_ARGS', '')), *args.arguments])
         return
     if args.action == 'build':
         run(maintenance_compose(all_ingress=True, executor_build=True) + ['--profile', '*', 'build'])

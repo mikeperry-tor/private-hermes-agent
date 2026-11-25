@@ -255,9 +255,12 @@ assert decide(False) and not undecided()
                         output.extend(os.read(master, 65536))
             assert marker in output, f'Chat did not show {marker!r}: {output[-6000:].decode(errors="replace")}'
 
+        chat_environment = {**environment, 'TERM': 'xterm-256color'}
+        if interface and TARGET in roots:
+            chat_environment['CHAT_ARGS'] = shlex.join(['--in', TARGET])
         try:
             with subprocess.Popen(['make', 'chat'], cwd=checkout,
-                                  env={**environment, 'TERM': 'xterm-256color'},
+                                  env=chat_environment,
                                   stdin=slave, stdout=slave, stderr=slave, start_new_session=True) as chat:
                 try:
                     for _ in range(80):
@@ -290,6 +293,9 @@ assert decide(False) and not undecided()
 
                                     submit(b"!test -d /opt/data && m=GATEWAY || m=EXECUTOR; printf 'PRIVATE-SHELL-%s\\n' \"$m\"")
                                     expect(b'PRIVATE-SHELL-' + mode.upper().encode(), chat)
+                                    if mode == 'executor' and TARGET in roots:
+                                        submit(b'!pwd')
+                                        expect(TARGET.encode(), chat)
                                     submit(b'/placement-probe')
                                     expect(b'PRIVATE-QUICK-EXECUTOR', chat)
                                     if model_edits:

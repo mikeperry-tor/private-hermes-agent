@@ -65,6 +65,33 @@ make up
   updates, so its built-in core version check reports an unsupported install;
   use `make check-updates` instead.
 
+### Move scheduled scripts to the executor
+
+When upgrading from a Private Hermes build that runs cron scripts inside
+Hermes to the v0.23.3-based build that runs them over SSH, keep the job records,
+run history, and original profile scripts. The [pre-upgrade backup](configuration.md#backup-scope)
+covers the Hermes named volume and the executor workspace.
+
+Before starting the upgraded gateway, copy any script that is due to the
+matching profile's `data/executor/workspace/cron/<profile>/scripts/` directory.
+Use `default` for the default profile or the profile's saved name. Copy its
+supporting files and give `runner` access as described in
+[shared project filesystem permissions](configuration.md#shared-project-filesystem-permissions).
+For example, a default profile job saved as `check.sh` looks for
+`/workspace/cron/default/scripts/check.sh` in the executor.
+
+Check saved pre-run and monitor paths, explicit workdirs, and Python
+interpreters. A relative script name uses the new directory. Absolute script
+paths must resolve inside it, and `~/` means the executor user's home. Pause
+jobs with old Hermes paths before the upgrade. After startup, use the owning
+profile's cron editor to select the copied script by relative name and set an
+executor Python interpreter if required. The job's explicit workdir must be
+an applied directory in the executor.
+
+Run `hermes cron doctor` from the Hermes administration shell to see the
+expected script location and interpreter errors. A failed one-shot can consume
+its scheduled occurrence. Check its run history before scheduling another.
+
 ## Manage persistent user plugins
 
 ```sh
@@ -142,7 +169,7 @@ for upgrade steps.
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| `0001-upstream-candidates` | Strict managed config, SSH trust, file errors, guarded reads, searches, and edits, SSH checkpoint refusal, executor desktop and browser transport, Code and Agent terminals and chat shells, configurable URL context, managed tool denial, and speech output in the profile audio cache. | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0001-upstream-candidates` | Managed configuration and SSH trust, workspace selection and project operations, guarded file tools, executor shells and Python, SSH checkpoint refusal, desktop and browser transport, skills and cron placement, and artifact delivery. | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
 | `0002-managed-policy` | Generates root-owned files in `/etc/hermes` at startup and requires applied workspace grants for managed SSH writes. | Verify effective settings under conflicting profile input, reloads, and offline jobs. Keep the missing-grant check until Hermes can require the list for a managed deployment. |
 | `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code and Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
 | `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |
@@ -163,6 +190,8 @@ At startup, the Hermes entrypoint writes `/etc/hermes/config.yaml` and
   and publishes only `/workspace` and the exact project destinations.
   `make chat` compares the running gateway's list with the executor's mounts
   before copying the destinations into its managed config.
+- The SSH cron base directory at `/workspace/cron`. Hermes resolves relative
+  script names under the owning profile's `scripts/` directory there.
 - Cleared `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` values (applied on top
   of Compose defaults and reapplied across profile reloads) so the namespace
   firewall and `tor` gateway remain the single enforcement point for local
@@ -178,9 +207,8 @@ At startup, the Hermes entrypoint writes `/etc/hermes/config.yaml` and
 The desktop executor pairs the pinned `hermes-sandbox` image with OpenSSH and a
 hash-locked browser harness under `/opt/browser-harness` (following Hermes's
 Python lockfile plus the Pillow 13 `--no-deps` override). Hermes sends the
-runner and screenshot helper over SSH, keeps the live browser profile excluded
-from SSH sync archives, and provides an empty agent-side `/workspace` directory
-(separate from the executor's `/workspace`) for session `cwd` validation.
+runner and screenshot helper over SSH, and excludes the live browser profile
+from SSH sync archives.
 
 The image rebuilds the WebApp and TUI from the patched source. The TUI launcher
 uses the rebuilt bundle at either packaged lookup path. The runtime image pins

@@ -470,6 +470,13 @@ Update component images in place with:
 ```bash
 make down
 git pull
+```
+
+Back up the stopped stack before pulling the update. If you run scheduled
+scripts, follow the [script migration steps](docs/updates-and-plugins.md#move-scheduled-scripts-to-the-executor)
+before starting the new build.
+
+```bash
 make up
 ```
 

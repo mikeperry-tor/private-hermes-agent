@@ -101,17 +101,24 @@ When host-port or LAN grants are enabled, startup allows `tor` to write to
 
 ### Code execution and SSH isolation
 
-Hermes terminal commands, remote Python `execute_code`, and backend-aware file
-tools run over SSH in the executor. Subagents stay in the Hermes process as
-orchestrator instances and run their code in the same executor. All sessions and
-subagents share one executor user (UID 10000) and `/workspace`: this separates
-the agent from executed code, not tasks or tenants from each other.
+Model terminal commands, Python execution, and project file tools run over SSH
+in the executor. A subagent starts in its parent's executor directory and
+resumes in its own last saved directory. Scheduled scripts and enabled inline
+skill commands also run as `runner`. Each session shares UID 10000 and the
+executor's workspace. Isolation separates Hermes from executed code.
 
 - Provider credentials and the `hermes-data` volume are not mounted in the
   executor.
-- Hermes can still copy skills, caches, and operator-declared credential files
-  to remote backends. Review `terminal.credential_files` and skill passthrough
-  declarations accordingly.
+- Hermes can copy approved profile skills, caches, and operator-declared
+  credentials to the executor. An operator can trust project skills by their
+  verified executor checkout. Those skills can read their own supporting files
+  and use installed executor dependencies. Hermes does not register their
+  requests for profile environment variables, credential files, or packages.
+- The managed project list comes from the applied mounts. Project-aware
+  commands refuse work when SSH or the saved directory is unavailable. Existing
+  transcripts and job records stay available for inspection. Managed SSH
+  checkpoints, delegated Git worktree isolation, and Kanban worktree workers
+  decline workspace operations that require a local checkout.
 - Code running in the executor can invoke allowlisted Hermes tools over RPC;
   this is an authorized tool capability, not a network bypass.
 - The executor's browser profile stays in its persistent home mount and is

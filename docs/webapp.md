@@ -250,8 +250,10 @@ bounding capability sets:
 An authenticated WebApp user has administrative authority over the Hermes
 container. The default **Code** terminal runs in the SSH executor, while the
 optional **Agent** terminal runs inside Hermes with access to `/opt/data`. The
-browser file API uses SSH for workspace paths, while staged agent files remain
-in Hermes. Do not treat WebApp UI controls as executor sandboxing. The executor
+browser resolves a file link or edit against the chat that opened it. Project
+files use that chat's SSH directory in both modes. An explicitly staged upload
+uses its owning attachment interface in Hermes. The administrative file API
+serves Hermes files independently of the chat's project. The executor
 has no ingress network membership, no WebApp or Tailscale credentials, and no
 path to private WebApp listeners.
 
@@ -385,7 +387,7 @@ setting. Saved gateway terminals keep their separate remote-Hermes path.
 The same applied setting selects the shell for `!command` in classic and TUI
 chat. Reopen `make chat` after applying a change. In Code mode, `!pwd` uses the
 chat's last executor directory or starts in `/workspace`. In Agent mode, `!pwd`
-uses the chat's directory in Hermes. In either mode, saved `quick_commands` of
+uses the owning profile's directory in Hermes. In either mode, saved `quick_commands` of
 type `exec` run in the chat's executor directory. The model's terminal tool
 uses the executor in both modes.
 
@@ -403,9 +405,8 @@ share it yourself.
   executor directory, or parent directory for a file path). Missing paths,
   inaccessible directories, and control-character paths fail cleanly instead of
   falling back. Bash OSC prompt updates track `cd` changes (preserving spaces,
-  Unicode, and shell metacharacters). The workspace file API always targets the
-  executor, so in Agent mode its view can differ from local container files;
-  agent-side `/workspace` is empty and ephemeral across restarts.
+  Unicode, and shell metacharacters). Project previews follow the chat's saved
+  executor directory independently of tabs that run an administrative shell.
 - **Lifecycle and cancellation:** Page refresh reattaches to a surviving shell
   and replays buffered output. Closing a Code tab during startup cancels the
   pending SSH probe, and closing an open tab terminates the shell and foreground

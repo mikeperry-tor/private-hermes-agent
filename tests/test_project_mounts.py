@@ -377,10 +377,10 @@ class ProjectMountTests(unittest.TestCase):
                 patch.object(stack, 'capture', return_value=json.dumps(entries)), \
                 patch.object(stack, 'inspect_launch', return_value=({'services': {}}, True)), \
                 patch.object(stack, 'prepare_launch') as prepare, patch.object(stack, 'run') as run:
-            stack.start_chat()
+            stack.start_chat(['--in', root])
             command = run.call_args.args[0]
             self.assertEqual(command[:5], ['env', *entries])
-            self.assertEqual(command[-5:], ['run', '--rm', '--no-deps', 'hermes', 'chat'])
+            self.assertEqual(command[-7:], ['run', '--rm', '--no-deps', 'hermes', 'chat', '--in', root])
             self.assertNotIn('/private/source', repr(command))
             prepare.assert_called_once()
 

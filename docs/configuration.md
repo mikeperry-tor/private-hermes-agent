@@ -220,6 +220,13 @@ and run `make up`.
 A new `make chat` checks that the executor's attached shares match the running
 gateway's policy. Apply changes before opening a chat that needs those shares.
 
+Choose a project with the WebApp workspace picker or run
+`make chat 'CHAT_ARGS=--in "/mnt/projects/my-app"'`. A new chat without a
+selection starts in `/workspace`. A
+resumed chat retains its saved project. After you remove a share, its chats
+remain in history. Select an available project before asking the model to do
+more work, or restore the share at its saved destination.
+
 With shares configured, the executor stays stopped after an exit. Run
 `make up` to check the project sources and start it again. If the executor's
 network namespace owner also needs recovery, follow the
@@ -325,8 +332,9 @@ git --no-pager log -p -n 5
 In Code mode, both interfaces in `make chat` run operator shell commands in the
 executor. Use `!git -C /mnt/projects/my-app status --short` or
 `!git -C /mnt/projects/my-app --no-pager diff`. You can also ask the agent to
-run the same commands with its terminal tool. The agent uses the executor in
-both terminal modes.
+run the same commands with its terminal tool in either mode. Use `/diff` for
+the chat's executor checkout, or open the WebApp's Git view to inspect and
+stage changes. Use the Code terminal for network Git commands and commits.
 
 ### Host-side shared project security enforcement
 
@@ -589,9 +597,9 @@ review the [risks of opening executor-written files](#security-considerations-fo
 
 | Storage | Contents |
 | --- | --- |
-| `hermes-data` (named volume) | Hermes profile, configuration, credentials, conversations, memory, skills, plugins, uploads, and `webapp-image-consent.sqlite3` |
+| `hermes-data` (named volume) | Profiles, settings, credentials, conversations, memory, skills, plugins, uploads, cron jobs and history, legacy profile `scripts/`, and `webapp-image-consent.sqlite3` |
 | `x402_treazury-data` (named volume) | Treasury home: encrypted wallet state, decryption key, financial journals, catalog cache, and onboarding record |
-| `data/executor/workspace/` | Agent-created repositories, documents, and scripts (durable, not cleared automatically) |
+| `data/executor/workspace/` | Repositories, documents, and active cron scripts under `cron/<profile>/scripts/` |
 | `data/executor/home/` | Executor home directory, shell and tool config, browser profile, and caches |
 | `data/ssh/agent/` | Hermes SSH client key and pinned executor host key |
 | `data/ssh/executor/` | Executor SSH host key and authorized client key |
@@ -791,8 +799,7 @@ regenerating keys unnecessarily. Upgrading from the pre-v0.23.3 wrapper also
 clears previously saved local terminal tabs (saved gateway tabs and executor
 files survive).
 
-The profile's `terminal.cwd` setting applies to model execution and Agent
-shells. Workspace file APIs always read the executor, so their files can differ
-from what an Agent shell sees locally. Agent-side `/workspace` is ephemeral;
-durable agent files live under `/opt/data`. See
+The profile's `terminal.cwd` setting can choose the starting directory for
+executor tools within the applied roots. Agent chat shells use the profile's
+Hermes directory. Durable Hermes files live under `/opt/data`. See
 [terminal environment](webapp.md#terminal-environment).

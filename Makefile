@@ -65,6 +65,7 @@ up:
 down:
 	python3 scripts/stack.py down
 
+chat: export PRIVATE_HERMES_CHAT_ARGS := $(value CHAT_ARGS)
 chat:
 	python3 scripts/stack.py chat
 
