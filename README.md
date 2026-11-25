@@ -151,9 +151,10 @@ provider later** if prompted in the WebApp. Open **Settings -> Model**, select
 **Teep**, choose a model, and apply the selection. In `make chat`, choose
 **Teep** and a model in the provider setup prompt.
 
-The browser's Code terminal opens in the same executor workspace as the agent.
-For an agent administration shell, set `WEBAPP_TERMINAL_ENVIRONMENT=agent`, run
-`make up`, and reload the browser. See
+The browser's Code terminal and `!command` in `make chat` run in the same SSH
+executor as the agent. For an administration shell, set
+`WEBAPP_TERMINAL_ENVIRONMENT=agent`, run `make up`, then reload the browser and
+reopen `make chat`. See
 [terminal operation](docs/webapp.md#terminal-environment).
 
 If you prefer terminal use, open the terminal client with:

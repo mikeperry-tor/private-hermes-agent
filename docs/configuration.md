@@ -312,11 +312,11 @@ git --no-pager diff --cached
 git --no-pager log -p -n 5
 ```
 
-In WebApp chat or `make chat`, you can also ask the agent to run these
-commands with its terminal tool in the project directory and show the output.
-Both the **Code** terminal and the agent's terminal tool run Git inside the
-executor. In the classic `make chat` interface, an operator command such as
-`!git status` runs in the Hermes container.
+In Code mode, both interfaces in `make chat` run operator shell commands in the
+executor. Use `!git -C /mnt/projects/my-app status --short` or
+`!git -C /mnt/projects/my-app --no-pager diff`. You can also ask the agent to
+run the same commands with its terminal tool. The agent uses the executor in
+both terminal modes.
 
 ### Host-side shared project security enforcement
 
@@ -758,24 +758,25 @@ after preparation and do not use this file.
 
 ## WebApp terminal environment
 
-`WEBAPP_TERMINAL_ENVIRONMENT` defaults to `code` when unset:
+`WEBAPP_TERMINAL_ENVIRONMENT` controls the WebApp terminal and `!command` in
+`make chat`. It defaults to `code` when unset.
 
-- **`code`:** Opens a `runner` bash shell in the SSH executor at `/workspace`.
+- **`code`:** Uses a `runner` bash shell in the SSH executor.
 - **`agent`:** Opens a shell inside the Hermes container with administrative
   access to `/opt/data`.
 
 Empty or unknown values fail serving validation while leaving inspection,
-backup, repair, and shutdown available. After editing `.env`, run `make up` and
-reload browser tabs. Switching modes recreates Hermes, preserves credentials and
-executor files, and clears local terminal tabs, saved working directories, and
-scrollback from the previous mode (saved gateway tabs survive, and running
-processes never migrate between environments).
+backup, repair, and shutdown available. After editing `.env`, run `make up`,
+reload browser tabs, and reopen `make chat`. Switching modes recreates Hermes,
+preserves credentials and executor files, and clears local terminal tabs,
+saved working directories, and scrollback from the previous mode. Saved gateway
+tabs survive. Running processes stay in their original environment.
 
-In Code mode, requested directories are validated inside the executor (files
-open in their parent directory). Missing or inaccessible paths, control
-characters, and invalid UTF-8 are rejected, while spaces, Unicode, and shell
-metacharacters are treated safely as path data. SSH errors never fall back to an
-Agent shell: fix the executor or SSH keys and open a fresh terminal without
+The WebApp Code terminal starts at `/workspace` and validates requested
+directories inside the executor. Selecting a file opens its parent directory.
+The WebApp rejects missing or inaccessible paths, control characters, and
+invalid UTF-8. It passes spaces, Unicode, and shell metacharacters as path data.
+On SSH errors, fix the executor or SSH keys and open a fresh terminal without
 regenerating keys unnecessarily. Upgrading from the pre-v0.23.3 wrapper also
 clears previously saved local terminal tabs (saved gateway tabs and executor
 files survive).

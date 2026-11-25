@@ -382,6 +382,12 @@ for an **Agent** terminal inside Hermes with administrative access to
 `/opt/data`. Browser input and profile config cannot override this deployment
 setting. Saved gateway terminals keep their separate remote-Hermes path.
 
+The same applied setting selects the shell for `!command` in classic and TUI
+chat. Reopen `make chat` after applying a change. In Code mode, `!pwd` uses the
+chat's last executor directory or starts in `/workspace`. In either mode, saved
+`quick_commands` of type `exec` run in the executor when invoked from
+`make chat`. The model's terminal tool uses the executor in both modes.
+
 When the model has the `read_terminal` tool, it can read visible output and
 scrollback from the selected terminal tab, including an **Agent** terminal.
 Keep secrets out of its output.

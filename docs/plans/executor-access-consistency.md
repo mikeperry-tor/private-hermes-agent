@@ -1,9 +1,10 @@
 # Use the SSH executor for chat shells and project work
 
 Status: in progress. The wrapper passes applied project destinations to both
-clients, and the candidate package refuses SSH checkpoints. The grant
-consumers, chat shell placement, structured edits, project operations,
-scheduled work, and final qualification remain open.
+clients. The candidate package places classic and TUI operator shells and
+refuses SSH checkpoints. The WebApp model terminal reader, grant consumers,
+structured edits, project operations, scheduled work, and final qualification
+remain open.
 
 - Wrapper branch: `executor-access-consistency`. Compare the complete change
   with `a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The plan under review
@@ -551,6 +552,23 @@ to match the final image. Recheck the documented reason for the empty Hermes
   hooks, local checkpoint retention, and routed undo. The explicit
   `verification.status` RPC still needs executor-backed project facts in
   phase 2.
+- The local operator shell topic is `feat/webapp-executor-terminals` at
+  `f5aecfefcf3cb4e747e65af7f80138a71c5a5810`. The release topic is
+  `a931426be527c14eeb73e0181d5ea14165d23b42` and the combined release replay is
+  `e1d5320d2cd6095f25e67004b1bcd1586258f14a`. Each tree passed 90 focused
+  Python tests before the final TUI-only change. The submission TUI passed
+  123 focused tests and type-checking with Node 26.12.1 and pnpm 12.15.0.
+  The build of replay `259412299` matched the 12 changed shell Python modules
+  and passed Node syntax checks for both installed TUI entrypoints. The
+  disposable OpenSSH fixture on Docker Desktop verified the executor UID,
+  literal directories, independent output streams, exit status, invalid
+  directory refusal, foreground cancellation, and host-key refusal and
+  recovery. Full `make chat` placement and engine checks remain open.
+- Independent shell reviews traced the gateway's route and profile checks,
+  process cleanup, and placement errors. Follow-up changes protect shell syntax
+  in collapsed paste chips, keep renderer updates with the submitting chat,
+  keep restored shell drafts for operator review, and share the saved SSH cwd
+  with model tools while its project binding holds.
 
 ### Completion checks
 

@@ -40,7 +40,7 @@ COPY --from=webapp-build /opt/hermes/persistence/ /opt/hermes/persistence/
 COPY --from=webapp-build /opt/hermes/plugins/computer_use/ /opt/hermes/plugins/computer_use/
 COPY --from=webapp-build /opt/hermes/tools/ /opt/hermes/tools/
 COPY --from=webapp-build /opt/hermes/tui_gateway/ /opt/hermes/tui_gateway/
-COPY --from=webapp-build /opt/hermes/model_tools.py /opt/hermes/run_agent.py /opt/hermes/toolsets.py /opt/hermes/
+COPY --from=webapp-build /opt/hermes/cli.py /opt/hermes/model_tools.py /opt/hermes/run_agent.py /opt/hermes/toolsets.py /opt/hermes/
 COPY --from=webapp-build /opt/hermes/apps/desktop/dist-webapp/ /opt/hermes/apps/desktop/dist-webapp/
 COPY --from=webapp-build /tmp/private-hermes-tui/dist/ /opt/hermes/ui-tui/dist/
 COPY components/hermes/managed_policy.py /opt/hermes/docker/private-managed-policy.py
@@ -52,4 +52,5 @@ COPY --chown=0:0 --chmod=0644 components/hermes/ssh-client.conf /etc/ssh/ssh_con
 # and wrapper command lookup cannot execute profile content. Unique profile
 # wrapper names still resolve for the unprivileged application.
 ENV PATH=/opt/hermes/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/data/.local/bin
+ENV HERMES_MANAGED_DIR=/etc/hermes
 ENV HERMES_WEBAPP_DIST=/opt/hermes/apps/desktop/dist-webapp

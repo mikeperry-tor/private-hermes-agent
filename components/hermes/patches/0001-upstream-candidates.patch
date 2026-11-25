@@ -1,6 +1,6 @@
 Runtime and renderer changes from the upstream PR1–PR6 combined replay.
 Base: caafe5389ae585ef77387a962aee05b1bcf17029
-Head: da4ad13358a0595febabf7dcf8e85fca6a7a0d15
+Head: e1d5320d2cd6095f25e67004b1bcd1586258f14a
 
 diff --git a/agent/agent_init.py b/agent/agent_init.py
 index fa4c1e24a000e9273b889982236fe675059d3ac1..d48bdd3083dfb4f3b38c35e981e352d335d2442e 100644
@@ -2713,6 +2713,234 @@ index 840fab136d39740c4b75c4c22c3d352bb1e73962..4b2aae2f21c8bf8403e071780cf1793d
      missing: t.screen.portalNotInstalled,
      unsupported: t.screen.portalUnsupported,
      unavailable: isManagedBackend(bot) ? t.screen.portalUnavailableManaged : t.screen.portalUnavailable,
+diff --git a/apps/shared/src/gateway-contract.generated.ts b/apps/shared/src/gateway-contract.generated.ts
+index 8ebfef5d9eb16b1d85f4f89e7aa954bc11b74722..7a3005df2ea5c7c5e330fe270524e71fa7725c12 100644
+--- a/apps/shared/src/gateway-contract.generated.ts
++++ b/apps/shared/src/gateway-contract.generated.ts
+@@ -4802,6 +4802,19 @@ export interface CanonicalShellExecParams {
+   command: string
+   profile?: string | null
+ }
++export interface ShellCwdParams {
++  session_id: string
++  profile?: string | null
++}
++export interface ShellCwdResult {
++  environment: 'executor' | 'gateway'
++  cwd: string | null
++}
++export interface ShellCancelParams {
++  session_id: string
++  profile?: string | null
++}
++export type EmptyResult = Record<string, never>
+ export interface PromptReceiptParams {
+   session_id: string
+   admission_id: string
+@@ -7250,7 +7263,11 @@ export interface CanonicalRpcMethods {
+   'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
+   /** One page of a stored conversation's display rows across its compression lineage (live rows and rows a compaction archived, each logical message once, and each compaction handoff as a `row_kind: 'compaction'` row at its position), from the oldest or the newest. Never attaches the caller. A page holds at most `limit` (1-500) rows, compaction rows included, plus up to 64 tool results of the call at its edge, and at most 2 MiB of JSON, cut between tool groups (a single larger row keeps only its role, kind, time, ids and the head of its text, and carries `truncated`). Oldest order: read on until a page is empty, then poll with the same `next_cursor` for the rows written since; `reset: true` means the rows the cursor covered changed shape, so the reply starts again from the first page. Latest order: read on until `next_cursor` is null; its cursor stays valid across later compactions and turns. A rotated lineage past `sessions.max_resume_messages` pages only its current segment (a cursor from before it crossed, or a latest-order cursor from before a compaction rotated that segment, answers `reset: true`). With `subagent_id`: a delegated child of the session (running: through the parent's roster; finished: through its stored row, when its ancestry reaches this conversation); a foreign or unknown child is `available: false`. Refusals: invalid_params (a cursor issued for another session, child or order, or not by this read), not_found, permission_denied, profile_mismatch. */
+   'session.transcript': { params: StoredTranscriptParams; result: StoredTranscriptResult }
+-  /** Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in its frozen launch cwd (``gateway/session_shell.py``). */
++  /** Cancel pending shell commands that this WebSocket submitted for the session. */
++  'shell.cancel': { params: ShellCancelParams; result: EmptyResult }
++  /** Read the session owner's directory for a managed local operator shell. */
++  'shell.cwd': { params: ShellCwdParams; result: ShellCwdResult }
++  /** Run one approved shell command for a local session with the owner's terminal placement. */
+   'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
+   /** Adopt a registered execution after verifying the live producer claim. */
+   'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
+@@ -7311,6 +7328,8 @@ export const CANONICAL_RPC_METHODS = [
+   'session.stats',
+   'session.steer',
+   'session.transcript',
++  'shell.cancel',
++  'shell.cwd',
+   'shell.exec',
+   'worker.adopt',
+   'worker.persist',
+diff --git a/apps/shared/src/gateway-contract.openrpc.json b/apps/shared/src/gateway-contract.openrpc.json
+index 9fd571061706a41950469cbdafb527d2985e7d10..b221e16eea153e9c399f2e03adb9c11b48d600d1 100644
+--- a/apps/shared/src/gateway-contract.openrpc.json
++++ b/apps/shared/src/gateway-contract.openrpc.json
+@@ -18696,6 +18696,12 @@
+         "title": "EmptyRequestParams",
+         "type": "object"
+       },
++      "EmptyResult": {
++        "additionalProperties": false,
++        "properties": {},
++        "title": "EmptyResult",
++        "type": "object"
++      },
+       "ErrorPayload": {
+         "additionalProperties": false,
+         "description": "Every ``_emit(\"error\", \u2026)`` site sets exactly ``message``.",
+@@ -43117,6 +43123,88 @@
+         "title": "SharedMetricsUpdateRunResult",
+         "type": "object"
+       },
++      "ShellCancelParams": {
++        "additionalProperties": false,
++        "properties": {
++          "session_id": {
++            "title": "Session Id",
++            "type": "string"
++          },
++          "profile": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Profile"
++          }
++        },
++        "required": [
++          "session_id"
++        ],
++        "title": "ShellCancelParams",
++        "type": "object"
++      },
++      "ShellCwdParams": {
++        "additionalProperties": false,
++        "properties": {
++          "session_id": {
++            "title": "Session Id",
++            "type": "string"
++          },
++          "profile": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Profile"
++          }
++        },
++        "required": [
++          "session_id"
++        ],
++        "title": "ShellCwdParams",
++        "type": "object"
++      },
++      "ShellCwdResult": {
++        "additionalProperties": false,
++        "properties": {
++          "environment": {
++            "enum": [
++              "executor",
++              "gateway"
++            ],
++            "title": "Environment",
++            "type": "string"
++          },
++          "cwd": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Cwd"
++          }
++        },
++        "required": [
++          "environment",
++          "cwd"
++        ],
++        "title": "ShellCwdResult",
++        "type": "object"
++      },
+       "ShellExecParams": {
+         "additionalProperties": false,
+         "properties": {
+@@ -51316,9 +51404,45 @@
+         }
+       }
+     },
++    {
++      "name": "shell.cancel",
++      "summary": "Cancel pending shell commands that this WebSocket submitted for the session.",
++      "params": [
++        {
++          "name": "params",
++          "schema": {
++            "$ref": "#/components/schemas/ShellCancelParams"
++          }
++        }
++      ],
++      "result": {
++        "name": "result",
++        "schema": {
++          "$ref": "#/components/schemas/EmptyResult"
++        }
++      }
++    },
++    {
++      "name": "shell.cwd",
++      "summary": "Read the session owner's directory for a managed local operator shell.",
++      "params": [
++        {
++          "name": "params",
++          "schema": {
++            "$ref": "#/components/schemas/ShellCwdParams"
++          }
++        }
++      ],
++      "result": {
++        "name": "result",
++        "schema": {
++          "$ref": "#/components/schemas/ShellCwdResult"
++        }
++      }
++    },
+     {
+       "name": "shell.exec",
+-      "summary": "Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in its frozen launch cwd (``gateway/session_shell.py``).",
++      "summary": "Run one approved shell command for a local session with the owner's terminal placement.",
+       "params": [
+         {
+           "name": "params",
+diff --git a/cli.py b/cli.py
+index 38c072ba4af4672dd0c45ee79d78ff3c6090286c..31ee7fc9315211b08725604fab2f40170d16871e 100644
+--- a/cli.py
++++ b/cli.py
+@@ -1255,12 +1255,18 @@ class HermesCLI(CLIBacktrackMixin, CLIInitMixin, CLITuiRuntimeMixin, CLIProcessN
+             # the env is sanitized because this process holds every API key.
+             from tools.environments.local import build_subprocess_env
+             from hermes_cli._subprocess_compat import windows_hide_flags
+-            result = subprocess.run(
+-                exec_cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
+-                timeout=30, env=build_subprocess_env(),
+-                creationflags=windows_hide_flags(),  # no console flash on Windows (#56747),
+-                check=False,
+-            )
++            from hermes_cli.managed_operator_shell import placement, run_executor
++            selected = placement()
++            if selected is not None:
++                from tools.terminal_tool import get_session_cwd
++                result = run_executor(selected, exec_cmd, get_session_cwd(self.session_id), timeout=30)
++            else:
++                result = subprocess.run(
++                    exec_cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
++                    timeout=30, env=build_subprocess_env(),
++                    creationflags=windows_hide_flags(),  # no console flash on Windows (#56747),
++                    check=False,
++                )
+             # See #56747.
+             output = result.stdout.strip() or result.stderr.strip()
+             if output:
 diff --git a/cron/scheduler.py b/cron/scheduler.py
 index b051eb5f0263c8c2578be7841e73822fdaa50680..e9747b1cc99d5c27658c7027622c4ff68497789d 100644
 --- a/cron/scheduler.py
@@ -2751,6 +2979,382 @@ index 432af68e2973e30f6101d5aae93c8ae4b599cda7..d85ded311f612a0e2c05cab2572e1162
          "container_cpu": "TERMINAL_CONTAINER_CPU",
          "container_memory": "TERMINAL_CONTAINER_MEMORY",
          "container_disk": "TERMINAL_CONTAINER_DISK",
+diff --git a/gateway/run_inbound_hooks.py b/gateway/run_inbound_hooks.py
+index 4805da9875ccbb82ad848c824afb88125228bf16..6fffd385ace7263d33d803351b4a85a18add7bd9 100644
+--- a/gateway/run_inbound_hooks.py
++++ b/gateway/run_inbound_hooks.py
+@@ -199,6 +199,12 @@ class GatewayInboundHooksMixin:
+         ``cwd`` is a local session's folder; None keeps the gateway's own (messaging)."""
+         proc = None
+         try:
++            from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement
++            try:
++                if placement() is not None:
++                    return t("gateway.quick_command.error", error="Use a local operator chat to run a managed shortcut.")
++            except OperatorShellUnavailable as exc:
++                return t("gateway.quick_command.error", error=exc)
+             from tools.environments.local import build_subprocess_env
+             proc = await asyncio.create_subprocess_shell(
+                 exec_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+diff --git a/gateway/session_commands.py b/gateway/session_commands.py
+index 02473d0ea985a245129d1098dfad570e50df8fd4..49a97218859e6ea5e905f85ee0a3e5f5051c9f1d 100644
+--- a/gateway/session_commands.py
++++ b/gateway/session_commands.py
+@@ -192,7 +192,7 @@ def _runner_command(name):
+                  if get_plugin_command_handler(registered)), None)
+
+
+-async def _run_runner_command(runner, live, name, arg, kind, shell):
++async def _run_runner_command(connection, runner, live, name, arg, kind, shell):
+     """The messaging gateway's own quick-command / plugin-command dispatch for this session
+     (``run_inbound_hooks``): the operator's slash access policy, the 30 s sanitized-env exec with
+     redacted output, the plugin handler under this session's env scope."""
+@@ -205,7 +205,22 @@ async def _run_runner_command(runner, live, name, arg, kind, shell):
+         if refused:
+             return refused
+         from gateway.session_policy import policy_for_source
++        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement, run_executor_async
+         policy = policy_for_source(runner, live.source)
++        try:
++            selected = placement()
++            if selected is not None:
++                if not connection.native_owner or 'session:operator' not in connection.actor.capabilities:
++                    raise AuthorityRefusal('permission_denied')
++                from agent.redact import redact_sensitive_text
++                from gateway.session_terminal_cwd import operator_ssh_cwd
++                result = await run_executor_async(selected, shell, operator_ssh_cwd(runner, live.route, policy), timeout=30)
++                output = (result.stdout or result.stderr).strip()
++                return redact_sensitive_text(output) if output else t('gateway.quick_command.no_output')
++        except OperatorShellUnavailable as exc:
++            raise AuthorityRefusal('operator_shell_unavailable', detail=str(exc)) from None
++        except TimeoutError:
++            return t('gateway.quick_command.timed_out')
+         cwd = getattr(policy, 'cwd', None) or None
+         if cwd is None or not await asyncio.to_thread(os.path.isdir, cwd):
+             # Never fall back to the gateway's own folder: a relative command would act there.
+@@ -475,7 +490,7 @@ async def execute_command(connection, ref, params, *, dispatch=False):
+         from gateway.plugin_command_choice import viewer_choices
+         with (_profile_runtime_scope(home), _session_workspace(authority.runner, live.source),
+               viewer_choices(live, ref.session_id)):
+-            output = await _run_runner_command(authority.runner, live, name, arg, *runner_command)
++            output = await _run_runner_command(connection, authority.runner, live, name, arg, *runner_command)
+         return {'type': 'exec', 'output': _text(output)}
+     if definition is None:
+         def build():  # in the session's folder: its trusted project skills, as its catalog lists them
+diff --git a/gateway/session_shell.py b/gateway/session_shell.py
+index 4d75c5a58f4be920365f3a56bb70d572b379d689..a644f1be29c6b9d2cacde38e37964971adf44fbd 100644
+--- a/gateway/session_shell.py
++++ b/gateway/session_shell.py
+@@ -1,18 +1,11 @@
+-"""Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one captured shell command for a local session.
+-
+-The legacy sidecar ran ``subprocess.run(cwd=os.getcwd())`` in its own process: on the owner that is
+-the daemon's directory (the install root for an auto-started one), not the session's launch cwd or
+-``-w`` worktree, and the sidecar's contract refused the ``session_id`` Ink sends (dokterdok N22).
+-Here the command runs for exactly one local session, in its frozen launch cwd, behind the same
+-hardline/dangerous-command refusal, with Hermes-managed secrets scrubbed from the child and the
+-output redacted before it crosses the wire. Nothing enters the transcript or the admission FIFO.
+-"""
++"""Run a captured operator shell command for a local session."""
+ import asyncio
+ from functools import partial
+ import json
+ import os
+ import subprocess
+
++from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement, run_executor_async
+ from persistence.core.errors import AuthorityRefusal
+
+ TIMEOUT_SECONDS = 30
+@@ -20,15 +13,12 @@ _LOCAL_BACKENDS = frozenset({'', 'local'})
+
+
+ def handlers(connection):
+-    return {'shell.exec': partial(shell_exec, connection)}
++    return {'shell.exec': partial(shell_exec, connection), 'shell.cwd': partial(shell_cwd, connection)}
+
+
+-async def shell_exec(connection, ref, params):
+-    command = params.get('command')
+-    if (set(params) - {'session_id', 'profile', 'command'} or not isinstance(ref.session_id, str)
+-            or not ref.session_id or not isinstance(command, str) or not command.strip()):
+-        raise AuthorityRefusal('invalid_params')
++def _operator_session(connection, ref, params):
+     from gateway.session_busy_controls import authorize
++
+     authorize(connection, ref, params, 'session:control')
+     authority = connection.authority
+     authority._require_admission_open()
+@@ -42,37 +32,88 @@ async def shell_exec(connection, ref, params):
+     policy = policy_for_source(authority.runner, live.source)
+     if policy is None:
+         raise AuthorityRefusal('permission_denied')
+-    # The frozen terminal policy chose a sandbox (docker, ssh, ...): the owner's host shell is not
+-    # that backend, so refuse rather than run on the host behind the session's back.
+-    # The refusal names the backend so the client can say where the command would have run.
+-    backend = str(json.loads(policy.terminal_json).get('TERMINAL_ENV') or '').strip().lower()
+-    if backend not in _LOCAL_BACKENDS:
+-        raise AuthorityRefusal('unsupported_terminal_backend', field='terminal.backend', detail=backend)
++    try:
++        selected = placement()
++    except OperatorShellUnavailable as exc:
++        raise AuthorityRefusal('operator_shell_unavailable', detail=str(exc)) from None
++    if selected is not None and (not connection.native_owner or 'session:operator' not in connection.actor.capabilities):
++        raise AuthorityRefusal('permission_denied')
++    return live, policy, selected
++
++
++async def shell_cwd(connection, ref, params):
++    """Read the managed shell directory from the owner of this chat."""
++    if set(params) - {'session_id', 'profile'} or not ref.session_id:
++        raise AuthorityRefusal('invalid_params')
++    live, policy, selected = _operator_session(connection, ref, params)
++    if selected is None:
++        raise AuthorityRefusal('operator_shell_unavailable')
++    from gateway.session_terminal_cwd import operator_ssh_cwd
++    try:
++        cwd = operator_ssh_cwd(connection.authority.runner, live.route, policy) if selected.mode == 'executor' else policy.cwd
++    except OperatorShellUnavailable as exc:
++        raise AuthorityRefusal('operator_shell_unavailable', detail=str(exc)) from None
++    return {'environment': selected.mode, 'cwd': cwd}
++
++
++async def shell_exec(connection, ref, params):
++    command = params.get('command')
++    if (set(params) - {'session_id', 'profile', 'command'} or not isinstance(ref.session_id, str)
++            or not ref.session_id or not isinstance(command, str) or not command.strip()):
++        raise AuthorityRefusal('invalid_params')
++    live, policy, selected = _operator_session(connection, ref, params)
++    if selected is None:
++        backend = str(json.loads(policy.terminal_json).get('TERMINAL_ENV') or '').strip().lower()
++        if backend not in _LOCAL_BACKENDS:
++            raise AuthorityRefusal('unsupported_terminal_backend', field='terminal.backend', detail=backend)
+     from tools.approval_detection import detect_dangerous_command, detect_hardline_command
+     # No prompt here, so anything the agent's gate would ask about is refused, including a command
+     # the scanners could not read to the end (detect_dangerous_command reports that too).
+     if detect_hardline_command(command)[0] or detect_dangerous_command(command)[0]:
+         raise AuthorityRefusal('dangerous_command')
+-    return await asyncio.to_thread(_run, command, policy.cwd)
++    if selected is None or selected.mode == 'gateway':
++        return await _run(command, policy.cwd)
++    from gateway.session_terminal_cwd import operator_ssh_cwd
++    try:
++        cwd = operator_ssh_cwd(connection.authority.runner, live.route, policy)
++        result = await run_executor_async(selected, command, cwd, timeout=TIMEOUT_SECONDS)
++    except TimeoutError:
++        raise AuthorityRefusal('command_timeout') from None
++    except OperatorShellUnavailable as exc:
++        raise AuthorityRefusal('operator_shell_unavailable', detail=str(exc)) from None
++    return _redacted_result(result)
+
+
+-def _run(command, cwd):
+-    from agent.redact import redact_sensitive_text
++async def _run(command, cwd):
++    from gateway.run_inbound_hooks import _stop_exec_tree
+     from hermes_cli._subprocess_compat import windows_hide_flags
+     from tools.environments.local import build_subprocess_env
+-    # shell=True keeps the user-facing !cmd grammar (pipes, redirects); the child never inherits
+-    # credentials the long-lived owner holds, nor a launch profile's .env residue in a routed one.
+-    if not os.path.isdir(cwd):  # a deleted checkout / worktree: never fall back to the owner's cwd
++    if not os.path.isdir(cwd):
+         raise AuthorityRefusal('cwd_unavailable')
+     env = build_subprocess_env(strip_launch_profile=True)
+     try:
+-        result = subprocess.run(command, cwd=cwd, shell=True, env=env, capture_output=True,
+-                                text=True, encoding='utf-8', errors='replace', timeout=TIMEOUT_SECONDS,
+-                                stdin=subprocess.DEVNULL, creationflags=windows_hide_flags(), check=False)
+-    except subprocess.TimeoutExpired:
+-        raise AuthorityRefusal('command_timeout') from None
++        process = await asyncio.create_subprocess_shell(
++            command, cwd=cwd, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
++            stdin=subprocess.DEVNULL, creationflags=windows_hide_flags(),
++            start_new_session=True,  # detached-spawn: ok — awaited; cancellation kills the shell group
++        )
+     except OSError:
+         raise AuthorityRefusal('command_failed') from None
++    try:
++        stdout, stderr = await asyncio.wait_for(process.communicate(), TIMEOUT_SECONDS)
++    except (TimeoutError, asyncio.CancelledError) as exc:
++        await asyncio.shield(_stop_exec_tree(process))
++        if isinstance(exc, TimeoutError):
++            raise AuthorityRefusal('command_timeout') from None
++        raise
++    return _redacted_result(subprocess.CompletedProcess(
++        command, process.returncode, stdout.decode('utf-8', 'replace'), stderr.decode('utf-8', 'replace'),
++    ))
++
++
++def _redacted_result(result):
++    from agent.redact import redact_sensitive_text
++
+     # Redact before tailing so a credential crossing the slice boundary cannot survive as fragments.
+     stdout = redact_sensitive_text(result.stdout or '', force=True, redact_url_credentials=True)[-4000:]
+     stderr = redact_sensitive_text(result.stderr or '', force=True, redact_url_credentials=True)[-2000:]
+diff --git a/gateway/session_terminal_cwd.py b/gateway/session_terminal_cwd.py
+index 61f7ef09acfe00291517b5ce118eb30e5b98db71..b6d6394f59795aa8e1fa6d2e3e46c3a391ef9a17 100644
+--- a/gateway/session_terminal_cwd.py
++++ b/gateway/session_terminal_cwd.py
+@@ -1,17 +1,4 @@
+-"""A chat's terminal working directory survives a gateway restart (#41128).
+-
+-The terminal tool records where each command finished (``tools.terminal_tool.record_session_cwd``,
+-keyed by the chat's session key) in a process-local dict, so a ``cd`` made in one turn holds for the
+-next. A restart empties that dict and the chat's next command runs in ``terminal.cwd`` again. The
+-turn now writes the recorded directory onto the chat's routing entry when it changed, and a turn
+-that finds no record (the first after a restart) seeds it back from there.
+-
+-Local backend only: a host path can be checked before it is trusted. A remote or container
+-directory cannot be vouched for from here, and every session-env command starts with
+-``cd -- <cwd> || exit 126``, so a stale one would break the chat's commands instead of falling back.
+-A ``/new`` starts a fresh entry, and the new conversation starts in ``terminal.cwd`` (the old record
+-is dropped at its first turn, never saved onto it).
+-"""
++"""Keep terminal working directories on the owning chat's routing entry."""
+ from __future__ import annotations
+
+ import json
+@@ -21,9 +8,10 @@ import os
+ logger = logging.getLogger(__name__)
+
+ _METADATA_KEY = "terminal_cwd"
++_SSH_METADATA_KEY = "terminal_ssh_cwd"
+
+
+-def _local_backend(policy) -> bool:
++def _backend(policy) -> str:
+     """The backend this turn's terminal runs on: a local session's frozen policy, else (a messaging
+     turn, which has none) the profile's live terminal config the tool itself reads."""
+     if policy is not None:
+@@ -35,7 +23,25 @@ def _local_backend(policy) -> bool:
+         from tools.terminal_tool_config import _tenv
+         _ensure_terminal_env_bridged()
+         backend = _tenv("TERMINAL_ENV", "local")
+-    return str(backend or "local").strip().lower() == "local"
++    return str(backend or "local").strip().lower()
++
++
++def _ssh_binding(policy):
++    terminal = json.loads(policy.terminal_json)
++    cwd = terminal.get("TERMINAL_CWD")
++    return cwd if cwd not in (None, "", ".", "~", "auto", "cwd") else None
++
++
++def _managed_ssh(policy) -> bool:
++    if policy is None:
++        return False
++    from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement
++
++    try:
++        selected = placement()
++    except OperatorShellUnavailable:
++        return False
++    return selected is not None and selected.terminal.get("backend") == "ssh"
+
+
+ def _routing_entry(runner, session_key):
+@@ -51,21 +57,56 @@ def _routing_entry(runner, session_key):
+ _record_owner: dict[str, object] = {}
+
+
++def _saved_ssh_cwd(entry, binding):
++    saved = entry.metadata.get(_SSH_METADATA_KEY) if entry else None
++    if isinstance(saved, dict) and saved.get("binding") == binding:
++        cwd = saved.get("cwd")
++        if isinstance(cwd, str) and cwd.startswith("/") and "\x00" not in cwd:
++            return cwd
++    return None
++
++
++def operator_ssh_cwd(runner, session_key, policy) -> str | None:
++    """Use the session's recorded SSH cwd or its configured executor directory."""
++    from hermes_cli.managed_operator_shell import OperatorShellUnavailable
++    from tools.terminal_tool import _qualify_task_key, get_session_cwd
++
++    if policy is None or _backend(policy) != "ssh":
++        raise OperatorShellUnavailable("The session has no SSH terminal binding.")
++    binding = _ssh_binding(policy)
++    entry = _routing_entry(runner, session_key)
++    token = (entry.created_at, _SSH_METADATA_KEY, binding) if entry else None
++    owner = _qualify_task_key(session_key)
++    if _record_owner.get(owner, token) == token and (cwd := get_session_cwd(session_key)):
++        return cwd
++    return _saved_ssh_cwd(entry, binding) or binding
++
++
+ def restore_turn_cwd(runner, session_key: str | None, policy) -> object | None:
+     """Seed the chat's cwd record from its routing entry when this process has none yet, after
+     dropping one an earlier conversation on this chat left. Returns the conversation token
+     :func:`persist_turn_cwd` saves against."""
+     entry = _routing_entry(runner, session_key) if session_key else None
+-    if entry is None or not _local_backend(policy):
++    if entry is None:
++        return None
++    backend = _backend(policy)
++    if backend == "local":
++        field, binding = _METADATA_KEY, None
++    elif backend == "ssh" and _managed_ssh(policy):
++        field, binding = _SSH_METADATA_KEY, _ssh_binding(policy)
++    else:
+         return None
+     from tools.terminal_tool import _qualify_task_key, clear_session_cwd, get_session_cwd, record_session_cwd
+-    owner, token = _qualify_task_key(session_key), entry.created_at
++    owner, token = _qualify_task_key(session_key), (entry.created_at, field, binding)
+     if _record_owner.get(owner, token) != token:
+         clear_session_cwd(session_key)
+     _record_owner[owner] = token
+     if get_session_cwd(session_key) is None:
+-        saved = entry.metadata.get(_METADATA_KEY)
+-        if isinstance(saved, str) and os.path.isabs(saved) and os.path.isdir(saved):
++        if backend == "ssh":
++            # The SSH backend checks existence when it runs a command.
++            if saved := _saved_ssh_cwd(entry, binding):
++                record_session_cwd(session_key, saved)
++        elif isinstance((saved := entry.metadata.get(_METADATA_KEY)), str) and os.path.isabs(saved) and os.path.isdir(saved):
+             record_session_cwd(session_key, saved)
+     return token
+
+@@ -73,16 +114,22 @@ def restore_turn_cwd(runner, session_key: str | None, policy) -> object | None:
+ def persist_turn_cwd(runner, session_key: str | None, token: object | None) -> None:
+     """Write the chat's recorded cwd onto its routing entry when it changed. Only onto the entry the
+     turn started on: a ``/new`` during the turn published a fresh one, which starts in ``terminal.cwd``."""
+-    entry = _routing_entry(runner, session_key) if token is not None else None
+-    if entry is None or entry.created_at != token:
++    if token is None:
++        return
++    created, field, binding = token
++    entry = _routing_entry(runner, session_key)
++    if entry is None or entry.created_at != created:
+         return
+     from tools.terminal_tool import get_session_cwd
+     cwd = get_session_cwd(session_key)
+-    if not cwd or entry.metadata.get(_METADATA_KEY) == cwd:
++    if not cwd:
++        return
++    saved = {"cwd": cwd, "binding": binding} if field == _SSH_METADATA_KEY else cwd
++    if entry.metadata.get(field) == saved:
+         return
+     try:
+         runner.session_store._update_entry(  # the conversation check and the write under one lock
+-            session_key, lambda e: e.created_at == token and not e.metadata.update({_METADATA_KEY: cwd}))
++            session_key, lambda e: e.created_at == created and not e.metadata.update({field: saved}))
+     except Exception as exc:  # health: allow BLE001 -- runs in the turn's finally: a failed save must not fail the finished turn
+         logger.warning("Could not save the terminal cwd of %s: %s", session_key, exc)
+
+@@ -91,9 +138,11 @@ def forget_turn_cwd(runner, session_key: str) -> None:
+     """Drop the chat's saved cwd along with its record (a workspace move): the next turn must start in
+     the new binding's directory, not restore the old one."""
+     entry = _routing_entry(runner, session_key)
+-    if entry is None or entry.metadata.get(_METADATA_KEY) is None:
++    if entry is None:
+         return
+     try:  # the in-memory entry drops it before the save, so this process never restores it
+-        runner.session_store.set_session_metadata(session_key, _METADATA_KEY, None)
++        for field in (_METADATA_KEY, _SSH_METADATA_KEY):
++            if entry.metadata.get(field) is not None:
++                runner.session_store.set_session_metadata(session_key, field, None)
+     except Exception as exc:  # health: allow BLE001 -- runs after the policy commit: a failed save must not strand its publication
+         logger.warning("Could not clear the saved terminal cwd of %s: %s", session_key, exc)
 diff --git a/gateway/session_tui_ops.py b/gateway/session_tui_ops.py
 index 24bcc3e19c68cdc38d35df0ef6e4974a45e0f87e..fe7dc540feaf202914fe02b09881a7b66f79e1de 100644
 --- a/gateway/session_tui_ops.py
@@ -2877,6 +3481,29 @@ index b6840cf960706f944219e3f70bcedb8fe0a78ab1..d86ed8e83426c4aaa6dffeac456b87af
      # --------------------------------------------------------------------- /compress
 
      async def _handle_compress_command(self, event: MessageEvent) -> str:
+diff --git a/hermes_cli/bang_shell.py b/hermes_cli/bang_shell.py
+index 454429f295f5ce5be754388f2e30f6a91846049d..5d75627bf751ee115b1e5919ddbeb9b4ad502f45 100644
+--- a/hermes_cli/bang_shell.py
++++ b/hermes_cli/bang_shell.py
+@@ -97,13 +97,17 @@ def _bang_env() -> dict:
+     return build_subprocess_env()
+
+
+-def run_bang_command(command: str, *, cwd: Optional[str] = None, timeout: int = DEFAULT_TIMEOUT, writer=None) -> int:
++def run_bang_command(command: str, *, cwd: Optional[str] = None, timeout: int = DEFAULT_TIMEOUT, writer=None,
++                     strict_cwd: bool = False) -> int:
+     """Execute *command*, streaming merged stdout/stderr through *writer* (default ``print``); return the exit code.
+
+     Output exists only on the user's terminal — nothing is returned for insertion into history.
+     """
+     emit = writer or (lambda line: print(line, end="" if line.endswith("\n") else "\n"))
+     run_cwd = os.path.expanduser(cwd) if cwd else None
++    if strict_cwd and (not run_cwd or not os.path.isdir(run_cwd)):
++        emit("!: the session's gateway directory is unavailable")
++        return 127
+     if run_cwd and not os.path.isdir(run_cwd):
+         run_cwd = None
+     try:
 diff --git a/hermes_cli/banner.py b/hermes_cli/banner.py
 index 1a8b5402077807a9021037f805db67876ceea664..c540cc055385bc837438cefb3369b44153cdb9ab 100644
 --- a/hermes_cli/banner.py
@@ -3028,10 +3655,18 @@ index cdffbab48993a0ecd53bc56db7a07c9bd3afdf54..8ac7d5baf4a4d6816c2e90db93945dcf
          "docker_shm_size", "docker_mount_cwd_to_workspace", "docker_network", "docker_run_as_host_user",
          "docker_snap_compat",
 diff --git a/hermes_cli/cli_info_mixin.py b/hermes_cli/cli_info_mixin.py
-index 5fbca2899d86b8b9b783f86c46ab6653fa314317..1cd0415a1a2984e8089e812d9191704fa9163bbc 100644
+index 5fbca2899d86b8b9b783f86c46ab6653fa314317..8afbfe6a83214f99ef2586c44820df057519edbf 100644
 --- a/hermes_cli/cli_info_mixin.py
 +++ b/hermes_cli/cli_info_mixin.py
-@@ -157,11 +157,21 @@ class CLIInfoMixin:
+@@ -11,6 +11,7 @@ import concurrent.futures
+ import logging
+ import os
+ import shutil
++import subprocess
+ import threading
+ import time
+ from typing import Any, NamedTuple
+@@ -157,11 +158,21 @@ class CLIInfoMixin:
              self._show_status()
          else:
              # Warm-launch fast path: replay last launch's tool panel when the snapshot fingerprint
@@ -3054,7 +3689,7 @@ index 5fbca2899d86b8b9b783f86c46ab6653fa314317..1cd0415a1a2984e8089e812d9191704f
              try:
                  snapshot = load_banner_snapshot(self.enabled_toolsets)
              except Exception:
-@@ -182,12 +192,9 @@ class CLIInfoMixin:
+@@ -182,12 +193,9 @@ class CLIInfoMixin:
                  def _refresh_banner_snapshot() -> None:
                      try:
                          from model_tools import get_toolset_for_tool
@@ -3069,7 +3704,7 @@ index 5fbca2899d86b8b9b783f86c46ab6653fa314317..1cd0415a1a2984e8089e812d9191704f
                      except Exception:
                          logger.debug("banner snapshot refresh failed", exc_info=True)
 
-@@ -197,13 +204,11 @@ class CLIInfoMixin:
+@@ -197,13 +205,11 @@ class CLIInfoMixin:
              else:
                  # Cold path: compute live, then persist the snapshot for the next launch.
                  from model_tools import get_toolset_for_tool
@@ -3085,6 +3720,52 @@ index 5fbca2899d86b8b9b783f86c46ab6653fa314317..1cd0415a1a2984e8089e812d9191704f
                  except Exception:
                      logger.debug("banner snapshot save failed", exc_info=True)
 
+@@ -530,8 +536,9 @@ class CLIInfoMixin:
+         """
+         from cli import _rich_text_from_ansi
+         from hermes_cli.bang_shell import (
+-            USAGE_HINT, bang_shell_enabled, check_bang_approval, is_bang_command,
++            DEFAULT_TIMEOUT, USAGE_HINT, bang_shell_enabled, check_bang_approval, is_bang_command,
+             parse_bang_command, resolve_bang_cwd, run_bang_command)
++        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement, run_executor
+
+         if not is_bang_command(text):
+             return False
+@@ -553,10 +560,30 @@ class CLIInfoMixin:
+             self._console_print(f"[bold red]{_escape(str(message))}[/]")
+             return True
+
+-        exit_code = run_bang_command(
+-            command,
+-            cwd=resolve_bang_cwd(getattr(self, "session_id", None)),
+-            writer=lambda line: self._console_print(_rich_text_from_ansi(line)))
++        session_id = getattr(self, "session_id", None)
++
++        def emit(line):
++            self._console_print(_rich_text_from_ansi(line))
++
++        try:
++            selected = placement()
++            if selected is None or selected.mode == "gateway":
++                exit_code = run_bang_command(command, cwd=resolve_bang_cwd(session_id), writer=emit)
++            else:
++                from tools.terminal_tool import get_session_cwd
++                result = run_executor(selected, command, get_session_cwd(session_id), timeout=DEFAULT_TIMEOUT, emit=emit)
++                for line in result.stderr.splitlines():
++                    emit(line)
++                exit_code = result.returncode
++        except OperatorShellUnavailable as exc:
++            emit(f"!: {exc}")
++            exit_code = 127
++        except KeyboardInterrupt:
++            emit("!: interrupted")
++            exit_code = 130
++        except subprocess.TimeoutExpired:
++            emit(f"!: command timed out after {DEFAULT_TIMEOUT}s")
++            exit_code = 124
+         if exit_code:
+             self._console_print(f"[dim]{t('cli.shell.exited', code=str(exit_code))}[/]")
+         return True
 diff --git a/hermes_cli/config.py b/hermes_cli/config.py
 index f27e0640fa0466e85a96da5ae942b7b824aff325..719196f1b0c546d8abab4e8b3ed8d084c69952bc 100644
 --- a/hermes_cli/config.py
@@ -3744,6 +4425,105 @@ index 4b1c5b9b37b604e4ee47acdf0d9e37ea1f7b5c67..421aaae03228178960b888e800e38298
 
      # A real fetch attempt happened (success OR error): mark the home so the 3-5 import-time calls per
      # startup don't re-fetch / re-print (error retries are opt-in via reset_secret_source_cache()).
+diff --git a/hermes_cli/gateway_chat_view.py b/hermes_cli/gateway_chat_view.py
+index e9ea49802b7f991223cb560d0673abd94bc99b15..d0727635f392886a8b24806fbb7fb6c23632b246 100644
+--- a/hermes_cli/gateway_chat_view.py
++++ b/hermes_cli/gateway_chat_view.py
+@@ -2,6 +2,7 @@
+ import asyncio
+ from contextlib import suppress
+ import logging
++import signal
+ import sys
+ import uuid
+
+@@ -88,6 +89,35 @@ def lost_admission(snapshot, admission_id):
+     return lost
+
+
++async def _interactive_executor_shell(selected, command, cwd, timeout):
++    from hermes_cli.managed_operator_shell import run_executor_async
++
++    task = asyncio.create_task(run_executor_async(
++        selected, command, cwd, timeout=timeout, emit=lambda line: print(line, flush=True),
++    ))
++    interrupted = False
++
++    def interrupt(_signum, _frame):
++        nonlocal interrupted
++        if not interrupted:
++            interrupted = True
++            task.cancel()
++
++    previous = signal.signal(signal.SIGINT, interrupt)
++    try:
++        result = await task
++    except asyncio.CancelledError:
++        if not interrupted:
++            raise
++        print("!: interrupted", file=sys.stderr)
++        return 130
++    finally:
++        signal.signal(signal.SIGINT, previous)
++    if result.stderr:
++        print(result.stderr, end="", file=sys.stderr, flush=True)
++    return result.returncode
++
++
+ class GatewayChatView:
+     def __init__(self, client, snapshot, *, quiet=False, emitter=None, usage_file=None):
+         self.usage_file = usage_file
+@@ -363,6 +393,41 @@ class GatewayChatView:
+                         await self._recover(admission, sid)
+         return receipt
+
++    async def shell_line(self, text):
++        from hermes_cli.bang_shell import DEFAULT_TIMEOUT, USAGE_HINT, check_bang_approval, parse_bang_command, run_bang_command
++        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement
++
++        try:
++            selected = placement()
++            if selected is None:
++                return False
++            command = parse_bang_command(text)
++            if not command:
++                print(USAGE_HINT, flush=True)
++                return True
++            approval = check_bang_approval(command)
++            if not approval.get("approved"):
++                print(approval.get("message") or approval.get("description") or "Command denied.", file=sys.stderr)
++                return True
++            owner = await self.client.rpc("shell.cwd", session_id=self.session_id)
++            if owner.get("environment") != selected.mode:
++                raise OperatorShellUnavailable("The chat and its owner have different managed shell settings.")
++            if selected.mode == "gateway":
++                previous = signal.signal(signal.SIGINT, signal.default_int_handler)
++                try:
++                    code = run_bang_command(command, cwd=owner.get("cwd"), strict_cwd=True)
++                finally:
++                    signal.signal(signal.SIGINT, previous)
++            else:
++                code = await _interactive_executor_shell(selected, command, owner.get("cwd"), DEFAULT_TIMEOUT)
++            if code:
++                print(f"! exited {code}", file=sys.stderr)
++        except OperatorShellUnavailable as exc:
++            print(f"!: {exc}", file=sys.stderr)
++        except TimeoutError:
++            print(f"!: command timed out after {DEFAULT_TIMEOUT}s", file=sys.stderr)
++        return True
++
+     async def command(self, text):
+         command, _, rest = text.partition(" ")
+         if command in {"/quit", "/exit", "/detach"}:
+@@ -614,6 +679,8 @@ class GatewayChatView:
+                         if text.startswith("/"):
+                             if not await self.command(text):
+                                 return 0
++                        elif text.startswith("!") and await self.shell_line(text):
++                            continue
+                         else:
+                             # Same scrollback shape as the in-process CLI: the typed prompt line is
+                             # erased on submit and the message lands as a `●` preview row.
 diff --git a/hermes_cli/gateway_connections_ssh_transport.py b/hermes_cli/gateway_connections_ssh_transport.py
 index c446e30c2f72a9a88963adfcf8bb0aaf3f7520bf..9a9d426eeb2c803ba4b844f80dd2913f436e6152 100644
 --- a/hermes_cli/gateway_connections_ssh_transport.py
@@ -3811,6 +4591,223 @@ index b821de6acca62d049b2d526c11831f218a894e85..b932d4d273ffec6259365070b18ffd93
          print(f"  ❌ {exc}")
 
 
+diff --git a/hermes_cli/managed_operator_shell.py b/hermes_cli/managed_operator_shell.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c50973725023dbab07a7a4045c6b229a7a5d0ad7
+--- /dev/null
++++ b/hermes_cli/managed_operator_shell.py
+@@ -0,0 +1,211 @@
++"""Run operator commands using the deployment's managed terminal placement."""
++
++from __future__ import annotations
++
++import asyncio
++import codecs
++import os
++from contextlib import suppress
++from dataclasses import dataclass
++from pathlib import Path
++import shutil
++import subprocess
++import uuid
++
++
++class OperatorShellUnavailable(RuntimeError):
++    """The operator command could not be started in the selected environment."""
++
++
++def _terminal_error() -> OperatorShellUnavailable:
++    return OperatorShellUnavailable("Managed operator shell settings are unavailable. Check the administrator's configuration.")
++
++
++@dataclass(frozen=True)
++class Placement:
++    mode: str
++    terminal: dict
++
++
++def placement() -> Placement | None:
++    """Read the raw administrator policy, without profile or environment expansion."""
++    from hermes_cli.config_backend import ConfigBackendUnavailable
++    from hermes_cli.managed_scope import load_managed_config
++    from hermes_yaml import YAMLError
++
++    try:
++        managed = load_managed_config(strict=True)
++    except (ConfigBackendUnavailable, OSError, TypeError, ValueError, YAMLError):
++        raise _terminal_error() from None
++    terminal = managed.get("terminal", {})
++    webapp = managed.get("webapp", {})
++    if not isinstance(webapp, dict):
++        raise _terminal_error()
++    if "terminal_environment" not in webapp:
++        if "executor_ssh_config" in webapp or os.environ.get("HERMES_MANAGED_DIR", "").strip():
++            raise _terminal_error()
++        return None
++    mode = webapp["terminal_environment"]
++    if mode not in ("gateway", "executor") or not isinstance(terminal, dict):
++        raise _terminal_error()
++    return Placement(mode, terminal)
++
++
++# Hold stdin open while the SSH client owns the command. EOF (including a
++# disconnect) stops the foreground group while keeping stdout and stderr on
++# separate SSH channels. The child has no access to the control pipe.
++_REMOTE_COMMAND = """\
++import os, selectors, signal, subprocess, sys
++from contextlib import suppress
++
++cwd, command, receipt, merge = sys.argv[1:]
++try:
++    proc = subprocess.Popen(
++        ["bash", "-c", command], cwd=cwd, stdin=subprocess.DEVNULL, start_new_session=True,
++        stdout=subprocess.PIPE, stderr=subprocess.STDOUT if merge == "merge" else subprocess.PIPE,
++    )
++except OSError:
++    sys.exit(126)
++
++def stop_group():
++    with suppress(ProcessLookupError):
++        os.killpg(proc.pid, signal.SIGKILL)
++
++with selectors.DefaultSelector() as streams:
++    streams.register(0, selectors.EVENT_READ)
++    streams.register(proc.stdout, selectors.EVENT_READ, sys.stdout.buffer)
++    if proc.stderr is not None:
++        streams.register(proc.stderr, selectors.EVENT_READ, sys.stderr.buffer)
++    try:
++        while len(streams.get_map()) > 1 or proc.poll() is None:
++            for key, _ in streams.select(None if len(streams.get_map()) > 1 else 0.1):
++                if key.fd == 0:
++                    stop_group()
++                    sys.exit(0)
++                chunk = os.read(key.fd, 65536)
++                if chunk:
++                    key.data.write(chunk)
++                    key.data.flush()
++                else:
++                    streams.unregister(key.fileobj)
++    finally:
++        if proc.returncode is None:
++            stop_group()
++            proc.wait()
++code = proc.returncode
++sys.stderr.write(receipt + str(code if code >= 0 else 128 - code) + "\\n")
++"""
++
++
++def executor_command(selected: Placement, command: str, cwd: str | None, *,
++                     merge: bool = False) -> tuple[list[str], str]:
++    from hermes_cli.gateway_connections_ssh_transport import (
++        SshEndpoint, SshReachError, build_exec_args, login_shell_quote,
++        validate_key_path, validate_ssh_target,
++    )
++
++    terminal = selected.terminal
++    if terminal.get("backend") != "ssh":
++        raise _terminal_error()
++    host = terminal.get("ssh_host")
++    user = terminal.get("ssh_user")
++    port = terminal.get("ssh_port")
++    key = terminal.get("ssh_key")
++    config = terminal.get("ssh_config")
++    if not all(isinstance(value, str) and value for value in (host, user, key, config)):
++        raise _terminal_error()
++    if not Path(key).is_absolute() or not Path(config).is_absolute():
++        raise _terminal_error()
++    if cwd is None:
++        cwd = terminal.get("cwd")
++        if cwd is None:
++            roots = terminal.get("ssh_workspace_roots")
++            if isinstance(roots, list) and roots:
++                cwd = roots[0]
++    if not isinstance(cwd, str) or not cwd.startswith("/") or "\x00" in cwd:
++        raise OperatorShellUnavailable("The executor working directory is unavailable.")
++    try:
++        validate_ssh_target(host, user, port)
++        validate_key_path(key)
++        validate_key_path(config)
++        if not Path(key).is_file() or not Path(config).is_file():
++            raise OperatorShellUnavailable("The managed SSH identity or configuration file is missing.")
++    except (OSError, ValueError, SshReachError):
++        raise OperatorShellUnavailable("The managed SSH settings are unusable. Check the endpoint, identity, and SSH client.") from None
++    binary = shutil.which("ssh", path=os.defpath) if os.name == "posix" else None
++    if binary is None:
++        raise OperatorShellUnavailable("The system OpenSSH client is unavailable.")
++    endpoint = SshEndpoint(host, user, port, key)
++    receipt = "hermes-shell-" + uuid.uuid4().hex + "="
++    fields = (_REMOTE_COMMAND, cwd, command, receipt, "merge" if merge else "separate")
++    remote = "exec python3 -c " + " ".join(login_shell_quote(value) for value in fields)
++    return [binary, "-T", *build_exec_args(endpoint, remote, ssh_config=config)], receipt
++
++
++def executor_result(argv: list[str], receipt: str, status: int, stdout: str, stderr: str) -> subprocess.CompletedProcess:
++    if status == 126:
++        raise OperatorShellUnavailable("The executor working directory or shell is unavailable.")
++    if status != 0:
++        raise OperatorShellUnavailable("Could not run the executor shell. Check SSH connectivity, identity, and host key.")
++    before, separator, after = stderr.rpartition(receipt)
++    code, newline, trailing = after.partition("\n")
++    if not separator or not newline or not code.isascii() or not code.isdecimal() or len(code) > 3 or int(code) > 255:
++        raise OperatorShellUnavailable("The executor shell exited without a command status.")
++    return subprocess.CompletedProcess(argv, int(code), stdout, before + trailing)
++
++
++def run_executor(selected: Placement, command: str, cwd: str | None, *, timeout: int,
++                 emit=None) -> subprocess.CompletedProcess:
++    try:
++        return asyncio.run(run_executor_async(selected, command, cwd, timeout=timeout, emit=emit))
++    except TimeoutError:
++        raise subprocess.TimeoutExpired("ssh", timeout) from None
++
++
++async def _stream_lines(stream, emit) -> None:
++    decoder = codecs.getincrementaldecoder("utf-8")("replace")
++    pending = ""
++    while chunk := await stream.read(65536):
++        lines = (pending + decoder.decode(chunk)).split("\n")
++        pending = lines.pop()
++        for line in lines:
++            emit(line.rstrip("\r"))
++    if pending := pending + decoder.decode(b"", final=True):
++        emit(pending)
++
++
++async def _collect(process, emit):
++    if emit is None:
++        return await process.communicate()
++    async with asyncio.TaskGroup() as tasks:
++        tasks.create_task(_stream_lines(process.stdout, emit))
++        stderr = tasks.create_task(process.stderr.read())
++    await process.wait()
++    return b"", stderr.result()
++
++
++async def run_executor_async(selected: Placement, command: str, cwd: str | None, *,
++                             timeout: int, emit=None) -> subprocess.CompletedProcess:
++    argv, receipt = executor_command(selected, command, cwd, merge=emit is not None)
++    reader, writer = os.pipe()
++    try:
++        try:
++            process = await asyncio.create_subprocess_exec(
++                *argv, stdin=reader, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
++                env={},
++            )
++        except OSError:
++            raise OperatorShellUnavailable("Could not start the managed SSH client.") from None
++        try:
++            stdout, stderr = await asyncio.wait_for(_collect(process, emit), timeout=timeout)
++        except BaseException:
++            with suppress(ProcessLookupError):
++                process.kill()
++            await process.communicate()
++            raise
++    finally:
++        os.close(reader)
++        os.close(writer)
++    return executor_result(
++        argv, receipt, process.returncode, stdout.decode("utf-8", "replace"), stderr.decode("utf-8", "replace"),
++    )
 diff --git a/hermes_cli/managed_scope.py b/hermes_cli/managed_scope.py
 index 19cda7208107c9eee4379786da9427cf1568aff5..0c6b3b6ee0ef2bf6897d7ac9050f148e67639156 100644
 --- a/hermes_cli/managed_scope.py
@@ -10114,6 +11111,57 @@ index db7c80c494b731ba9a39b4b03b8a5b46a45c4d12..d16ab0d0a692c9d432939e138038b53b
              return None
          since = undo_span_start((target_message or {}).get("timestamp"), kept_history)
          return undo_hint_payload(mgr, cwd, since, task_id=None)
+diff --git a/tui_gateway/contracts/tools_commands.py b/tui_gateway/contracts/tools_commands.py
+index d672daeefbf3e97faa1a987db88f42a79ecd6d1f..c762a4bdb084b62549de59c981fb808c53a71020 100644
+--- a/tui_gateway/contracts/tools_commands.py
++++ b/tui_gateway/contracts/tools_commands.py
+@@ -8,10 +8,12 @@ known to emit plus ``extra="allow"`` so a new upstream key never trips the stric
+
+ from __future__ import annotations
+
++from typing import Literal
++
+ from pydantic import Field
+
+ from .base import JsonValue, Params, Result, WireEnum
+-from .common import UndoRollbackHint
++from .common import EmptyResult, UndoRollbackHint
+ from .registry import canonical_method, method
+
+
+@@ -178,8 +180,30 @@ class CanonicalShellExecParams(Params):
+
+
+ canonical_method("shell.exec", params=CanonicalShellExecParams, result=ShellExecResult,
+-                 doc="Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in "
+-                     "its frozen launch cwd (``gateway/session_shell.py``).")
++                 doc="Run one approved shell command for a local session with the owner's terminal placement.")
++
++
++class ShellCwdParams(Params):
++    session_id: str
++    profile: str | None = None
++
++
++class ShellCwdResult(Result):
++    environment: Literal["executor", "gateway"]
++    cwd: str | None
++
++
++canonical_method("shell.cwd", params=ShellCwdParams, result=ShellCwdResult,
++                 doc="Read the session owner's directory for a managed local operator shell.")
++
++
++class ShellCancelParams(Params):
++    session_id: str
++    profile: str | None = None
++
++
++canonical_method("shell.cancel", params=ShellCancelParams, result=EmptyResult,
++                 doc="Cancel pending shell commands that this WebSocket submitted for the session.")
+
+
+ class CliExecParams(Params):
 diff --git a/tui_gateway/methods_browser.py b/tui_gateway/methods_browser.py
 index 33e5da9335fde0ec5b8b789103724f1fc8b407f4..e1452ac8a6c2f9c0910266aa75794609d0e6f2c8 100644
 --- a/tui_gateway/methods_browser.py
@@ -10182,10 +11230,19 @@ index bfd4f8691c97ac230aa1e539f7cb66c8e4a7ce84..2a85de7aa93d898b19a7ed207051fbd6
          return _err(rid, _DISPLAY_ERR, "no supported package manager (apt-get, dnf, pacman) on this host")
      profile_key = hermes_home_key()
 diff --git a/tui_gateway/methods_tools.py b/tui_gateway/methods_tools.py
-index c3f95d21fa281be3849568f2393dbc88d91f16a5..807e8a4fd8e5106a8a9ea43e90a89eb821be270d 100644
+index c3f95d21fa281be3849568f2393dbc88d91f16a5..c4be266051f33024025c90bcaa12954f7a065b5c 100644
 --- a/tui_gateway/methods_tools.py
 +++ b/tui_gateway/methods_tools.py
-@@ -1120,14 +1120,16 @@ def _(rid, params: dict) -> dict:
+@@ -481,6 +481,8 @@ def _dispatch_quick(rid, params, session, name, arg):
+     if qc is None:
+         return None
+     if qc.get("type") == "exec":
++        if refusal := _managed_shell_refusal(rid):
++            return refusal
+         # Sanitized env: the TUI server process holds every API key in os.environ.
+         env = _tools_mod("tools.environments.local").build_subprocess_env()
+         r = subprocess.run(qc.get("command", ""), shell=True, env=env, **_capture_run_kwargs(30))
+@@ -1120,14 +1122,16 @@ def _(rid, params: dict) -> dict:
 
  @_rpc("rollback.list", live_session=True, fail_code=5020)
  def _(rid, params: dict, session) -> dict:
@@ -10204,7 +11261,7 @@ index c3f95d21fa281be3849568f2393dbc88d91f16a5..807e8a4fd8e5106a8a9ea43e90a89eb8
 
 
  @_rpc("rollback.restore", live_session=True, fail_code=5021)
-@@ -1143,9 +1145,9 @@ def _(rid, params: dict, session) -> dict:
+@@ -1143,9 +1147,9 @@ def _(rid, params: dict, session) -> dict:
      if not file_path and session.get("running"):
          return _err(rid, 4009, busy_message("rollback restore", bool(session.get("_manual_compress_active"))))
 
@@ -10217,7 +11274,7 @@ index c3f95d21fa281be3849568f2393dbc88d91f16a5..807e8a4fd8e5106a8a9ea43e90a89eb8
          # A whole-tree restore keeps the user's hand-edits unless ``all`` (main's --all), as on the owner.
          commit = _resolve_checkpoint_hash(mgr, cwd, target)
          taken = _tools_mod("agent.checkpoints.undo_hint").checkpoint_taken_at(cwd, commit)
-@@ -1176,10 +1178,9 @@ def _(rid, params: dict, session) -> dict:
+@@ -1176,10 +1180,9 @@ def _(rid, params: dict, session) -> dict:
      if not (target := params.get("hash", "")):
          return _err(rid, 4014, "hash required")
 
@@ -10231,7 +11288,7 @@ index c3f95d21fa281be3849568f2393dbc88d91f16a5..807e8a4fd8e5106a8a9ea43e90a89eb8
          r = mgr.diff(cwd, _resolve_checkpoint_hash(mgr, cwd, target))
          raw = r.get("diff", "")[:4000]
          payload = {"stat": r.get("stat", ""), "diff": raw}
-@@ -1189,22 +1190,6 @@ def _(rid, params: dict, session) -> dict:
+@@ -1189,22 +1192,6 @@ def _(rid, params: dict, session) -> dict:
      return _with_checkpoints(session, go)
 
 
@@ -10254,6 +11311,33 @@ index c3f95d21fa281be3849568f2393dbc88d91f16a5..807e8a4fd8e5106a8a9ea43e90a89eb8
  @method("browser.manage")
  @_profile_scoped
  def _(rid, params: dict) -> dict:
+@@ -1952,6 +1939,8 @@ def _(rid, params: dict) -> dict:
+     cmd = params.get("command", "")
+     if not cmd:
+         return _err(rid, 4004, "empty command")
++    if refusal := _managed_shell_refusal(rid):
++        return refusal
+     try:
+         approval = _tools_mod("tools.approval_detection")
+         is_hardline, hardline_desc = approval.detect_hardline_command(cmd)
+@@ -1980,6 +1969,17 @@ def _(rid, params: dict) -> dict:
+         timeout_err=(5002, "command timed out (30s)"), on_result=done)
+
+
++def _managed_shell_refusal(rid):
++    from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement
++
++    try:
++        if placement() is not None:
++            return _err(rid, 4005, "Managed shell commands require a local operator chat on the session owner.")
++    except OperatorShellUnavailable as exc:
++        return _err(rid, 5003, str(exc))
++    return None
++
++
+ def register(server) -> None:
+     """Rebind this module's helpers + handlers onto ``server`` and register the handlers."""
+     bind_module(globals(), server, skip=("_",))
 diff --git a/tui_gateway/server.py b/tui_gateway/server.py
 index 3df83a2ef41703a8ae998333e00a70d7cf78db06..d56cf815a2c9e2bcf536547d8bca63e1c39ecc4b 100644
 --- a/tui_gateway/server.py
@@ -10320,8 +11404,520 @@ index 7578264fabfffbf5fe6d6aebadc24539249c548a..0988264c7b262ba3eec694038bd8a807
 
 
  # ── Methods: session ─────────────────────────────────────────────────
+diff --git a/tui_gateway/ws.py b/tui_gateway/ws.py
+index 860ffbb6105d629682c274e4c05065aac9c8900f..dda8cd5ffeeff04887516aeee8a6995873dfe2b5 100644
+--- a/tui_gateway/ws.py
++++ b/tui_gateway/ws.py
+@@ -7,8 +7,9 @@ from __future__ import annotations
+
+ import asyncio
+ import collections
+-import contextlib
+ import concurrent.futures
++import contextlib
++from dataclasses import dataclass
+ import json
+ import logging
+ import socket
+@@ -430,6 +431,21 @@ class _SendFailed(Exception):
+     """Raised by handle_ws._reply when a reply could not be written: ends the read loop."""
+
+
++@dataclass
++class _PendingShell:
++    session_id: str
++    profile: str | None
++    task: asyncio.Task | None = None
++    cancelled: bool = False
++
++    def cancel(self) -> None:
++        if self.cancelled:
++            return
++        self.cancelled = True
++        if self.task is not None:
++            self.task.cancel()
++
++
+ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol: str | None = None,
+                     operator: bool = False) -> None:
+     """Run one WebSocket session. Wire-compatible with ``tui_gateway.entry``. *auth_identity* is the server-minted
+@@ -453,6 +469,7 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol:
+         return {"jsonrpc": "2.0", "error": {"code": code, "message": message}, "id": req_id}
+
+     pending: asyncio.Queue = asyncio.Queue(maxsize=_WS_DISPATCH_QUEUE_MAX)
++    pending_shells: dict[int, _PendingShell] = {}
+     dispatcher: asyncio.Task | None = None
+     concurrent_reads: set[asyncio.Task] = set()
+     started_reads: set[asyncio.Task] = set()
+@@ -481,6 +498,23 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol:
+         already dispatches keeps going (a viewer leaving never stops a turn)."""
+         client_gone.set()
+         held_dropped.update(key for key, started in held_waiting.items() if not started.is_set())
++        for shell in pending_shells.values():
++            shell.cancel()
++
++    async def _dispatch_shell(req: dict, shell: _PendingShell) -> Any:
++        try:
++            if not shell.cancelled:
++                shell.task = asyncio.create_task(_dispatch_request(authority_connection, req, "shell.exec", transport))
++                try:
++                    return await shell.task
++                except asyncio.CancelledError:
++                    if not shell.cancelled or asyncio.current_task().cancelling():
++                        raise
++            if not client_gone.is_set():
++                return _error(4001, "command_interrupted", req.get("id"))
++            return None
++        finally:
++            pending_shells.pop(id(req), None)
+
+     async def _dispatch_one(req: Any) -> None:
+         """Dispatch one request and write its inline reply."""
+@@ -491,7 +525,10 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol:
+         # writes the response itself via transport.write (a separate thread, so that is the safe
+         # path). Inline handlers return the response dict, written here from the loop.
+         try:
+-            resp = await _dispatch_request(authority_connection, req, req_method, transport)
++            if shell := pending_shells.get(id(req)):
++                resp = await _dispatch_shell(req, shell)
++            else:
++                resp = await _dispatch_request(authority_connection, req, req_method, transport)
+         # health: allow BLE001 -- dispatch boundary: logs the traceback (_log.exception) and answers -32603
+         except Exception:
+             dispatch_crashes += 1
+@@ -538,7 +575,8 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol:
+             del held_waiting[key]  # dispatching from here on: a later disconnect lets these frames finish
+             frames = held[key]
+             if key in held_dropped:
+-                for _ in frames:
++                for frame in frames:
++                    pending_shells.pop(id(frame), None)
+                     held_room.release()
+                 frames.clear()
+             while frames:
+@@ -609,6 +647,25 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol:
+             await _dispatch_one(req)
+
+     async def _queue_request(req: Any) -> None:
++        if authority_connection is not None and isinstance(req, dict):
++            method, params = req.get("method"), req.get("params")
++            sid = params.get("session_id") if isinstance(params, dict) else None
++            profile = params.get("profile") if isinstance(params, dict) else None
++            valid_profile = profile is None or isinstance(profile, str)
++            if method == "shell.cancel":
++                # The reply must pass the serial lane while it waits for shell.exec. This
++                # socket can only cancel requests that it submitted for this session.
++                if not isinstance(sid, str) or not sid or not valid_profile or set(params) - {"session_id", "profile"}:
++                    response = _error(4001, "invalid_params", req.get("id"))
++                else:
++                    for shell in pending_shells.values():
++                        if shell.session_id == sid and shell.profile == (profile or None):
++                            shell.cancel()
++                    response = {"jsonrpc": "2.0", "id": req.get("id"), "result": {}}
++                await _reply(response, "send_failed_after_shell_cancel", "ws shell cancel reply failed peer=%s", peer)
++                return
++            if method == "shell.exec" and isinstance(sid, str) and sid and valid_profile:
++                pending_shells[id(req)] = _PendingShell(sid, profile or None)
+         if _answers_open_request(req):
+             await _dispatch_one(req)
+             return
+diff --git a/ui-tui/src/app/backtrackStore.ts b/ui-tui/src/app/backtrackStore.ts
+index b37c7d741c76e60cc37fdb5830b808ab55a3fcf2..49af7506a9dd13c4271111b61830441f4c4964b7 100644
+--- a/ui-tui/src/app/backtrackStore.ts
++++ b/ui-tui/src/app/backtrackStore.ts
+@@ -10,6 +10,7 @@
+ import { atom } from 'nanostores'
+
+ import { t } from '../i18n/runtime.js'
++import { hasShellSubmission } from '../protocol/paste.js'
+
+ import type { ComposerToken, RewindTarget } from './interfaces.js'
+
+@@ -81,7 +82,7 @@ export function sendPendingRewind(submission: RewindSubmission, sid: null | stri
+
+   const typed = submission.display
+
+-  if (pending.sid !== sid || !typed.trim() || /^[/!]/.test(typed.trimStart())) {
++  if (pending.sid !== sid || !typed.trim() || typed.trimStart().startsWith('/') || hasShellSubmission(typed.trimStart(), submission.text)) {
+     return false
+   }
+
+diff --git a/ui-tui/src/app/interfaces.ts b/ui-tui/src/app/interfaces.ts
+index e072aa32b421acae43220f74642db71b46d434f9..a20a3d158e214c7f56bf112ef5d697c199d527f5 100644
+--- a/ui-tui/src/app/interfaces.ts
++++ b/ui-tui/src/app/interfaces.ts
+@@ -499,6 +499,7 @@ export interface UseComposerStateResult {
+ export interface InputHandlerActions {
+   appendMessage: (msg: Msg) => void
+   cancelClarify: () => void
++  cancelShell?: () => boolean
+   /** User prompts in the transcript on screen (gates the backtrack prime hint). */
+   countPrompts: () => number
+   die: () => void
+diff --git a/ui-tui/src/app/useInputHandlers.ts b/ui-tui/src/app/useInputHandlers.ts
+index 4b1eccc65e5ae466f64d5e3e16fd6576b746c503..9c04d3ae2b430224fbebd949c1f1df130cce61e7 100644
+--- a/ui-tui/src/app/useInputHandlers.ts
++++ b/ui-tui/src/app/useInputHandlers.ts
+@@ -948,6 +948,10 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
+       }
+
+       if (ctrlC === 'interrupt' && live.sid) {
++        if (actions.cancelShell?.()) {
++          return
++        }
++
+         return turnController.interruptTurn({
+           appendMessage: actions.appendMessage,
+           gw: gateway.gw,
+diff --git a/ui-tui/src/app/useMainApp.ts b/ui-tui/src/app/useMainApp.ts
+index 1c38846c2cd9cc7b8b80ab36adf0e28714e90434..d1db3d3db06f90a7bd2a5fd1b3c28fa341f7314c 100644
+--- a/ui-tui/src/app/useMainApp.ts
++++ b/ui-tui/src/app/useMainApp.ts
+@@ -965,7 +965,7 @@ export function useMainApp(gw: GatewayClient) {
+
+   sysRef.current = sys
+
+-  const { dispatchSubmission, send, sendQueued, submit, submitLiteral } = useSubmission({
++  const { cancelShell, dispatchSubmission, send, sendQueued, submit, submitLiteral } = useSubmission({
+     appendMessage,
+     composerActions,
+     composerRefs,
+@@ -1007,6 +1007,7 @@ export function useMainApp(gw: GatewayClient) {
+     actions: {
+       appendMessage,
+       cancelClarify,
++      cancelShell,
+       countPrompts: () => historyItemsRef.current.filter(msg => msg.role === 'user' && !msg.kind).length,
+       die,
+       dispatchSubmission,
+diff --git a/ui-tui/src/app/useSubmission.ts b/ui-tui/src/app/useSubmission.ts
+index 2bb276581db8d54c1f69422fcd4c79a27587f461..3812d956772500878db38063c457f131259dd684 100644
+--- a/ui-tui/src/app/useSubmission.ts
++++ b/ui-tui/src/app/useSubmission.ts
+@@ -1,5 +1,5 @@
+ import type { ShellExecResponse } from '@hermes/shared/gateway-types'
+-import { hasInterpolation, INTERPOLATION_RE } from '@hermes/shared/interpolation'
++import { INTERPOLATION_RE } from '@hermes/shared/interpolation'
+ import { looksLikeSlashCommand, parseSlashCommand } from '@hermes/shared/slash'
+ import { completionToApplyOnSubmit } from '@hermes/shared/slash-input'
+ import { type MutableRefObject, useCallback, useEffect, useRef } from 'react'
+@@ -10,6 +10,7 @@ import type { GatewayClient } from '../gatewayClient.js'
+ import { queueItem, type QueueItem } from '../hooks/useQueue.js'
+ import { t } from '../i18n/runtime.js'
+ import { asRpcResult } from '../lib/rpc.js'
++import { hasShellSubmission, hasVisibleInterpolation, PASTE_SNIPPET_RE, visibleInterpolations } from '../protocol/paste.js'
+ import type { Msg } from '../types.js'
+
+ import { cancelPendingRewind, sendPendingRewind } from './backtrackStore.js'
+@@ -25,6 +26,7 @@ import { getUiState, patchUiState } from './uiStore.js'
+ import { describeShellExecError } from './userMessages.js'
+
+ const DOUBLE_ENTER_MS = 450
++const shellKey = ({ profile, profileHome, sid }: SubmissionDestination) => JSON.stringify([sid, profile, profileHome])
+
+ const spliceMatches = (text: string, matches: RegExpMatchArray[], results: string[]) =>
+   matches.reduceRight((acc, m, i) => acc.slice(0, m.index!) + results[i] + acc.slice(m.index! + m[0].length), text)
+@@ -68,7 +70,7 @@ export const prepareSlashSubmission = (display: string, tokens: ComposerToken[])
+   display
+ })
+
+-export const shouldInterpolateSubmission = (display: string) => hasInterpolation(display)
++export const shouldInterpolateSubmission = hasVisibleInterpolation
+
+ /**
+  * Where and how a busy-time input is admitted. Captured synchronously at the
+@@ -94,6 +96,23 @@ export function useSubmission(opts: UseSubmissionOptions) {
+
+   const lastEmptyAt = useRef(0)
+   const typingIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
++  const runningShells = useRef(new Map<string, { cancelled: boolean }>())
++
++  const cancelShell = useCallback(() => {
++    const destination = captureDestination()
++    const attempt = runningShells.current.get(shellKey(destination))
++
++    if (!gw.isCanonical || !destination.sid || !attempt) {
++      return false
++    }
++
++    if (!attempt.cancelled) {
++      attempt.cancelled = true
++      void gw.request('shell.cancel', { session_id: destination.sid }).catch(error => sys(describeShellExecError(error)))
++    }
++
++    return true
++  }, [gw, sys])
+
+   useEffect(() => {
+     if (typingIdleTimer.current) {
+@@ -162,13 +181,26 @@ export function useSubmission(opts: UseSubmissionOptions) {
+   const shellExec = useCallback(
+     (cmd: string, destination = captureDestination(), item?: QueueItem) => {
+       const focused = () => isCurrentDestination(destination)
+-      appendMessage({ role: 'user', text: `!${cmd}` })
+-      patchUiState({ busy: true, status: 'running…' })
++      const attempt = { cancelled: false }
++      const key = shellKey(destination)
++
++      if (destination.sid) {
++        runningShells.current.set(key, attempt)
++      }
++
++      if (focused()) {
++        appendMessage({ role: 'user', text: `!${cmd}` })
++        patchUiState({ busy: true, status: 'running…' })
++      }
+
+       gw.request<ShellExecResponse>('shell.exec', { command: cmd, session_id: destination.sid })
+         .then(raw => {
+           const r = asRpcResult<ShellExecResponse>(raw)
+-          item?.settle?.(Boolean(r))
++          item?.settle?.(Boolean(r) && !attempt.cancelled)
++
++          if (attempt.cancelled) {
++            return
++          }
+
+           if (!focused()) {
+             return
+@@ -196,6 +228,10 @@ export function useSubmission(opts: UseSubmissionOptions) {
+           }
+         })
+         .finally(() => {
++          if (runningShells.current.get(key) === attempt) {
++            runningShells.current.delete(key)
++          }
++
+           if (focused()) {
+             patchUiState({ busy: false, status: 'ready' })
+           }
+@@ -208,25 +244,41 @@ export function useSubmission(opts: UseSubmissionOptions) {
+   // placeholder such as `(error)` standing in for output the user expected (dokterdok N22). The
+   // staged row settles as not accepted, so the input stays retained for Alt+K / an edit.
+   const interpolate = useCallback(
+-    (text: string, then: (result: string) => void, destination = captureDestination(), item?: QueueItem) => {
+-      patchUiState({ status: 'interpolating…' })
+-      const matches = [...text.matchAll(new RegExp(INTERPOLATION_RE.source, 'g'))]
+-
+-      Promise.all(
+-        matches.map(m =>
+-          gw
+-            .request<ShellExecResponse>('shell.exec', { command: m[1]!, session_id: destination.sid })
+-            .then(raw => {
+-              const r = asRpcResult<ShellExecResponse>(raw)
+-
+-              if (!r) {
+-                throw new Error(t('session.common.invalidResponse', 'shell.exec'))
+-              }
+-
+-              return [r.stdout, r.stderr].filter(Boolean).join('\n').trim()
+-            })
+-        )
+-      ).then(
++    (text: string, then: (result: string) => void, destination: SubmissionDestination, item: QueueItem | undefined,
++      matches: RegExpMatchArray[]) => {
++      if (isCurrentDestination(destination)) {
++        patchUiState({ status: 'interpolating…' })
++      }
++
++      const attempt = { cancelled: false }
++      const key = shellKey(destination)
++
++      if (destination.sid) {
++        runningShells.current.set(key, attempt)
++      }
++
++      const expand = async () => {
++        const results: string[] = []
++
++        for (const match of matches) {
++          const raw = await gw.request<ShellExecResponse>('shell.exec', { command: match[1]!, session_id: destination.sid })
++          const result = asRpcResult<ShellExecResponse>(raw)
++
++          if (attempt.cancelled) {
++            throw new Error('command_interrupted')
++          }
++
++          if (!result) {
++            throw new Error(t('session.common.invalidResponse', 'shell.exec'))
++          }
++
++          results.push([result.stdout, result.stderr].filter(Boolean).join('\n').trim())
++        }
++
++        return results
++      }
++
++      void expand().then(
+         results => then(spliceMatches(text, matches, results)),
+         (error: unknown) => {
+           item?.settle?.(false)
+@@ -236,7 +288,11 @@ export function useSubmission(opts: UseSubmissionOptions) {
+             patchUiState({ busy: false, status: 'ready' })
+           }
+         }
+-      )
++      ).finally(() => {
++        if (runningShells.current.get(key) === attempt) {
++          runningShells.current.delete(key)
++        }
++      })
+     },
+     [gw, sys]
+   )
+@@ -245,30 +301,49 @@ export function useSubmission(opts: UseSubmissionOptions) {
+     (input: string | QueueItem) => {
+       const item = typeof input === 'string' ? undefined : input
+       const text = item?.preparedText ?? (typeof input === 'string' ? input : input.text)
++      const visible = item?.display ?? text
+       const destination = item?.destination ?? captureDestination()
++      const shell = hasShellSubmission(visible, text)
+
+       if (item?.preparedText !== undefined) {
+         return send(text, true, item.display, value => value, { destination, queueItem: item, skipDetectDrop: true })
+       }
+
+-      if (text.startsWith('!')) {
+-        return shellExec(text.slice(1).trim(), destination, item)
++      if (shell && runningShells.current.has(shellKey(destination))) {
++        return composerActions.prependQueue(item ?? queueItem(text, visible), destination)
+       }
+
+-      if (hasInterpolation(text)) {
+-        patchUiState({ busy: true })
++      if (shell && visible.trim() !== text && visible.match(PASTE_SNIPPET_RE)) {
++        item?.settle?.(false)
++        if (isCurrentDestination(destination)) {
++          sys('Expand the paste before running a shell command.')
++          patchUiState({ busy: false, status: 'ready' })
++        }
++
++        return
++      }
++
++      if (visible.startsWith('!')) {
++        return shellExec(visible.slice(1).trim(), destination, item)
++      }
++
++      if (hasVisibleInterpolation(visible, text)) {
++        if (isCurrentDestination(destination)) {
++          patchUiState({ busy: true })
++        }
+
+         return interpolate(
+           text,
+           result => send(result, true, undefined, value => value, { destination, queueItem: item }),
+           destination,
+-          item
++          item,
++          [...text.matchAll(INTERPOLATION_RE)]
+         )
+       }
+
+       send(text, true, undefined, value => value, { destination, queueItem: item })
+     },
+-    [interpolate, send, shellExec]
++    [composerActions, interpolate, send, shellExec, sys]
+   )
+
+   // Honors `display.busy_input_mode` from config.yaml (CLI parity):
+@@ -290,10 +365,16 @@ export function useSubmission(opts: UseSubmissionOptions) {
+         if (opts.fallbackToFront) {
+           composerActions.prependQueue(item, destination)
+         } else {
+-          composerActions.enqueue(item.text, item.display, destination)
++          composerActions.enqueue(item.text, item.display, destination, item.attachments)
+         }
+       }
+
++      // Shell syntax is expanded by the local operator client once the turn
++      // settles. The owner prompt queue only receives the expanded prompt.
++      if (hasShellSubmission(item.display, item.text)) {
++        return enqueueText()
++      }
++
+       if (gw.isCanonical && mode !== 'queue') {
+         const staged = item.settle ? item : composerActions.stage?.(item.text, item.display, destination)
+
+@@ -353,10 +434,16 @@ export function useSubmission(opts: UseSubmissionOptions) {
+       const submissionTokens = [...composerRefs.tokensRef.current]
+       const submission = prepareSubmission(full, submissionTokens)
+       const toHistory = submission.text
++      if (full.startsWith('!') && submissionTokens.some(token => full.includes(token.label))) {
++        return sys('Expand the paste before running a shell command.')
++      }
++      const matches = visibleInterpolations(full, submissionTokens.map(token => token.label))
+
+       // Expanded here, before clearIn() empties the tokens the async rewind would expand against;
+       // the tokens ride along so a rewind that cuts nothing restores the draft whole.
+-      if (sendPendingRewind({ ...submission, tokens: submissionTokens }, getUiState().sid)) {
++      if (matches.length) {
++        cancelPendingRewind(sys)
++      } else if (sendPendingRewind({ ...submission, tokens: submissionTokens }, getUiState().sid)) {
+         // The sent row shows each chip and expands it from these bodies, as an ordinary submit's does.
+         stagePastes(full, submission.text, submissionTokens)
+         composerActions.pushHistory(toHistory)
+@@ -430,12 +517,6 @@ export function useSubmission(opts: UseSubmissionOptions) {
+         return
+       }
+
+-      if (full.startsWith('!')) {
+-        composerActions.clearIn()
+-
+-        return shellExec(full.slice(1).trim())
+-      }
+-
+       // The user row shows each chip and expands it from these payloads.
+       stagePastes(full, submission.text, submissionTokens)
+
+@@ -490,14 +571,24 @@ export function useSubmission(opts: UseSubmissionOptions) {
+         })
+       }
+
++      if (full.startsWith('!')) {
++        if (live.busy || runningShells.current.has(shellKey(destination))) {
++          return void journaled(() => composerActions.enqueue(full, full, destination))
++        }
++
++        composerActions.clearIn()
++
++        return shellExec(full.slice(1).trim(), destination)
++      }
++
+       composerActions.pushHistory(toHistory)
+
+-      if (getUiState().busy) {
++      if (getUiState().busy || runningShells.current.has(shellKey(destination))) {
+         return void journaled(() =>
+           handleBusyInput({ ...queueItem(submission.text, submission.display), attachments: submission.attachments }))
+       }
+
+-      if (shouldInterpolateSubmission(full)) {
++      if (matches.length) {
+         const staged = journaled(() => composerActions.stage?.(submission.text, submission.display, destination, submission.attachments))
+
+         if (!staged) { return }
+@@ -512,7 +603,8 @@ export function useSubmission(opts: UseSubmissionOptions) {
+               queueItem: item, attachments: submission.attachments
+             }),
+           destination,
+-          item
++          item,
++          matches
+         )
+       }
+
+@@ -608,7 +700,7 @@ export function useSubmission(opts: UseSubmissionOptions) {
+     [send]
+   )
+
+-  return { dispatchSubmission, send, sendQueued, submit, submitLiteral }
++  return { cancelShell, dispatchSubmission, send, sendQueued, submit, submitLiteral }
+ }
+
+ export interface UseSubmissionOptions {
 diff --git a/ui-tui/src/app/userMessages.ts b/ui-tui/src/app/userMessages.ts
-index 862082942208d00f9b210db3a73992d5e60b26e8..34904cc3c14d3a72275a6627f9a2d8431bebf401 100644
+index 862082942208d00f9b210db3a73992d5e60b26e8..bfb281621793f91d0b4bdfd206d4dd3e377543cc 100644
 --- a/ui-tui/src/app/userMessages.ts
 +++ b/ui-tui/src/app/userMessages.ts
 @@ -167,6 +167,12 @@ export const describeRpcError = (err: unknown): string => {
@@ -10337,6 +11933,33 @@ index 862082942208d00f9b210db3a73992d5e60b26e8..34904cc3c14d3a72275a6627f9a2d843
    if (isVersionSkewError(err)) {
      logReplacedWireText(code, text)
 
+@@ -191,12 +197,14 @@ export const describeRpcError = (err: unknown): string => {
+ export const isUnsupportedCommand = (err: unknown): boolean =>
+   (err as { data?: { reason?: string } } | null)?.data?.reason === 'unsupported_command'
+
+-/** The shared owner refuses `!cmd` / `{!cmd}` for a session whose terminal backend is not local
+- *  (gateway/session_shell.py): the command would run on the gateway host, outside the session's
+- *  sandbox. Name the backend and point at the agent; other errors read as describeRpcError. */
++/** Explain a shell placement refusal or use the gateway's general error text. */
+ export const describeShellExecError = (err: unknown): string => {
+   const data = (err as { data?: { detail?: unknown; reason?: unknown } } | null)?.data
+
++  if (data?.reason === 'operator_shell_unavailable' && typeof data.detail === 'string') {
++    return data.detail
++  }
++
+   if (data?.reason === 'unsupported_terminal_backend') {
+     const backend = typeof data.detail === 'string' ? data.detail.trim() : ''
+
+@@ -231,7 +239,7 @@ export const describeSlashExecError = (command: string, err: unknown): string =>
+     return [t('userMessages.rpc.slashCrashed', command), detail].filter(Boolean).join('\n')
+   }
+
+-  return describeRpcError(err)
++  return describeShellExecError(err)
+ }
+
+ // slash.exec answers 4018 with exactly these texts when it does NOT own the
 diff --git a/ui-tui/src/i18n/en/userMessages.ts b/ui-tui/src/i18n/en/userMessages.ts
 index bf9a1b3b5291d7118d1c9089c27616361f821960..2434e4d1c6b74ac535fdbc66ffcc00201f31a17a 100644
 --- a/ui-tui/src/i18n/en/userMessages.ts
@@ -10349,3 +11972,66 @@ index bf9a1b3b5291d7118d1c9089c27616361f821960..2434e4d1c6b74ac535fdbc66ffcc0020
        /** `{0}` = the session's terminal backend (docker, ssh, ...). shell.exec runs on the gateway host. */
        shellBackendRefused: (backend: string) =>
          `!commands run on the gateway host, but this session's terminal backend is ${backend}, so the command was not run. Ask the agent to run it instead; the agent's terminal runs inside ${backend}.`,
+diff --git a/ui-tui/src/lib/pendingInputs.ts b/ui-tui/src/lib/pendingInputs.ts
+index fa2f4ed7f83cadd16b082a78a2058460f1c7d208..94a3fb736f1752dde5bc714607d5b93548861ba1 100644
+--- a/ui-tui/src/lib/pendingInputs.ts
++++ b/ui-tui/src/lib/pendingInputs.ts
+@@ -16,6 +16,7 @@ import { join } from 'node:path'
+ import type { SubmissionDestination } from '../app/submissionDestination.js'
+ import type { QueueItem } from '../hooks/useQueue.js'
+ import { t } from '../i18n/runtime.js'
++import { hasShellSubmission } from '../protocol/paste.js'
+
+ const directory = (home?: string) =>
+   join(home ?? process.env.HERMES_HOME ?? join(homedir(), '.hermes'), 'tui-pending-inputs')
+@@ -179,7 +180,11 @@ export function loadPendingInputs(destination: SubmissionDestination, durableRes
+         return []
+       }
+
+-      return [{ ...record, inFlight: false, failed: Boolean(record.attempted) }]
++      // A fresh client can show an unfinished shell draft, but replay needs
++      // another operator action since shell commands have side effects.
++      const shellDraft = record.preparedText === undefined && hasShellSubmission(record.display, record.text)
++
++      return [{ ...record, inFlight: false, failed: Boolean(record.attempted) || shellDraft }]
+     })
+     .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+ }
+diff --git a/ui-tui/src/lib/text.ts b/ui-tui/src/lib/text.ts
+index 9197a7e7e5cdd7d22e53d687320fc345c7c1e5a0..34b68ed0e88e004f61935dffd3d66ca4f4bd93a9 100644
+--- a/ui-tui/src/lib/text.ts
++++ b/ui-tui/src/lib/text.ts
+@@ -53,7 +53,7 @@ export const compactPreview = (s: string, max: number) => {
+ export const estimateTokensRough = (text: string) => (!text ? 0 : (text.length + 3) >> 2)
+
+ export const edgePreview = (s: string, head = 16, tail = 28) => {
+-  const one = s.replace(WS_RE, ' ').trim().replace(/\]\]/g, '] ]')
++  const one = s.replace(WS_RE, ' ').trim().replace(/\]{2,}/g, run => [...run].join(' '))
+
+   return !one
+     ? ''
+diff --git a/ui-tui/src/protocol/paste.ts b/ui-tui/src/protocol/paste.ts
+index 9eae137cea455d3414c37390ee53153d5ef24418..bd3f476f96124977cf740a08f2f5c9479c27e162 100644
+--- a/ui-tui/src/protocol/paste.ts
++++ b/ui-tui/src/protocol/paste.ts
+@@ -1 +1,20 @@
++import { hasInterpolation, INTERPOLATION_RE } from '@hermes/shared/interpolation'
++
+ export const PASTE_SNIPPET_RE = /\[\[[^\n]*?\]\]/g
++
++// Keep offsets for replacement. Newlines also prevent a shell match from
++// starting on one side of a chip and finishing on the other.
++const withoutPasteChips = (text: string) => text.replace(PASTE_SNIPPET_RE, chip => '\n'.repeat(chip.length))
++
++const shellTemplate = (display: string, expanded: string) =>
++  display.trim() === expanded ? display : withoutPasteChips(display)
++
++export function visibleInterpolations(display: string, labels: readonly string[]): RegExpMatchArray[] {
++  const visible = labels.reduce((text, label) => text.replaceAll(label, '\n'.repeat(label.length)), display)
++
++  return [...visible.matchAll(INTERPOLATION_RE)]
++}
++export const hasVisibleInterpolation = (display: string, expanded = display.trim()) =>
++  hasInterpolation(shellTemplate(display, expanded))
++export const hasShellSubmission = (display: string, expanded: string) =>
++  display.startsWith('!') || hasVisibleInterpolation(display, expanded)
