@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Check project sharing through Make, the authenticated executor, and upgrades."""
 import argparse
+from contextlib import suppress
 import io
 import json
 import os
 from pathlib import Path
+import pty
 import shlex
+import signal
 import socket
 import subprocess
 import sys
@@ -20,6 +23,9 @@ from project_mount_smoke import (ROOT, SETTING, engine, engine_command,
                                 two_way_writes)
 
 TARGET = '/mnt/projects/shared project'
+POLICY_TARGET = '/mnt/projects/nested/literal ${PROJECT_NAME} \U0001f680'
+POLICY_READER = ('import json; from hermes_cli.managed_scope import load_managed_config; '
+                 'print(json.dumps(load_managed_config(strict=True)))')
 
 
 def extract_revision(checkout, revision):
@@ -67,6 +73,8 @@ def managed_probe(scratch, backend, variant, prior, browser):
     checkout.mkdir()
     uid = runner_host_uid(backend)
     prepare_fixture(source, uid)
+    nested = scratch / 'second project'
+    prepare_fixture(nested, uid)
     current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     extract_revision(checkout, prior or current)
     project = 'hermes-project-test-' + uuid.uuid4().hex[:10]
@@ -80,16 +88,16 @@ def managed_probe(scratch, backend, variant, prior, browser):
             'WEBAPP_EXTERNAL_CONTENT': 'off', 'WEBAPP_TERMINAL_ENVIRONMENT': 'code',
             'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS': 'none', 'HERMES_INTEGRATIONS_LAN_ENDPOINTS': 'none',
             SETTING: ''}
-    configured = {**base, SETTING: f'{source}:{TARGET}'}
+    configured = {**base, SETTING: f'{source}:{TARGET},{nested}:{POLICY_TARGET}'}
     marker = uuid.uuid4().hex
 
     def make(target, environment=base):
         run('make', target, cwd=checkout, env=environment)
 
-    def stack(*arguments):
+    def stack(*arguments, timeout=None):
         try:
             return run(sys.executable, 'scripts/stack.py', 'compose', *arguments,
-                       cwd=checkout, env=base, capture_output=True).stdout.strip()
+                       cwd=checkout, env=base, capture_output=True, timeout=timeout).stdout.strip()
         except subprocess.CalledProcessError as error:
             print(error.stdout or '', error.stderr or '', file=sys.stderr, flush=True)
             raise
@@ -108,6 +116,52 @@ def managed_probe(scratch, backend, variant, prior, browser):
         executor = stack('exec', '-T', 'executor', 'stat', '-c', '%i %u %g',
                          '/run/executor-auth/ssh_host_ed25519_key', '/home/runner', '/workspace')
         return agent, executor
+
+    def assert_chat_policy(environment, roots, mode='executor'):
+        python = ['/opt/hermes/.venv/bin/python', '-c', POLICY_READER]
+        gateway = json.loads(stack('exec', '-T', '--user', '10000:10000', 'hermes', *python))
+        assert gateway['terminal']['ssh_workspace_roots'] == roots, gateway['terminal']['ssh_workspace_roots']
+        assert gateway['webapp']['terminal_environment'] == mode
+        previous = set(stack('ps', '-a', '-q', 'hermes', timeout=10).splitlines())
+        master, slave = pty.openpty()
+        os.set_blocking(master, False)
+        container = None
+        output = bytearray()
+        try:
+            with subprocess.Popen(['make', 'chat'], cwd=checkout, env=environment,
+                                  stdin=slave, stdout=slave, stderr=slave, start_new_session=True) as chat:
+                try:
+                    for _ in range(80):
+                        with suppress(BlockingIOError):
+                            output.extend(os.read(master, 65536))
+                        if chat.poll() is not None:
+                            break
+                        candidates = set(stack('ps', '-a', '-q', 'hermes', timeout=10).splitlines()) - previous
+                        assert len(candidates) <= 1, candidates
+                        if candidates:
+                            container = candidates.pop()
+                            result = subprocess.run([*engine_command(), 'exec', '--user', '10000:10000',
+                                                     container, *python], text=True, capture_output=True, timeout=10)
+                            if result.returncode == 0 and (client := json.loads(result.stdout)):
+                                assert client == gateway
+                                return
+                        time.sleep(.25)
+                    raise AssertionError(f'Chat managed policy did not appear: {output.decode(errors="replace")}')
+                finally:
+                    try:
+                        if container:
+                            subprocess.run([*engine_command(), 'stop', '--time', '1', container], check=False,
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+                    finally:
+                        try:
+                            chat.wait(timeout=4)
+                        except subprocess.TimeoutExpired:
+                            with suppress(ProcessLookupError):
+                                os.killpg(chat.pid, signal.SIGKILL)
+                            chat.wait()
+        finally:
+            os.close(slave)
+            os.close(master)
 
     try:
         if prior:
@@ -129,6 +183,8 @@ def managed_probe(scratch, backend, variant, prior, browser):
             moved.rename(source)
         make('up', configured)
         executor = stack('ps', '-q', 'executor')
+        roots = ['/workspace', *sorted([TARGET, POLICY_TARGET])]
+        assert_chat_policy({**base, 'WEBAPP_TERMINAL_ENVIRONMENT': 'agent'}, roots)
 
         def restart_policy(container):
             return run(*engine_command(), 'inspect', '--format', '{{.HostConfig.RestartPolicy.Name}}',
@@ -183,20 +239,25 @@ else:
             print('SKIP: Code WebApp terminal (requested --skip-browser).', flush=True)
         # Stop the listener from inside the container so the engine observes
         # a process exit. An explicit engine stop suppresses restart policies.
-        signal = 'kill -TERM "$(cat /run/sshd.pid)"'
-        result = subprocess.run([*engine_command(), 'exec', executor, 'sh', '-c', signal],
+        stop_sshd = 'kill -TERM "$(cat /run/sshd.pid)"'
+        result = subprocess.run([*engine_command(), 'exec', executor, 'sh', '-c', stop_sshd],
                                 text=True, capture_output=True)
         assert result.returncode in (0, 143), result.stderr
         run(*engine_command(), 'wait', executor, timeout=30, capture_output=True)
         assert not stack('ps', '-q', 'executor')
+        chat = subprocess.run(['make', 'chat'], cwd=checkout, env=configured, text=True,
+                              capture_output=True, timeout=20)
+        assert chat.returncode and 'running executor service' in chat.stderr, chat.stderr
         make('up', configured)
         ssh('test -d ' + shlex.quote(TARGET))
+        assert_chat_policy(configured, roots)
 
         # Clearing the list goes through managed startup with the old share
         # still active, then restores the base executor's restart policy.
         make('up')
         assert restart_policy(stack('ps', '-q', 'executor')) == 'unless-stopped'
         ssh('test ! -e ' + shlex.quote(TARGET))
+        assert_chat_policy(configured, ['/workspace'])
         assert (source / 'agent.txt').read_text() == 'agent project'
         print(f'PASS: {backend} {variant} managed project lifecycle', flush=True)
     finally:
