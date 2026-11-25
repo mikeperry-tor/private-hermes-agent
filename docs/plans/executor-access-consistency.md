@@ -695,7 +695,36 @@ and after the editor save. Removing the managed grant from the fixture
 produced HTTP 503 and left the bytes intact. A publisher probe under Debian
 native Docker and rootless Podman verified executable permissions, a new
 file's inherited ACL, both users' effective access, and refusal of a
-read-only file. Full chat, editor, and upgrade lifecycle checks are open.
+read-only file. The Debian ARM64 Docker 29.10.0 lean upgrade fixture passed
+the full lifecycle for the implementation in `57fda81`. It covered classic
+and TUI shell placement, managed model writes, the WebApp approval card and
+editor, host ACL checks, and recovery after the executor stopped. Rootless
+Podman and desktop lifecycle checks remain open.
+
+The follow-up writer cleanup `ceb61c4d4c3880ac5482584f706db9d5cc37aa5d`
+splits SSH dispatch and tests and narrows handled errors. It passed 280
+native tests with nine skips and all 22 upstream checks. Its release commit
+is `3d38202f915671b5b656900406a04104a6f71616`. The managed submission topic
+includes it at `7110ca808a05cce06d4add92dee88e3f1da9f97f`, and the matching
+release topic is `761b2893c2e72e13a0908a2f431cd3c278b92e9d`. Combined head
+`3b285164393886d89e36f2e5d3d69f32011ad74b` passed 337 focused tests with
+11 skips. The 189-path candidate SHA-256 is
+`27d0106002232636d253e31be6c87c1ed785bd69f9406012b9e4e2e7b5fd3b92`.
+The Docker Desktop ARM64 image passed the direct SSH file tool and
+authenticated editor API probe, including the missing-grant refusal.
+`make check` passed 242 tests and all four Compose models.
+
+### Project selection
+
+The project selection work starts from the managed workspace topic at
+`7110ca808a05cce06d4add92dee88e3f1da9f97f`. Independent design review traced
+canonical and legacy session ownership, root validation, Git metadata, and
+the WebApp picker. Keep saved sessions and project records available when a
+mount is removed. Resolve work and metadata against applied roots in SSH
+before adopting a directory. Reuse the existing transport and directory
+and project caches. The project probe and canonical policy work are in
+development. Legacy selection and resume, discovery, editor session paths,
+and renderer routing remain open.
 
 ### Speech output topic
 
@@ -705,7 +734,7 @@ at Hermes `v0.23.3` (`caafe5389ae585ef77387a962aee05b1bcf17029`). It has no
 SSH or cron prerequisite.
 
 Native head `8ba4892861228e6b593e476c6a06aed7a034a9fb` passed 116 focused
-tests with two Windows skips. The speech fixture checks bytes and attachments
+tests with two Windows skips and passed all 22 upstream checks. The speech fixture checks bytes and attachments
 from current and populated legacy profile caches with a stale `output_path`
 argument. Internal playback still uses and removes its explicit temporary
 file. Release head `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` combines at

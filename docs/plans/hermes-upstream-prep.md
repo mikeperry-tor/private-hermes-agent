@@ -201,7 +201,7 @@ for `PR7`). The author identity is
 | Topic | Draft | Submission branch | Head | Review base |
 | --- | --- | --- | --- | --- |
 | PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | Upstream main |
-| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `d4919743c0b0623ca26ca3178460a10283d4ef5c` | Upstream main |
+| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `ceb61c4d4c3880ac5482584f706db9d5cc37aa5d` | Upstream main |
 | PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | PR1 |
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
@@ -211,7 +211,7 @@ for `PR7`). The author identity is
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
 | Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `8ba4892861228e6b593e476c6a06aed7a034a9fb` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` |
-| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `b77fb13df8af4eeade3c7139b143801a21ea90da` | PR1, PR2a, and PR2b at `0bf150642e637a644696d43c39e10e1cbc136014` |
+| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `7110ca808a05cce06d4add92dee88e3f1da9f97f` | PR1, PR2a, and PR2b, including the writer cleanup |
 
 The original `upstream-pr/*` refs preserve the exact qualification heads.
 The current submission refs add commented configuration examples, including
@@ -359,17 +359,17 @@ For a later release, use the
 | Local branch under `stack-patches/v0.23.3/` | Head | Commits | Scope |
 | --- | --- | --- | --- |
 | `managed-config` (PR1) | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
-| `executor-desktop-browser` (PR3) | `214381873955bbfef268b7ce69cb0174f3ce551b` | 18 | SSH file reads, searches, and edits, checkpoint refusal, and desktop and browser placement |
+| `executor-desktop-browser` (PR3) | `3d38202f915671b5b656900406a04104a6f71616` | 19 | SSH file reads, searches, and edits, checkpoint refusal, and desktop and browser placement |
 | `executor-terminals` (PR4) | `b886b1b648231e528a174a01c35f733548debf11` | 13 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 | `tts-output-placement` | `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` | 1 | Model speech output in the profile audio cache |
-| `ssh-project-workspaces` | `999fec97543172e216642e43d2f597d43269da79` | 19 | Managed grants and a shared publisher for model and editor writes |
+| `ssh-project-workspaces` | `761b2893c2e72e13a0908a2f431cd3c278b92e9d` | 21 | Managed grants and a shared publisher for model and editor writes |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Local combined replay: `stack-patches/v0.23.3/combined`
-  `667641fd834f16dff1996dc97df1482fc61d6a19` (54 commits).
+  `3b285164393886d89e36f2e5d3d69f32011ad74b` (57 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).

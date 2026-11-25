@@ -13690,7 +13690,7 @@ index 000000000..78404ec85
 +    except (KeyError, TypeError, ValueError):
 +        return WriteResult(error="Could not verify the SSH write. Inspect the file before retrying.")
 diff --git a/tools/file_tools.py b/tools/file_tools.py
-index 7982b09f0..b1dc31da1 100644
+index 7982b09f0..34933a071 100644
 --- a/tools/file_tools.py
 +++ b/tools/file_tools.py
 @@ -8,6 +8,7 @@ staleness state).
@@ -14048,34 +14048,43 @@ index 7982b09f0..b1dc31da1 100644
      # write_file checks the binary-document guard before the mirror guard.
      err = (_check_sensitive_path(path, task_id)
             or _check_binary_document_write(path, task_id)
-@@ -994,6 +1090,26 @@ def patch_tool(mode: str = "replace", path: str | None = None, old_string: str |
-     ``cross_profile``: same semantics as ``write_file``'s flag (mirror-guard
-     bypass only; unadvertised).
-     """
-+    if mode == "replace" and uses_ssh_for_task(task_id):
+@@ -985,6 +1081,25 @@ def _collect_v4a_header_paths(patch: str) -> tuple[list[str], list[str], list[st
+     return paths, content_paths, entry_paths
+
+
++def _patch_ssh_tool(mode, path, old_string, new_string, replace_all, patch, task_id):
++    try:
++        if mode == "patch":
++            if not patch:
++                return tool_error("patch content required")
++            return patch_ssh_v4a(_get_ssh_file_ops(task_id), patch, task_id)
++        if mode != "replace":
++            return tool_error(f"Unknown mode: {mode}")
 +        if not path or old_string is None or new_string is None:
 +            return tool_error("path, old_string, and new_string are required.")
 +        if error := get_nt_namespace_error(path, verb="Write"):
 +            return tool_error(error)
-+        try:
-+            requested = _anchor_ssh_path(_hosted_tilde(path, task_id), task_id)
-+            return patch_ssh_replace(_get_ssh_file_ops(task_id), requested, old_string,
-+                                     new_string, replace_all, task_id)
-+        except (OSError, ValueError) as exc:
-+            return tool_error(str(exc))
++        requested = _anchor_ssh_path(_hosted_tilde(path, task_id), task_id)
++        return patch_ssh_replace(_get_ssh_file_ops(task_id), requested, old_string,
++                                 new_string, replace_all, task_id)
++    except (OSError, ValueError) as exc:
++        return tool_error(str(exc))
 +
-+    if mode == "patch" and uses_ssh_for_task(task_id):
-+        if not patch:
-+            return tool_error("patch content required")
-+        try:
-+            return patch_ssh_v4a(_get_ssh_file_ops(task_id), patch, task_id)
-+        except (OSError, ValueError) as exc:
-+            return tool_error(str(exc))
++
+ def patch_tool(mode: str = "replace", path: str | None = None, old_string: str | None = None,
+                new_string: str | None = None, replace_all: bool = False, patch: str | None = None,
+                task_id: str = "default", cross_profile: bool = False,
+@@ -994,6 +1109,9 @@ def patch_tool(mode: str = "replace", path: str | None = None, old_string: str |
+     ``cross_profile``: same semantics as ``write_file``'s flag (mirror-guard
+     bypass only; unadvertised).
+     """
++    if uses_ssh_for_task(task_id):
++        return _patch_ssh_tool(mode, path, old_string, new_string, replace_all, patch, task_id)
 +
      _paths_to_check = [path] if path else []
      _content_write_paths = list(_paths_to_check)
      _entry_paths: list[str] = []
-@@ -1090,7 +1206,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+@@ -1090,7 +1208,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
 
          # Pagination args (and order) are part of the key so paging through truncated
          # results doesn't trip the repeated-search guard.
@@ -14085,7 +14094,7 @@ index 7982b09f0..b1dc31da1 100644
          with _read_tracker_lock:
              task_data = _read_tracker.setdefault(task_id, {
                  "last_key": None, "consecutive": 0, "read_history": set()})
-@@ -1111,6 +1228,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+@@ -1111,6 +1230,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
          if nt_err:
              return tool_error(nt_err)
          path = _hosted_tilde(path, task_id)
@@ -14536,7 +14545,7 @@ index 000000000..990acf511
 +        return ssh_edit_report(response, adapter.paths)
 diff --git a/tools/file_tools_ssh_writes.py b/tools/file_tools_ssh_writes.py
 new file mode 100644
-index 000000000..cbc06b2e0
+index 000000000..c2686b93a
 --- /dev/null
 +++ b/tools/file_tools_ssh_writes.py
 @@ -0,0 +1,210 @@
@@ -14678,7 +14687,7 @@ index 000000000..cbc06b2e0
 +            before = original if ext == ".py" and pre_content is not None else pre_content
 +            after = content if ext == ".py" else _strip_bom(content)[0]
 +            lint = ops._check_lint_delta(path, pre_content=before, post_content=after)
-+        except Exception as exc:
++        except (OSError, ValueError, RuntimeError) as exc:
 +            # The executor has already confirmed publication. Keep the receipt even if lint fails.
 +            logger.warning("Post-write SSH lint failed (%s)", type(exc).__name__)
 +            lint = LintResult(skipped=True, message="The SSH file was saved, but lint could not run.")
@@ -14751,7 +14760,7 @@ index 000000000..cbc06b2e0
 +        response["resolved_path"] = state.path
 +        return ssh_edit_report(response, paths)
 diff --git a/tools/file_tools_write_guards.py b/tools/file_tools_write_guards.py
-index 2436f608c..9e2ea2e01 100644
+index 2436f608c..87a12fd72 100644
 --- a/tools/file_tools_write_guards.py
 +++ b/tools/file_tools_write_guards.py
 @@ -12,6 +12,7 @@ whole-file overwrite of content this task never saw or that changed since.
@@ -14807,12 +14816,21 @@ index 2436f608c..9e2ea2e01 100644
          if key := write_approval_key(resolved):
              by_key.setdefault(key, []).append(p)
 +    return _request_write_approvals(by_key)
-+
 
++
 +def _request_write_approvals(by_key: dict[str, list[str]]) -> str | None:
      for pattern_key, targets in by_key.items():
          noun, why_gated = _APPROVAL_WRITE_CLASSES[pattern_key]
          display_targets = ", ".join(dict.fromkeys(targets))
+@@ -400,7 +422,7 @@ def _check_approval_required_write(paths: list[str], task_id: str = "default") -
+
+         try:
+             import tools.approval as _approval
+-        except Exception:
++        except ImportError:
+             return blocked.format(why=_APPROVAL_UNAVAILABLE)
+
+         result = _approval._run_approval_gate(
 @@ -497,7 +519,8 @@ def _target_regular_file_state(filepath: str, task_id: str = "default") -> str:
      return "unavailable"
 
