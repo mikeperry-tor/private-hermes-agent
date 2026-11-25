@@ -225,10 +225,10 @@ network namespace owner also needs recovery, follow the
 ### Shared project filesystem permissions
 
 Setup leaves project ownership, labels, modes, and ACLs under your control.
-Use the agent's terminal or the Code terminal for edits. Hermes's file tools
-can read project files, and their write policy still limits writes to
-`/opt/data`.
-
+Hermes can read project files over SSH. Its packaged `HERMES_WRITE_SAFE_ROOT`
+setting is `/opt/data`, so `write_file` and `patch` reject writes under
+`/mnt/projects/` even when the runner has filesystem permission. Use the
+agent's terminal tool or the WebApp **Code** terminal to edit shared files.
 
 | Engine | Permission behavior |
 | --- | --- |
@@ -312,7 +312,8 @@ git --no-pager log -p -n 5
 In WebApp chat or `make chat`, you can also ask the agent to run these
 commands with its terminal tool in the project directory and show the output.
 Both the **Code** terminal and the agent's terminal tool run Git inside the
-executor.
+executor. In the classic `make chat` interface, an operator command such as
+`!git status` runs in the Hermes container.
 
 ### Host-side shared project security enforcement
 
@@ -648,6 +649,10 @@ A complete backup covers:
 3. Both application named volumes: `hermes-data` and `x402_treazury-data`.
 4. The Git commit hash of this repository so matching images and defaults can be
    rebuilt.
+
+Back up the host sources listed in `CODE_EXECUTOR_BIND_MOUNTS` separately.
+Their files live outside the stack's `data/` directory and named volumes.
+Preserve any filesystem ACLs you use for two-way editing on Linux.
 
 Protect all of these artifacts as secrets: `.env` holds provider API keys and
 optional Tailscale keys, `data/tor/onion-service/` holds the onion identity

@@ -303,8 +303,9 @@ Its edits update the files on your computer. See the
 changes and removing shares.
 
 Share only folders whose contents the agent and any software it runs may
-read, change, or delete. Keep credentials outside shared folders and keep
-backups. Review changes before using host tools that can run project scripts,
+read, change, or delete. Keep credentials outside shared folders and include
+the host folders in your [backups](docs/configuration.md#backup-scope).
+Review changes before using host tools that can run project scripts,
 Git hooks, or editor tasks. The same risk applies when you work on the host
 with files from `data/executor/workspace/` or `data/executor/home/`, even if
 you never set `CODE_EXECUTOR_BIND_MOUNTS`.

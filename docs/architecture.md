@@ -387,7 +387,10 @@ wrappers.
 Other Hermes options have narrower scopes and are not part of this stack's
 execution boundary:
 
-- `HERMES_WRITE_SAFE_ROOT` guards some file tools, not arbitrary shell commands.
+- `HERMES_WRITE_SAFE_ROOT` limits destination paths for tools such as
+  `write_file` and `patch`. The SSH backend selects where model commands run.
+  The executor mounts and runner permissions govern access to shared files.
+  See [shared project permissions](configuration.md#shared-project-filesystem-permissions).
 - Python `code_execution.mode: strict` changes staging and interpreter
   selection, not OS containment.
 - Iron-proxy can broker SDK credentials and enforce HTTP destination rules, but

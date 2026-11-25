@@ -382,6 +382,10 @@ for an **Agent** terminal inside Hermes with administrative access to
 `/opt/data`. Browser input and profile config cannot override this deployment
 setting. Saved gateway terminals keep their separate remote-Hermes path.
 
+When the model has the `read_terminal` tool, it can read visible output and
+scrollback from the selected terminal tab, including an **Agent** terminal.
+Keep secrets out of its output.
+
 - **Working directory:** Code terminals start in `/workspace` (or the requested
   executor directory, or parent directory for a file path). Missing paths,
   inaccessible directories, and control-character paths fail cleanly instead of
