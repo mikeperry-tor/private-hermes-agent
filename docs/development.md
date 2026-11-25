@@ -164,11 +164,13 @@ source checks, Git operations, two-way edits, and behavior after source
 deletion. It prints the engine and Compose version and reports what the
 engine does if the source disappears just before creation.
 
-The managed startup test covers SSH-backed agent tools, authenticated Code
-terminal writes, executor exit and recovery through `make up`, and clearing
-all shares without shutting down the stack. Both executor images pass these
-checks on Docker Desktop, native Docker, and rootless Podman with Compose
-5.7.1. Stop stacks that use the fixed subnets before running the test.
+The managed startup test covers model file edits and instruction approvals
+through CLI and WebApp chat, host access after WebApp editor saves, and
+authenticated Code terminal writes. It also checks executor recovery
+through `make up` and clearing all shares without shutting down the stack.
+For managed edit and upgrade results, see the
+[executor access plan](plans/executor-access-consistency.md#managed-project-workspace-topic).
+Stop stacks that use the fixed subnets before running the test.
 
 ```sh
 python3 tests/project_mount_lifecycle.py --variant lean
@@ -176,8 +178,8 @@ python3 tests/project_mount_lifecycle.py --variant desktop
 ```
 
 Use the Playwright environment from [WebApp verification](webapp.md#verification-and-qualification)
-for the Code terminal check. With `--skip-browser`, the test reports that
-check as skipped. Pass `--prior-ref <local-git-revision>` to populate the
+for chat, editor, and Code terminal checks. With `--skip-browser`, the test
+skips those checks and still exercises chat through `make chat`. Pass `--prior-ref <local-git-revision>` to populate the
 disposable checkout using an older wrapper before testing the in-place
 upgrade. The scratch checkout uses the committed source at `HEAD` for the
 new wrapper. The recorded upgrade fixture covers the lean image on Docker

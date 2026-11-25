@@ -44,6 +44,7 @@ services:
     environment:
       HERMES_HOME: /opt/data
       AGENT_ONLY_SENTINEL: must-not-reach-executor
+      PRIVATE_HERMES_EXECUTOR_ROOTS: '["/workspace"]'
     volumes:
       - type: bind
         source: ${TEST_DATA_DIR:?disposable test data required}/ssh/agent

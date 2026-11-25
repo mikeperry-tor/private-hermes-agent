@@ -298,10 +298,13 @@ CODE_EXECUTOR_BIND_MOUNTS="/home/me/my-app:/mnt/projects/my-app,/home/me/notes:/
 ```
 
 Use your own folder paths, then run `make down && make up`. Ask the agent to
-use its terminal to work in `/mnt/projects/my-app` or `/mnt/projects/notes`.
-Its edits update the files on your computer. See the
-[shared project setup](docs/configuration.md#shared-project-setup) for applying
-changes and removing shares.
+work in `/mnt/projects/my-app` or `/mnt/projects/notes`. Its file tools can
+write and patch project files, and you can save them in the WebApp editor.
+Ordinary model edits proceed without an approval prompt when the runner has
+write access. The agent requests approval before editing an instruction file
+such as `AGENTS.md`.
+See [shared project setup](docs/configuration.md#shared-project-setup) for
+applying changes and removing shares.
 
 Share only folders whose contents the agent and any software it runs may
 read, change, or delete. Keep credentials outside shared folders and include

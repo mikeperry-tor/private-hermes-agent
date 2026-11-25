@@ -6570,9 +6570,18 @@ index dbd22186e..1e3dda72c 100644
                      return False
                  # Metadata-bearing host clients treat exactly the next binary
 diff --git a/hermes_cli/ssh_workspace_fs.py b/hermes_cli/ssh_workspace_fs.py
-index 0bc7ac4d0..65c80f67e 100644
+index 0bc7ac4d0..c287d935a 100644
 --- a/hermes_cli/ssh_workspace_fs.py
 +++ b/hermes_cli/ssh_workspace_fs.py
+@@ -10,7 +10,7 @@ import subprocess
+ import threading
+ import uuid
+ from dataclasses import dataclass
+-from typing import Any, Iterator
++from typing import Any, Callable, Iterator
+
+ from hermes_cli._subprocess_compat import windows_hide_flags
+ from tools.environments.ssh import SSHEnvironment
 @@ -32,6 +32,7 @@ class _SshFsConfig:
      key_path: str
      cwd: str
@@ -6589,7 +6598,56 @@ index 0bc7ac4d0..65c80f67e 100644
  target=$(realpath "$p" 2>/dev/null || readlink -f "$p" 2>/dev/null) || {{ printf '__HERMES_FS_ERROR__:ENOENT\\n'; exit 44; }}
  if [ ! -f "$target" ]; then printf '__HERMES_FS_ERROR__:ENOTREG\\n'; exit 45; fi
  size=$(stat -c %s "$target" 2>/dev/null || stat -f %z "$target" 2>/dev/null) || {{ printf '__HERMES_FS_ERROR__:EACCES\\n'; exit 46; }}
-@@ -302,6 +304,7 @@ def get_ssh_workspace_fs(profile_key: str, terminal_config: dict[str, Any]) -> S
+@@ -242,6 +244,48 @@ printf '__HERMES_FS_SIZE__:%s\\n' "$size"
+                 process.terminate()
+             process.wait()
+
++    def write_managed_text(
++        self, path: str, content: str, *, roots: tuple[str, ...],
++        is_sensitive: Callable[[str], bool], max_bytes: int,
++    ) -> tuple[str, int]:
++        """Publish an authenticated editor save through the SSH workspace transport."""
++        from tools.file_operations import ShellFileOperations
++        from tools.file_operations_ssh_write import (
++            SSHWriteConflict, SSHWriteFileTypeError, inspect_ssh_write, publish_ssh_file, ssh_write_snapshot,
++        )
++        from tools.file_tools_ssh_writes import executor_write_policy
++
++        target = self.normalize(path)
++        encoded = content.encode("utf-8")
++        if len(encoded) > max_bytes:
++            raise SshWorkspaceFsError("EFBIG")
++        ops = ShellFileOperations(self._env)
++        policy = executor_write_policy(roots, managed=True)
++        with self._lock:
++            try:
++                inspected = inspect_ssh_write(ops, target, policy)
++            except SSHWriteFileTypeError as exc:
++                raise SshWorkspaceFsError("EWRITETYPE", str(exc)) from None
++            except PermissionError as exc:
++                raise SshWorkspaceFsError("EWRITE", str(exc)) from None
++            except (OSError, ValueError) as exc:
++                raise SshWorkspaceFsError("EIO") from exc
++            paths = (target, inspected.entry, inspected.destination.path, *inspected.intermediate_links)
++            if inspected.approvals or any(is_sensitive(candidate) for candidate in paths):
++                raise SshWorkspaceFsError("EWRITE", "Access to sensitive files is not allowed")
++            try:
++                expected = ssh_write_snapshot(ops, inspected.destination)
++                result = publish_ssh_file(ops, target, inspected, expected, encoded, policy, create_parents=False)
++            except SSHWriteConflict as exc:
++                raise SshWorkspaceFsError("ESTALE") from exc
++            except PermissionError as exc:
++                raise SshWorkspaceFsError("EWRITE", str(exc)) from None
++            except (OSError, ValueError) as exc:
++                raise SshWorkspaceFsError("EIO") from exc
++        if result.error:
++            raise SshWorkspaceFsError(result._error_code or "EIO", result.error)
++        return target, result.bytes_written
++
+     def write_text(self, path: str, content: str, *, max_bytes: int) -> tuple[str, int]:
+         target = self.normalize(path)
+         encoded_size = len(content.encode("utf-8"))
+@@ -302,6 +346,7 @@ def get_ssh_workspace_fs(profile_key: str, terminal_config: dict[str, Any]) -> S
          key_path=str(terminal_config.get("ssh_key") or "").strip(),
          cwd=str(terminal_config.get("cwd") or "~").strip() or "~",
          timeout=int(terminal_config.get("timeout") or 180),
@@ -6597,7 +6655,7 @@ index 0bc7ac4d0..65c80f67e 100644
      )
      if not config.host or not config.user:
          raise SshWorkspaceFsError("ECONN", "SSH host and user are required")
-@@ -312,8 +315,8 @@ def get_ssh_workspace_fs(profile_key: str, terminal_config: dict[str, Any]) -> S
+@@ -312,8 +357,8 @@ def get_ssh_workspace_fs(profile_key: str, terminal_config: dict[str, Any]) -> S
              if cached and cached[0] == config:
                  return cached[1]
              _BACKENDS.pop(profile_key, None)
@@ -6608,7 +6666,7 @@ index 0bc7ac4d0..65c80f67e 100644
          if cached:
              with _lock_for(_ENDPOINT_LOCKS, _endpoint(cached[0])):
                  cached[1]._env.cleanup()
-@@ -327,6 +330,7 @@ def get_ssh_workspace_fs(profile_key: str, terminal_config: dict[str, Any]) -> S
+@@ -327,6 +372,7 @@ def get_ssh_workspace_fs(profile_key: str, terminal_config: dict[str, Any]) -> S
                      port=config.port,
                      key_path=config.key_path,
                      sync_files=False,
@@ -7284,7 +7342,7 @@ index 054fa7734..7183ea242 100644
          await ws.close(code=_CLOSE_DESKTOP_GONE, reason="Bot Desktop is not running")
          return
 diff --git a/hermes_cli/web_routers/files.py b/hermes_cli/web_routers/files.py
-index 08df7512c..fee943e95 100644
+index 08df7512c..d28bbe1f0 100644
 --- a/hermes_cli/web_routers/files.py
 +++ b/hermes_cli/web_routers/files.py
 @@ -425,6 +425,7 @@ def _fs_backend(profile: Optional[str] = None):
@@ -7295,6 +7353,64 @@ index 08df7512c..fee943e95 100644
      }.items():
          if not terminal.get(key) and profile_env.get(env_name):
              terminal[key] = profile_env[env_name]
+@@ -494,6 +495,9 @@ def _raise_fs_backend_error(exc: Exception) -> None:
+         "EIO": 502,
+         "ENOENT": 404,
+         "ENOTREG": 400,
++        "ESTALE": 409,
++        "EWRITE": 403,
++        "EWRITETYPE": 400,
+     }.get(exc.code, 400)
+     detail = {
+         "EACCES": "File is not readable",
+@@ -503,6 +507,7 @@ def _raise_fs_backend_error(exc: Exception) -> None:
+         "EIO": "SSH workspace request failed",
+         "ENOENT": "File not found",
+         "ENOTREG": "Only regular files can be read",
++        "ESTALE": "The SSH file changed before saving. Reopen it and retry.",
+     }.get(exc.code, str(exc) or "Filesystem request failed")
+     raise HTTPException(status_code=status, detail=detail)
+
+@@ -1247,8 +1252,8 @@ async def fs_write_text(payload: FsWriteText, profile: Optional[str] = None):
+     # Save where read-text read: a staged paste or pick on this host, all else on the SSH machine.
+     backend = await asyncio.to_thread(_remote_fs_backend, payload.path, profile)
+     if backend is not None:
+-        # The SSH write replaces the lexical path (mv onto a link swaps the link), so judge that
+-        # path exactly as the adapter writes it: stripped, ``~`` and cwd expanded, ``..`` folded.
++        # Apply the sensitive name guard to the path the adapter opens. Managed
++        # saves also check the executor's inspected entry and target before publishing.
+         from hermes_cli.ssh_workspace_fs import SshWorkspaceFsError
+
+         try:
+@@ -1258,12 +1263,22 @@ async def fs_write_text(payload: FsWriteText, profile: Optional[str] = None):
+         if _is_sensitive_path(Path(target)):
+             raise HTTPException(status_code=403, detail="Access to sensitive files is not allowed")
+         try:
+-            target, byte_size = await asyncio.to_thread(
+-                backend.write_text,
+-                target,
+-                text,
+-                max_bytes=_FS_TEXT_WRITE_MAX_BYTES,
+-            )
++            from tools.file_tools_paths import managed_ssh_workspace_roots
++
++            try:
++                roots = await asyncio.to_thread(managed_ssh_workspace_roots)
++            except ValueError as exc:
++                raise SshWorkspaceFsError("ECONN") from exc
++            if roots is None:
++                target, byte_size = await asyncio.to_thread(
++                    backend.write_text, target, text, max_bytes=_FS_TEXT_WRITE_MAX_BYTES,
++                )
++            else:
++                target, byte_size = await asyncio.to_thread(
++                    backend.write_managed_text, target, text, roots=roots,
++                    is_sensitive=lambda candidate: _is_sensitive_path(Path(candidate)),
++                    max_bytes=_FS_TEXT_WRITE_MAX_BYTES,
++                )
+         except Exception as exc:
+             _raise_fs_backend_error(exc)
+         return {"ok": True, "path": target, "byteSize": byte_size}
 diff --git a/hermes_cli/web_routers/webapp_relay_proxy.py b/hermes_cli/web_routers/webapp_relay_proxy.py
 index fdf800944..0d905bd1b 100644
 --- a/hermes_cli/web_routers/webapp_relay_proxy.py
@@ -12352,7 +12468,7 @@ index f8168e070..dbd9984de 100644
                 file_glob: Optional[str] = None, limit: int = 50, offset: int = 0,
                 output_mode: str = "content", context: int = 0,
 diff --git a/tools/file_operations_common.py b/tools/file_operations_common.py
-index 29d38315a..0bd877140 100644
+index 29d38315a..6f756bf2b 100644
 --- a/tools/file_operations_common.py
 +++ b/tools/file_operations_common.py
 @@ -35,6 +35,7 @@ class ReadResult:
@@ -12363,13 +12479,14 @@ index 29d38315a..0bd877140 100644
 
      def to_dict(self) -> dict:
          return {k: v for k, v in self.__dict__.items() if not k.startswith("_") and v is not None and v != []}
-@@ -49,6 +50,9 @@ class WriteResult:
+@@ -49,6 +50,10 @@ class WriteResult:
      # backend couldn't verify (no sha256sum). A mismatch is a hard error, never a flag.
      verified: Optional[bool] = None
      _content_sha256: Optional[str] = None
 +    _snapshot: Optional[tuple] = None
 +    _entry_landed: bool = False
 +    _entry_metadata: Optional[tuple] = None
++    _error_code: Optional[str] = None
      lint: Optional[dict[str, Any]] = None
      # LSP semantic diagnostics, kept separate from ``lint`` (syntax) so the model
      # reads the two as independent signals. None when LSP is off/inapplicable.
@@ -12403,6 +12520,134 @@ index 9d39ec4ab..95d6e0364 100644
          if len(parts) < 2:
              return None
          existing, missing = [], []
+diff --git a/tools/file_operations_ssh_acl.py b/tools/file_operations_ssh_acl.py
+new file mode 100644
+index 000000000..66885fbf8
+--- /dev/null
++++ b/tools/file_operations_ssh_acl.py
+@@ -0,0 +1,122 @@
++"""Executor-side preservation of access to managed project files."""
++
++SSH_PROJECT_ACL = r"""
++class SharedAccessError(WriteError):
++    pass
++
++def acl_library():
++    try:
++        lib = ctypes.CDLL("libacl.so.1", use_errno=True)
++    except OSError:
++        raise SharedAccessError("The SSH executor has no POSIX ACL library.") from None
++    lib.acl_get_fd.argtypes = (ctypes.c_int,)
++    lib.acl_get_fd.restype = ctypes.c_void_p
++    lib.acl_to_any_text.argtypes = (ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char, ctypes.c_int)
++    lib.acl_to_any_text.restype = ctypes.c_void_p
++    lib.acl_from_text.argtypes = (ctypes.c_char_p,)
++    lib.acl_from_text.restype = ctypes.c_void_p
++    lib.acl_set_fd.argtypes = (ctypes.c_int, ctypes.c_void_p)
++    lib.acl_set_fd.restype = ctypes.c_int
++    lib.acl_free.argtypes = (ctypes.c_void_p,)
++    return lib
++
++
++def acl_rows(lib, fd):
++    acl = lib.acl_get_fd(fd)
++    if not acl:
++        raise OSError(ctypes.get_errno(), "read file ACL")
++    try:
++        numeric_ids = 0x08
++        text = lib.acl_to_any_text(acl, None, b"\n", numeric_ids)
++        if not text:
++            raise OSError(ctypes.get_errno(), "read numeric file ACL")
++        try:
++            lines = ctypes.string_at(text).decode("ascii").splitlines()
++            rows = dict(line.rsplit(":", 1) for line in lines)
++            if len(rows) != len(lines):
++                raise SharedAccessError("The file ACL contains duplicate identities.")
++            for name in rows:
++                qualifier = name.split(":", 1)[1]
++                if qualifier and (not qualifier.isdecimal() or int(qualifier) >= 2**32 - 1):
++                    raise SharedAccessError("The file ACL has an unmapped identity.")
++            return rows
++        finally:
++            lib.acl_free(text)
++    finally:
++        lib.acl_free(acl)
++
++
++def set_acl_rows(lib, fd, rows):
++    payload = "\n".join(f"{name}:{bits}" for name, bits in rows.items()).encode("ascii")
++    acl = lib.acl_from_text(payload)
++    if not acl:
++        raise OSError(ctypes.get_errno(), "prepare replacement ACL")
++    try:
++        if lib.acl_set_fd(fd, acl):
++            raise OSError(ctypes.get_errno(), "set replacement ACL")
++    finally:
++        lib.acl_free(acl)
++
++
++def access_bits(fd):
++    path = f"/proc/self/fd/{fd}"
++    return "".join(ch if os.access(path, bit, effective_ids=True) else "-"
++                   for ch, bit in zip("rwx", (os.R_OK, os.W_OK, os.X_OK)))
++
++
++def mask_permissions(permissions, mask):
++    return "".join(bit if bit == ceiling else "-" for bit, ceiling in zip(permissions, mask))
++
++
++def overflow_id(kind):
++    with open(f"/proc/sys/kernel/overflow{kind}", encoding="ascii") as value:
++        return int(value.read())
++
++
++def retain_group(previous, stage_fd, rows):
++    if previous.st_gid == overflow_id("gid"):
++        raise SharedAccessError("The SSH user cannot preserve an unmapped file group.")
++    if os.fstat(stage_fd).st_gid == previous.st_gid:
++        return
++    try:
++        os.fchown(stage_fd, -1, previous.st_gid)
++    except PermissionError:
++        group = mask_permissions(rows["group:"], rows.get("mask:", "rwx"))
++        if group != rows["other:"] or any(key.startswith("group:") and key != "group:" for key in rows):
++            raise SharedAccessError("The SSH user cannot preserve the file's group access.") from None
++    else:
++        if os.fstat(stage_fd).st_gid != previous.st_gid:
++            raise SharedAccessError("The destination filesystem did not retain the file's group.")
++
++
++def retain_owner(previous_fd, previous, stage_fd, rows):
++    if os.fstat(stage_fd).st_uid == previous.st_uid:
++        return
++    owner = rows["user:"]
++    if owner != access_bits(previous_fd):
++        raise SharedAccessError("The SSH user's access differs from the file owner's permissions.")
++    if "mask:" not in rows and rows["group:"] == rows["other:"] == owner:
++        return
++    mask = rows.get("mask:", rows["group:"])
++    if mask_permissions(owner, mask) != owner:
++        raise SharedAccessError("The file ACL mask cannot preserve the owner's permissions.")
++    if previous.st_uid == overflow_id("uid"):
++        raise SharedAccessError("The SSH user cannot preserve an unmapped file owner.")
++    rows[f"user:{previous.st_uid}"] = owner
++    rows["mask:"] = mask
++
++
++def preserve_shared_access(previous_fd, stage_fd):
++    previous = os.fstat(previous_fd)
++    if previous.st_mode & (stat.S_ISUID | stat.S_ISGID):
++        raise SharedAccessError("The SSH editor cannot preserve set-user-ID or set-group-ID access.")
++    lib = acl_library()
++    rows = acl_rows(lib, previous_fd)
++    retain_group(previous, stage_fd, rows)
++    retain_owner(previous_fd, previous, stage_fd, rows)
++    os.fchmod(stage_fd, stat.S_IMODE(previous.st_mode))
++    if acl_rows(lib, stage_fd) != rows:
++        set_acl_rows(lib, stage_fd, rows)
++    if acl_rows(lib, stage_fd) != rows or stat.S_IMODE(os.fstat(stage_fd).st_mode) != stat.S_IMODE(previous.st_mode):
++        raise SharedAccessError("The destination filesystem did not preserve the file's access.")
++"""
 diff --git a/tools/file_operations_ssh_path.py b/tools/file_operations_ssh_path.py
 new file mode 100644
 index 000000000..485588250
@@ -12940,10 +13185,10 @@ index 000000000..072b0d83b
 +"""
 diff --git a/tools/file_operations_ssh_write.py b/tools/file_operations_ssh_write.py
 new file mode 100644
-index 000000000..fb7a735b8
+index 000000000..78404ec85
 --- /dev/null
 +++ b/tools/file_operations_ssh_write.py
-@@ -0,0 +1,420 @@
+@@ -0,0 +1,500 @@
 +"""Executor protocol for guarded SSH writes and directory entry edits."""
 +
 +import base64
@@ -12953,6 +13198,7 @@ index 000000000..fb7a735b8
 +
 +from tools.file_operations import SSHPathState
 +from tools.file_operations_common import WriteResult
++from tools.file_operations_ssh_acl import SSH_PROJECT_ACL
 +from tools.file_operations_ssh_path import SSH_PATH_STATE
 +
 +
@@ -12965,6 +13211,14 @@ index 000000000..fb7a735b8
 +    intermediate_links: tuple[str, ...]
 +
 +
++class SSHWriteConflict(OSError):
++    """The executor file changed after inspection."""
++
++
++class SSHWriteFileTypeError(OSError):
++    """The requested path exists and cannot be edited as a regular file."""
++
++
 +SSH_WRITE = r"""
 +import binascii
 +import ctypes
@@ -12973,6 +13227,9 @@ index 000000000..fb7a735b8
 +import uuid
 +
 +class WriteError(Exception):
++    pass
++
++class StaleWrite(WriteError):
 +    pass
 +
 +def under(path, root):
@@ -12987,14 +13244,24 @@ index 000000000..fb7a735b8
 +            homes.add(Path(expanded))
 +    return homes
 +
++def project_root(path, roots):
++    for root in roots:
++        if under(path, root) and os.path.isdir(root) and os.path.realpath(root) == root:
++            return root
++    return None
++
 +def write_policy(requested, supplied, resolved, policy, *, entry=False, check_roots=True):
-+    read_protected, home_files, home_dirs, shell_rc, protected, sensitive, exact, roots = policy
++    read_protected, home_files, home_dirs, shell_rc, protected, sensitive, exact, roots, managed = policy
 +    targets = {policy_key(Path(supplied)), policy_key(resolved)}
 +    if roots and check_roots:
-+        allowed = [os.path.realpath(os.path.expanduser(root)) for root in roots]
 +        changed_paths = (resolved, supplied) if entry else (resolved,)
-+        if any(not any(under(path, root) for root in allowed) for path in changed_paths):
-+            return 'The path is outside the allowed SSH write roots (HERMES_WRITE_SAFE_ROOT).', None
++        if managed:
++            if any(project_root(path, roots) is None for path in changed_paths):
++                return 'The path is outside the applied SSH workspace roots.', None
++        else:
++            allowed = [os.path.realpath(os.path.expanduser(root)) for root in roots]
++            if any(not any(under(path, root) for root in allowed) for path in changed_paths):
++                return 'The path is outside the allowed SSH write roots (HERMES_WRITE_SAFE_ROOT).', None
 +    exact_paths = {policy_key(candidate) for path in exact for candidate in (Path(path), policy_path(Path(path)))}
 +    dirs = {policy_key(candidate) for path in sensitive for candidate in (Path(path), policy_path(Path(path)))}
 +    if targets & exact_paths or any(under(path, directory) for path in targets for directory in dirs):
@@ -13070,18 +13337,20 @@ index 000000000..fb7a735b8
 +            'intermediate_links': intermediate_links(location) if location != resolved and not denied else []}
 +
 +@contextmanager
-+def opened_parent(path, *, create=False):
++def opened_parent(path, *, create=False, create_below='/'):
 +    # Walk from the root with directory descriptors so later symlink changes
 +    # cannot redirect staged writes.
 +    parent, name = os.path.split(path)
 +    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 +    fd = os.open('/', flags)
 +    try:
++        current = '/'
 +        for part in Path(parent).parts[1:]:
++            current = os.path.join(current, part)
 +            try:
 +                child = os.open(part, flags, dir_fd=fd)
 +            except FileNotFoundError:
-+                if not create:
++                if not create or current == create_below or not under(current, create_below):
 +                    raise
 +                try:
 +                    os.mkdir(part, dir_fd=fd)
@@ -13111,31 +13380,54 @@ index 000000000..fb7a735b8
 +        raise WriteError('The SSH client did not send the expected file data.')
 +    dest.flush()
 +
-+def target_permissions(parent_fd, name, expected, stage_fd):
++def target_permissions(parent_fd, name, expected, stage_fd, *, managed):
 +    previous_fd = os.open(name, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
 +    with os.fdopen(previous_fd, 'rb') as previous:
 +        before = os.fstat(previous_fd)
 +        if not stat.S_ISREG(before.st_mode) or metadata(before) != expected[:5]:
-+            raise WriteError('The SSH file changed before the write.')
++            raise StaleWrite('The SSH file changed before the write.')
 +        current_digest = hashlib.sha256()
 +        for block in iter(lambda: previous.read(65536), b''):
 +            current_digest.update(block)
 +        if current_digest.hexdigest() != expected[5] or metadata(os.fstat(previous_fd)) != expected[:5]:
-+            raise WriteError('The SSH file changed before the write.')
-+        os.fchmod(stage_fd, stat.S_IMODE(before.st_mode) & 0o777)
++            raise StaleWrite('The SSH file changed before the write.')
++        if managed:
++            try:
++                preserve_shared_access(previous_fd, stage_fd)
++            except OSError:
++                raise SharedAccessError('The destination filesystem could not preserve the file ACL.') from None
++        else:
++            os.fchmod(stage_fd, stat.S_IMODE(before.st_mode) & 0o777)
 +
 +def checked_parent(parent, fd):
 +    current = os.stat(parent, follow_symlinks=False)
 +    pinned = os.fstat(fd)
 +    if (current.st_dev, current.st_ino) != (pinned.st_dev, pinned.st_ino):
-+        raise WriteError('The SSH destination directory changed before the write.')
++        raise StaleWrite('The SSH destination directory changed before the write.')
 +
-+def publish(requested, path, entry, entry_version, expected, source, length, digest, policy, approvals):
++def write_digest(path, version):
++    try:
++        with open_regular(path, version) as stream:
++            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
++        return {'digest': digest}
++    except PermissionError:
++        return {'error': 'EACCES'}
++    except OSError as exc:
++        if exc.errno in (None, errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
++            return {'error': 'ESTALE'}
++        raise
++
++def publish(requested, path, entry, entry_version, links, expected, source, length, digest,
++            policy, approvals, create_parents):
 +    landed = False
 +    try:
 +        if not os.path.isabs(path) or path == '/' or os.path.normpath(path) != path:
 +            raise WriteError('The SSH write needs a verified absolute file path.')
-+        with opened_parent(path, create=True) as (parent, parent_fd, name):
++        roots, managed = policy[-2:]
++        root = project_root(path, roots) if managed else '/'
++        if root is None:
++            raise WriteError('The path is outside the applied SSH workspace roots.')
++        with opened_parent(path, create=create_parents, create_below=root) as (parent, parent_fd, name):
 +            scratch = '.hermes-write-' + uuid.uuid4().hex
 +            os.mkdir(scratch, 0o700, dir_fd=parent_fd)
 +            try:
@@ -13145,13 +13437,14 @@ index 000000000..fb7a735b8
 +                    with os.fdopen(stage_fd, 'w+b') as stage:
 +                        receive_bytes(source, stage, length, digest)
 +                        if expected is not None:
-+                            target_permissions(parent_fd, name, expected, stage_fd)
++                            target_permissions(parent_fd, name, expected, stage_fd, managed=managed)
 +                        checked_parent(parent, parent_fd)
 +                        current = inspect_write(requested, policy)
 +                        if (current['path'] != path or current['entry'] != entry
 +                                or current['entry_metadata'] != entry_version
++                                or tuple(current['intermediate_links']) != links
 +                                or current['kind'] != ('absent' if expected is None else 'regular')):
-+                            raise WriteError('The SSH path changed before the write.')
++                            raise StaleWrite('The SSH path changed before the write.')
 +                        if current['error'] or tuple(current['approvals']) != approvals:
 +                            raise WriteError(current['error'] or 'The SSH permissions changed before the write.')
 +                        if expected is None:
@@ -13160,7 +13453,7 @@ index 000000000..fb7a735b8
 +                            os.unlink('file', dir_fd=scratch_fd)
 +                        else:
 +                            if metadata(os.stat(name, dir_fd=parent_fd, follow_symlinks=False)) != expected[:5]:
-+                                raise WriteError('The SSH file changed before the write.')
++                                raise StaleWrite('The SSH file changed before the write.')
 +                            os.replace('file', name, src_dir_fd=scratch_fd, dst_dir_fd=parent_fd)
 +                            landed = True
 +                        return {'landed': True, 'written': length, 'metadata': metadata(os.fstat(stage_fd))}
@@ -13176,10 +13469,16 @@ index 000000000..fb7a735b8
 +        if landed:
 +            return {'landed': True, 'error': 'The SSH write landed before an I/O error. Inspect the file.'}
 +        if isinstance(exc, FileExistsError):
-+            return {'error': 'The SSH destination appeared before the write.'}
++            return {'error': 'The SSH destination appeared before the write.', 'error_code': 'ESTALE'}
++        if isinstance(exc, FileNotFoundError):
++            return {'error': 'The SSH file or its parent directory disappeared.', 'error_code': 'ENOENT'}
 +        if isinstance(exc, PermissionError):
-+            return {'error': 'The SSH user cannot write the file or its parent directory.'}
++            return {'error': 'The SSH user cannot write the file or its parent directory.', 'error_code': 'EWRITE'}
 +        return {'error': 'The SSH filesystem rejected the write: ' + os.strerror(exc.errno) + '.'}
++    except StaleWrite as exc:
++        return {'error': str(exc), 'error_code': 'ESTALE'}
++    except SharedAccessError as exc:
++        return {'error': str(exc), 'error_code': 'EWRITE'}
 +    except WriteError as exc:
 +        return {'error': str(exc)}
 +
@@ -13224,7 +13523,12 @@ index 000000000..fb7a735b8
 +                os.unlink(name, dir_fd=fd)
 +                return {'landed': True}
 +            target, expected_destination = destination
-+            with opened_parent(expected_destination['entry'], create=True) as (parent_to, fd_to, name_to):
++            roots, managed = policy[-2:]
++            target_path = expected_destination['entry']
++            root = project_root(target_path, roots) if managed else '/'
++            if root is None:
++                raise WriteError('The path is outside the applied SSH workspace roots.')
++            with opened_parent(target_path, create=True, create_below=root) as (parent_to, fd_to, name_to):
 +                if verify_entry(target, expected_destination, policy, fd_to, name_to) is not None:
 +                    raise WriteError('The SSH destination already exists.')
 +                if stat.S_ISLNK(mode):
@@ -13273,7 +13577,7 @@ index 000000000..fb7a735b8
 +              and all(type(value) is int for value in info)):
 +            state = SSHPathState(destination, kind, tuple(info))
 +        else:
-+            raise PermissionError("The SSH write target is not a regular file.")
++            raise SSHWriteFileTypeError("The SSH write target is not a regular file.")
 +        approvals = tuple(data["approvals"])
 +        if any(key not in {"ssh_config_write", "shell_rc_write"} for key in approvals):
 +            raise ValueError
@@ -13336,8 +13640,28 @@ index 000000000..fb7a735b8
 +    except (TypeError, ValueError):
 +        raise ValueError("Could not read the inspected SSH file before writing.") from None
 +
++def ssh_write_snapshot(ops, state: SSHPathState) -> tuple | None:
++    """Hash the inspected version on the executor without returning its file bytes."""
++    if state.kind == "absent":
++        return None
++    args = f"{state.path!r}, {state.metadata!r}"
++    reply = ops._framed_ssh_file_output(
++        SSH_PATH_STATE + SSH_WRITE + f"\nprint(json.dumps(write_digest({args})))\n")
++    response = json.loads(reply)
++    if not isinstance(response, dict):
++        raise ValueError("Could not verify the SSH file before saving.")
++    if response.get("error") == "ESTALE":
++        raise SSHWriteConflict("The SSH file changed before saving.")
++    if response.get("error") == "EACCES":
++        raise PermissionError("The SSH user cannot read the file before saving.")
++    digest = response.get("digest")
++    if not isinstance(digest, str) or len(digest) != 64:
++        raise ValueError("Could not verify the SSH file before saving.")
++    return (*state.metadata, bytes.fromhex(digest))
++
++
 +def publish_ssh_file(ops, input_path: str, inspected: SSHWritePath, expected: tuple | None,
-+                     content: bytes, policy: tuple) -> WriteResult:
++                     content: bytes, policy: tuple, *, create_parents: bool = True) -> WriteResult:
 +    """Publish verified bytes against the previously inspected SSH file."""
 +    state = inspected.destination
 +    if state.kind == "absent" and expected is None:
@@ -13345,17 +13669,18 @@ index 000000000..fb7a735b8
 +    elif state.kind == "regular" and expected is not None and expected[:5] == state.metadata:
 +        remote_version = (*expected[:5], expected[5].hex())
 +    else:
-+        return WriteResult(error="The SSH file changed before the write. Read it again.")
++        return WriteResult(error="The SSH file changed before the write. Read it again.", _error_code="ESTALE")
 +    digest = hashlib.sha256(content).digest()
 +    args = (f"{input_path!r}, {state.path!r}, {inspected.entry!r}, {inspected.entry_metadata!r}, "
-+            f"{remote_version!r}, sys.stdin.buffer, {len(content)}, {digest.hex()!r}, "
-+            f"{policy!r}, {inspected.approvals!r}")
++            f"{inspected.intermediate_links!r}, {remote_version!r}, sys.stdin.buffer, "
++            f"{len(content)}, {digest.hex()!r}, {policy!r}, {inspected.approvals!r}, {create_parents!r}")
 +    try:
 +        response = json.loads(ops._framed_ssh_file_output(
-+            SSH_PATH_STATE + SSH_WRITE + f"\nprint(json.dumps(publish({args})))\n",
++            SSH_PATH_STATE + SSH_WRITE + SSH_PROJECT_ACL + f"\nprint(json.dumps(publish({args})))\n",
 +            stdin_data=base64.b64encode(content).decode("ascii")))
 +        if isinstance(response.get("error"), str):
-+            return WriteResult(error=response["error"], _entry_landed=response.get("landed") is True)
++            return WriteResult(error=response["error"], _entry_landed=response.get("landed") is True,
++                               _error_code=response.get("error_code"))
 +        info = response["metadata"]
 +        if (response["written"] != len(content) or len(info) != 5
 +                or any(type(value) is not int for value in info) or info[2] != len(content)):
@@ -13780,10 +14105,47 @@ index 7982b09f0..b1dc31da1 100644
              resolved_search_path = str(_resolve_path_for_task(path, task_id))
          except (OSError, ValueError, RuntimeError) as exc:
 diff --git a/tools/file_tools_paths.py b/tools/file_tools_paths.py
-index 8c5c96f63..be91a25e7 100644
+index 8c5c96f63..abfb0f94d 100644
 --- a/tools/file_tools_paths.py
 +++ b/tools/file_tools_paths.py
-@@ -113,6 +113,15 @@ def container_backend_for_task(task_id: str = "default") -> str | None:
+@@ -13,11 +13,36 @@ import sys
+ import time
+ from pathlib import Path, PurePosixPath
+
++import hermes_yaml as yaml
+ from agent.runtime_self_protection import split_entry
++from hermes_cli.config_backend import ConfigBackendUnavailable
++from hermes_cli.managed_scope import load_managed_config
+ from tools.terminal_tool_config import _is_container_backend
+
+ logger = logging.getLogger(__name__)
+
++
++def managed_ssh_workspace_roots() -> tuple[str, ...] | None:
++    """Read the administrator's executor roots without resolving them on this host."""
++    try:
++        managed = load_managed_config(strict=True)
++    except (ConfigBackendUnavailable, OSError, ValueError, yaml.YAMLError) as exc:
++        raise ValueError("The managed SSH workspace roots could not be read.") from exc
++    terminal = managed.get("terminal", {})
++    if not isinstance(terminal, dict):
++        raise ValueError("The managed terminal settings must be a mapping.")
++    if "ssh_workspace_roots" not in terminal:
++        return None
++    roots = terminal["ssh_workspace_roots"]
++    if not isinstance(roots, list) or not roots or any(
++        not isinstance(root, str) or not root.startswith("/") or root.startswith("//")
++        or root == "/" or "\0" in root or posixpath.normpath(root) != root
++        for root in roots
++    ):
++        raise ValueError("The managed SSH workspace roots must be absolute directory paths.")
++    return tuple(dict.fromkeys(roots))
++
++
+ # ``TERMINAL_CWD`` values that mean "not configured" ("." from a stale config;
+ # "auto"/"cwd" are wizard placeholders). gateway/run.py sanitizes the same set.
+ _TERMINAL_CWD_SENTINELS = frozenset({"", ".", "./", "auto", "cwd"})
+@@ -113,6 +138,15 @@ def container_backend_for_task(task_id: str = "default") -> str | None:
      return _terminal_env_type_for_task(task_id) if _uses_container_paths(task_id) else None
 
 
@@ -13799,7 +14161,7 @@ index 8c5c96f63..be91a25e7 100644
  def _normalize_without_host_deref(path: str | Path | PurePosixPath) -> PurePosixPath:
      """Normalize path syntax without following host symlinks: container paths are
      meaningful inside the sandbox, and a host-side ``/workspace`` symlink must not rewrite them."""
-@@ -274,17 +283,17 @@ def _ssh_remote_home(task_id: str) -> str | None:
+@@ -274,17 +308,17 @@ def _ssh_remote_home(task_id: str) -> str | None:
      return home if isinstance(home, str) and posixpath.isabs(home) else None
 
 
@@ -14174,10 +14536,10 @@ index 000000000..990acf511
 +        return ssh_edit_report(response, adapter.paths)
 diff --git a/tools/file_tools_ssh_writes.py b/tools/file_tools_ssh_writes.py
 new file mode 100644
-index 000000000..519dbba82
+index 000000000..cbc06b2e0
 --- /dev/null
 +++ b/tools/file_tools_ssh_writes.py
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,210 @@
 +"""Write tool policy and version checks for SSH files."""
 +
 +import hashlib
@@ -14205,6 +14567,7 @@ index 000000000..519dbba82
 +from tools.file_operations_common import LintResult, _detect_line_ending, _normalize_line_endings, _strip_bom
 +from tools.file_operations_lint import LINTERS, LINTERS_INPROC
 +from tools.file_operations_ssh_write import inspect_ssh_write, publish_ssh_file, read_ssh_write_source
++from tools.file_tools_paths import managed_ssh_workspace_roots
 +from tools.file_tools_read_tracking import SSHFileKey, record_ssh_write, ssh_write_baseline
 +from tools.file_tools_write_guards import (
 +    _SENSITIVE_EXACT_PATHS,
@@ -14220,11 +14583,18 @@ index 000000000..519dbba82
 +logger = logging.getLogger(__name__)
 +
 +
-+def ssh_write_policy() -> tuple:
-+    roots = tuple(filter(None, os.getenv("HERMES_WRITE_SAFE_ROOT", "").split(os.pathsep)))
++def executor_write_policy(roots: tuple[str, ...], *, managed: bool) -> tuple:
 +    return (ssh_read_protected_entries(), (*HOME_CREDENTIAL_FILES, *SSH_KEY_FILES),
 +            HOME_CREDENTIAL_DIRS, SHELL_RC_FILES, HERMES_PROTECTED_SUBPATHS, _SENSITIVE_PATH_PREFIXES,
-+            tuple(sorted(_SENSITIVE_EXACT_PATHS | set(WRITE_PROTECTED_SYSTEM_FILES))), roots)
++            tuple(sorted(_SENSITIVE_EXACT_PATHS | set(WRITE_PROTECTED_SYSTEM_FILES))), roots, managed)
++
++
++def ssh_write_policy() -> tuple:
++    managed = managed_ssh_workspace_roots()
++    if managed is not None:
++        return executor_write_policy(managed, managed=True)
++    roots = tuple(filter(None, os.getenv("HERMES_WRITE_SAFE_ROOT", "").split(os.pathsep)))
++    return executor_write_policy(roots, managed=False)
 +
 +
 +def ssh_content_denial(inspected, task_id: str) -> str | None:

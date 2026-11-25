@@ -211,6 +211,7 @@ for `PR7`). The author identity is
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
 | Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `8ba4892861228e6b593e476c6a06aed7a034a9fb` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` |
+| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `b77fb13df8af4eeade3c7139b143801a21ea90da` | PR1, PR2a, and PR2b at `0bf150642e637a644696d43c39e10e1cbc136014` |
 
 The original `upstream-pr/*` refs preserve the exact qualification heads.
 The current submission refs add commented configuration examples, including
@@ -258,6 +259,8 @@ belongs in the upstream submission.
    shipping PR3b with live Chromium and SSH sync-back enabled, because transient
    profile entries can cause extraction to fail and block sync-back of ordinary
    state.
+   The workspace grant and editor changes use the managed configuration and
+   guarded SSH writes from PR1 and PR2a, and the SSH transport from PR2b.
    The speech output topic has no merge-order dependency. Recheck its pinned
    base against the target main before submission.
    For a squash merge, rebase each dependent branch from its listed review
@@ -362,10 +365,11 @@ For a later release, use the
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 | `tts-output-placement` | `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` | 1 | Model speech output in the profile audio cache |
+| `ssh-project-workspaces` | `999fec97543172e216642e43d2f597d43269da79` | 19 | Managed grants and a shared publisher for model and editor writes |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Local combined replay: `stack-patches/v0.23.3/combined`
-  `88fbc94607e9d12e25959a7f13a8fb3f9c7a3d3b` (52 commits).
+  `667641fd834f16dff1996dc97df1482fc61d6a19` (54 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).

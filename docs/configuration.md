@@ -228,10 +228,10 @@ network namespace owner also needs recovery, follow the
 ### Shared project filesystem permissions
 
 Setup leaves project ownership, labels, modes, and ACLs under your control.
-Hermes can read project files over SSH. Its packaged `HERMES_WRITE_SAFE_ROOT`
-setting is `/opt/data`, so `write_file` and `patch` reject writes under
-`/mnt/projects/` even when the runner has filesystem permission. Use the
-agent's terminal tool or the WebApp **Code** terminal to edit shared files.
+`make up` gives the SSH file tools and WebApp editor write roots at
+`/workspace` and the applied project destinations. The runner needs write
+access to the file and its containing directory. The file tools keep
+instruction-file approvals and credential denials within shared projects.
 
 | Engine | Permission behavior |
 | --- | --- |
@@ -261,11 +261,21 @@ setfacl -m "u:${runner_uid}:rw" "$project/notes.md"
 ```
 
 Repeat the directory step for existing subdirectories that both users
-should write to. Default ACLs apply to new files and directories below
-them. A tool that creates private files with mode `0600` can keep the
-other writer out. Use `getfacl` to check the ACL and effective mask after
-an edit or rename. The host user also needs permission to list and traverse
-each directory for the startup scan to complete. Confirm that the mounted
+should write to. New files inherit the destination directory's default ACL.
+A tool that creates private files with mode `0600` can keep the other writer
+out. The host user also needs permission to list and traverse each directory
+for the startup scan to complete.
+
+The SSH file tools and WebApp editor replace changed files atomically.
+Replacement can change ownership to the runner. On Linux, Hermes preserves
+effective read, write, and execute permissions through the file ACL. Give the
+runner the same effective access as the owner when both users edit a host-owned
+file, including execute access for an executable. Use `getfacl` to check the
+ACL and effective mask. If Hermes cannot preserve access, it leaves the original
+file in place. Docker Desktop on macOS supports the tested executable modes
+and host edit access. Native macOS ACLs are outside those checks.
+
+Confirm that the mounted
 source is the one you intended, and apply any filesystem security labels
 through the host's policy.
 

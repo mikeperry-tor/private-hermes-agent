@@ -681,6 +681,22 @@ at `0bf150642e637a644696d43c39e10e1cbc136014`. Their release equivalents are
 PR1 `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` and the SSH topic
 `214381873955bbfef268b7ce69cb0174f3ce551b`, which carries PR2a and PR2b.
 
+The native grant and editor commit is `b77fb13df8af4eeade3c7139b143801a21ea90da`.
+The release topic starts at the SSH topic above and lands at
+`999fec97543172e216642e43d2f597d43269da79`. Combined head
+`667641fd834f16dff1996dc97df1482fc61d6a19` exports 189 runtime paths.
+The candidate patch SHA-256 is
+`81786a68d03a496dfc753be1417d6c4d7fa22dc5c39323474382089cf3e95302`.
+The native suite passed 58 checks with two skips and all 22 `scripts/check`
+checks. The combined release passed 116 focused tests with four skips.
+The isolated Docker Desktop ARM64 image used actual SSH and an authenticated
+browser to save a host-owned executable and checked host edit access before
+and after the editor save. Removing the managed grant from the fixture
+produced HTTP 503 and left the bytes intact. A publisher probe under Debian
+native Docker and rootless Podman verified executable permissions, a new
+file's inherited ACL, both users' effective access, and refusal of a
+read-only file. Full chat, editor, and upgrade lifecycle checks are open.
+
 ### Speech output topic
 
 The independent `fix/tts-output-placement` topic starts at submission main

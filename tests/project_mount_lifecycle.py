@@ -23,7 +23,7 @@ from urllib.request import urlopen
 import uuid
 
 from project_mount_smoke import (ROOT, SETTING, engine, engine_command,
-                                engine_views, prepare_fixture, run, runner_host_uid,
+                                engine_views, grant_fixture_access, prepare_fixture, run, runner_host_uid,
                                 two_way_writes)
 
 TARGET = '/mnt/projects/shared project'
@@ -36,6 +36,7 @@ GATEWAY_READER = ('from hermes_cli.gateway_runtime import discover_gateway_endpo
                   'print(result.state, result.reason_code or "")')
 # Recreating the gateway repeatedly can trigger Hermes's 300-second backoff.
 GATEWAY_BACKOFF_MAX_SECONDS = 300
+FIXTURE_MODEL = 'project-inference'
 
 
 def extract_revision(checkout, revision):
@@ -45,7 +46,7 @@ def extract_revision(checkout, revision):
         files.extractall(checkout, filter='data')
 
 
-def webapp_terminal(origin, password):
+def webapp_project(origin, password, nonce):
     from code_terminal_browser import close_shell, command, metadata, open_shell
     from playwright.sync_api import sync_playwright
 
@@ -72,8 +73,51 @@ def webapp_terminal(origin, password):
             assert meta['cwd'] == TARGET
             assert 'webapp project' in command(page, "printf 'webapp project\\n' > webapp.txt; cat webapp.txt")
             close_shell(page, meta)
+            page.get_by_text('ready', exact=True).first.wait_for(timeout=30000)
+            composer = page.locator('[data-slot="composer-rich-input"]').first
+
+            def submit(probe):
+                composer.fill(f'qualification-project-{probe} web {nonce}')
+                composer.press('Enter')
+
+            submit('edit')
+            page.get_by_text(f'PRIVATE-PROJECT-EDIT-OK-web-{nonce}', exact=False).wait_for(timeout=75000)
+            assert page.locator('[data-approval-deny]').count() == 0
+            submit('approval')
+            approval = page.locator('[data-slot="tool-approval-card"]').filter(has_text='<write to AGENTS.md>')
+            approval.locator('[data-approval-deny]').click(timeout=30000)
+            page.get_by_text(f'PRIVATE-PROJECT-APPROVAL-OK-web-{nonce}', exact=False).wait_for(timeout=30000)
+            page.get_by_role('button', name='Open preview', exact=True).first.click(timeout=30000)
+            page.get_by_role('button', name='Edit', exact=True).first.click(timeout=30000)
+            editor = page.locator('.cm-content[contenteditable=true]').first
+            editor.press('Meta+A' if sys.platform == 'darwin' else 'Control+A')
+            page.keyboard.insert_text('#!/bin/sh\nprintf editor-content\n')
+            with page.expect_response(lambda response: '/api/fs/write-text' in response.url, timeout=30000) as save:
+                page.get_by_role('button', name='Save', exact=True).first.click()
+            response = save.value
+            assert response.status == 200 and response.json()['ok'], response.text()
         finally:
             browser.close()
+
+
+def assert_host_write(path, runner_uid, content, *, mode=None):
+    assert path.read_text() == content
+    if mode is not None:
+        assert path.stat().st_mode & 0o777 == mode
+    if sys.platform == 'linux':
+        # Linux stores the access ACL in a v2 xattr with little-endian records.
+        value = os.getxattr(path, 'system.posix_acl_access')
+        assert struct.unpack_from('<I', value) == (2,)
+        acl = {(tag, qualifier): bits for tag, bits, qualifier in struct.iter_unpack('<HHI', value[4:])}
+        owner = path.stat().st_uid
+        mask = acl[0x10, 0xffffffff]
+        required = 0o7 if mode is not None else 0o6
+        for uid in (os.getuid(), runner_uid):
+            access = acl[0x01, 0xffffffff] if uid == owner else acl[0x02, uid] & mask
+            assert access == required, (path, uid, access, required)
+        assert mask == required
+    path.write_text(content + '# host edit\n')
+    assert path.read_text() == content + '# host edit\n'
 
 
 def managed_probe(scratch, backend, variant, prior, browser):
@@ -83,6 +127,19 @@ def managed_probe(scratch, backend, variant, prior, browser):
     checkout.mkdir()
     uid = runner_host_uid(backend)
     prepare_fixture(source, uid)
+    for writer in ('cli', 'web', 'editor'):
+        executable = source / f'{writer}-executable.sh'
+        executable.write_text('#!/bin/sh\nprintf "host executable"\n')
+        executable.chmod(0o775)
+    (source / 'AGENTS.md').write_text('Protected fixture\n')
+    read_only = source / 'read-only'
+    read_only.mkdir()
+    (read_only / 'file.txt').write_text('unchanged\n')
+    if sys.platform == 'linux':
+        grant_fixture_access(source, uid)
+    mode = (source / 'cli-executable.sh').stat().st_mode & 0o777
+    (read_only / 'file.txt').chmod(0o444)
+    read_only.chmod(0o555)
     nested = scratch / 'second project'
     prepare_fixture(nested, uid)
     current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
@@ -101,6 +158,7 @@ def managed_probe(scratch, backend, variant, prior, browser):
             SETTING: ''}
     configured = {**base, SETTING: f'{source}:{TARGET},{nested}:{POLICY_TARGET}'}
     marker = uuid.uuid4().hex
+    nonce = marker[:12]
 
     def make(target, environment=base):
         run('make', target, cwd=checkout, env=environment)
@@ -128,13 +186,21 @@ def managed_probe(scratch, backend, variant, prior, browser):
                          '/run/executor-auth/ssh_host_ed25519_key', '/home/runner', '/workspace')
         return agent, executor
 
+    def start_inference():
+        script = (checkout / 'tests/fixtures/webapp-inference.py').read_text()
+        stack('exec', '-d', '--user', '10000:10000', 'hermes',
+              '/opt/hermes/.venv/bin/python', '-I', '-c', script, '--bind', '127.0.0.1')
+        stack('exec', '-T', '--user', '10000:10000', 'hermes', 'curl', '--fail', '--silent',
+              '--retry', '5', '--retry-connrefused', 'http://127.0.0.1:8337/health', timeout=15)
+
     def configure_chat(interface):
         code = f"""from hermes_cli.config import load_config, save_config
 from hermes_cli.observability.shared_metrics_consent import save_consent
 from hermes_cli.prune_advisor import decide, undecided
 config = load_config()
 config.setdefault('display', {{}})['interface'] = {('cli' if interface == 'classic' else interface)!r}
-config['model'] = {{'provider': 'custom', 'default': 'no-inference', 'base_url': 'http://127.0.0.1:1/v1'}}
+config['model'] = {{'provider': 'custom', 'default': {FIXTURE_MODEL!r},
+                   'base_url': 'http://127.0.0.1:8337/v1', 'api_key': 'fixture-only'}}
 config.setdefault('quick_commands', {{}})['placement-probe'] = {{
     'type': 'exec', 'command': "test ! -d /opt/data && printf 'PRIVATE-QUICK-%s\\\\n' EXECUTOR",
 }}
@@ -157,7 +223,7 @@ assert decide(False) and not undecided()
                 if starts:
                     print('Recent fixture gateway start times:', starts, file=sys.stderr, flush=True)
 
-    def assert_chat_policy(environment, roots, mode='executor', interface=None):
+    def assert_chat_policy(environment, roots, mode='executor', interface=None, model_edits=False):
         python = ['/opt/hermes/.venv/bin/python', '-c', POLICY_READER]
         gateway = json.loads(stack('exec', '-T', '--user', '10000:10000', 'hermes', *python))
         assert gateway['terminal']['ssh_workspace_roots'] == roots, gateway['terminal']['ssh_workspace_roots']
@@ -213,7 +279,7 @@ assert decide(False) and not undecided()
                                         expect(b'\x1b[?2004h', chat)
                                     else:
                                         # The idle window title includes the fixture model after the session attaches.
-                                        expect(b'\x1b]2;\xe2\x9c\x93 no-inference', chat)
+                                        expect(b'\x1b]2;\xe2\x9c\x93 ' + FIXTURE_MODEL.encode(), chat)
 
                                     def submit(command):
                                         output.clear()
@@ -226,6 +292,14 @@ assert decide(False) and not undecided()
                                     expect(b'PRIVATE-SHELL-' + mode.upper().encode(), chat)
                                     submit(b'/placement-probe')
                                     expect(b'PRIVATE-QUICK-EXECUTOR', chat)
+                                    if model_edits:
+                                        submit(f'qualification-project-edit cli {nonce}'.encode())
+                                        expect(f'PRIVATE-PROJECT-EDIT-OK-cli-{nonce}'.encode(), chat)
+                                        assert b'Write to protected agent-instruction file' not in output
+                                        submit(f'qualification-project-approval cli {nonce}'.encode())
+                                        expect(b'<write to AGENTS.md>', chat)
+                                        os.write(master, b'\x1b[B\r')
+                                        expect(f'PRIVATE-PROJECT-APPROVAL-OK-cli-{nonce}'.encode(), chat)
                                     submit(b'/quit')
                                     deadline = time.monotonic() + 20
                                     while chat.poll() is None and time.monotonic() < deadline:
@@ -278,7 +352,13 @@ assert decide(False) and not undecided()
         make('up', configured)
         executor = stack('ps', '-q', 'executor')
         roots = ['/workspace', *sorted([TARGET, POLICY_TARGET])]
-        assert_chat_policy({**base, 'WEBAPP_TERMINAL_ENVIRONMENT': 'agent'}, roots, interface='classic')
+        start_inference()
+        assert_chat_policy({**base, 'WEBAPP_TERMINAL_ENVIRONMENT': 'agent'}, roots,
+                           interface='classic', model_edits=True)
+        assert_host_write(source / f'cli-{nonce}.txt', uid, 'patched by the model\n')
+        assert_host_write(source / 'cli-executable.sh', uid, '#!/bin/sh\nprintf "cli model edit"\n', mode=mode)
+        assert (source / 'AGENTS.md').read_text() == 'Protected fixture\n'
+        assert (read_only / 'file.txt').read_text() == 'unchanged\n'
         assert_chat_policy(configured, roots, interface='tui')
 
         def restart_policy(container):
@@ -297,19 +377,16 @@ assert decide(False) and not undecided()
         # These use Hermes's SSH-backed tools, in addition to direct authenticated SSH.
         code = f"""import json
 from tools.terminal_tool import terminal_tool
-from tools.file_tools import read_file_tool, write_file_tool
+from tools.file_tools import read_file_tool
 root = {TARGET!r}
 result = json.loads(terminal_tool("pwd -P; id -u; printf 'agent project' > agent.txt",
                                   workdir=root, task_id='project-mount'))
 assert result['exit_code'] == 0 and result['output'].splitlines() == [root, '10000'], result
 read = read_file_tool(root + '/host.txt', task_id='project-mount')
 assert 'runner atomic' in read, read
-blocked = json.loads(write_file_tool(root + '/outside-write-policy.txt', 'guard check', task_id='project-mount'))
-assert 'HERMES_WRITE_SAFE_ROOT' in blocked.get('error', ''), blocked
 """
         stack('exec', '-T', '--user', '10000:10000', 'hermes', '/opt/hermes/.venv/bin/python', '-c', code)
         assert (source / 'agent.txt').read_text() == 'agent project'
-        assert not (source / 'outside-write-policy.txt').exists()
         ssh('test ! -e /opt/data/config.yaml; test ! -e /run/agent-ssh/id_ed25519; test ! -e /var/lib/x402')
         denied = """import socket
 try:
@@ -327,11 +404,23 @@ else:
             name = details['Config']['Labels']['com.docker.compose.service']
             assert (mounts.get(TARGET) is True if name == 'executor' else TARGET not in mounts), name
         if browser:
-            webapp_terminal(f'http://127.0.0.1:{port}', checkout / 'config/webapp/password')
+            # The controller has a different file at the editor's executor path.
+            editor_path = f'{TARGET}/editor-executable.sh'
+            local_file = shlex.join(['mkdir', '-p', TARGET])
+            local_file += '; printf %s "gateway decoy" > ' + shlex.quote(editor_path)
+            stack('exec', '-T', '--user', '0:0', 'hermes', 'sh', '-eu', '-c', local_file)
+            webapp_project(f'http://127.0.0.1:{port}', checkout / 'config/webapp/password', nonce)
             assert (source / 'webapp.txt').read_text() == 'webapp project\n'
-            print(f'PASS: {backend} {variant} Code WebApp wrote to the shared project', flush=True)
+            assert_host_write(source / f'web-{nonce}.txt', uid, 'patched by the model\n')
+            assert_host_write(source / 'web-executable.sh', uid, '#!/bin/sh\nprintf "web model edit"\n', mode=mode)
+            assert_host_write(source / 'editor-executable.sh', uid, '#!/bin/sh\nprintf editor-content\n', mode=mode)
+            decoy = stack('exec', '-T', '--user', '10000:10000', 'hermes', 'cat', editor_path)
+            assert decoy == 'gateway decoy'
+            assert (source / 'AGENTS.md').read_text() == 'Protected fixture\n'
+            assert (read_only / 'file.txt').read_text() == 'unchanged\n'
+            print(f'PASS: {backend} {variant} WebApp chat and editor wrote to the shared project', flush=True)
         else:
-            print('SKIP: Code WebApp terminal (requested --skip-browser).', flush=True)
+            print('SKIP: WebApp chat, editor, and terminal (requested --skip-browser).', flush=True)
         # Stop the listener from inside the container so the engine observes
         # a process exit. An explicit engine stop suppresses restart policies.
         stop_sshd = 'kill -TERM "$(cat /run/sshd.pid)"'
@@ -362,6 +451,7 @@ else:
         assert_chat_policy(base, ['/workspace'], interface='classic')
         print(f'PASS: {backend} {variant} managed project lifecycle', flush=True)
     finally:
+        read_only.chmod(0o755)
         if (checkout / '.env').exists():
             run('make', 'down', cwd=checkout, env=base)
             stack('down', '--volumes')

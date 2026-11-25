@@ -390,8 +390,9 @@ Hermes tools and configuration provide these additional controls.
   It records complete, unredacted text reads by SSH endpoint and file version.
 - `search_files` checks each executor path before returning or counting matches.
   Multiline content search requires ripgrep on the executor.
-- `HERMES_WRITE_SAFE_ROOT` limits structured writes in the filesystem where
-  each edit runs. SSH file tools inspect the executor's requested path,
+- `HERMES_WRITE_SAFE_ROOT=/opt/data` limits local structured writes. The SSH
+  file tools use the roots supplied by managed startup and refuse writes when
+  that list is unavailable. They inspect the executor's requested path,
   resolved file, and directory entry. A whole-file replacement requires the
   task to have read every page without redaction or written the current version.
   The executor checks the version before publishing. SSH patches use the
