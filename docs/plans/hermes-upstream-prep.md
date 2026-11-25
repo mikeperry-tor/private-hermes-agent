@@ -210,6 +210,7 @@ for `PR7`). The author identity is
 | PR5 URL reference fetching | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `c3a6b8a0bc49a16b907f98917cfbc50c5cd84e4e` | PR1 |
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
+| Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `8ba4892861228e6b593e476c6a06aed7a034a9fb` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` |
 
 The original `upstream-pr/*` refs preserve the exact qualification heads.
 The current submission refs add commented configuration examples, including
@@ -257,6 +258,8 @@ belongs in the upstream submission.
    shipping PR3b with live Chromium and SSH sync-back enabled, because transient
    profile entries can cause extraction to fail and block sync-back of ordinary
    state.
+   The speech output topic has no merge-order dependency. Recheck its pinned
+   base against the target main before submission.
    For a squash merge, rebase each dependent branch from its listed review
    base onto the updated main so the prerequisite commits stay out of its diff.
 2. Preserve both sides at shared paths. The combined submission replay resolves
@@ -358,10 +361,11 @@ For a later release, use the
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
+| `tts-output-placement` | `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` | 1 | Model speech output in the profile audio cache |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Local combined replay: `stack-patches/v0.23.3/combined`
-  `ffc64df1dcd433cfa5efd5962df51f38a30972f1` (48 commits).
+  `e0a3bffe4d3c16e7040da62452ed10d3634ca912` (50 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).

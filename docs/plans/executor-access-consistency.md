@@ -468,7 +468,7 @@ supported. Keep generic SSH guidance independent of Private Hermes paths.
 | Proposed `feat/ssh-project-workspaces` | SSH write roots and file permissions, project context and Git, WebApp files, delegation, gateway attachment delivery, Kanban workspaces, and remote Python project cwd. Separate commits by consumer. |
 | Proposed `feat/ssh-skill-shell` | Skill shell dispatch, project skill trust, credential passthrough, cwd mapping, and native skill tests. Reuse SSH and skill synchronization. |
 | Proposed `feat/ssh-cron-execution` | Cron workdirs, scripts, validation, cancellation, and executor artifact delivery. Reuse session project context where required. |
-| Proposed `fix/tts-output-placement` | Model speech schema and dispatch, with coverage for internal callers. Independent of SSH and cron. |
+| `fix/tts-output-placement` | Model speech schema and dispatch, with coverage for internal callers. Independent of SSH and cron. |
 
 Start proposed topics at submission main unless they use an unmerged
 prerequisite. Record the exact dependency and review base before the first
@@ -657,6 +657,25 @@ to match the final image. Recheck the documented reason for the empty Hermes
   and a Code WebApp write to a shared project. The gateway remained absent
   from owner discovery after the final Code recreation in that fixture. A
   shorter Code to Agent to Code fixture passed on the same engine.
+
+### Speech output topic
+
+The independent `fix/tts-output-placement` topic starts at submission main
+`25a1302eacb563c59eb3b7454c1a53f8c89f274c`. The matching release topic starts
+at Hermes `v0.23.3` (`caafe5389ae585ef77387a962aee05b1bcf17029`). It has no
+SSH or cron prerequisite.
+
+Native head `8ba4892861228e6b593e476c6a06aed7a034a9fb` passed 116 focused
+tests with two Windows skips. The speech fixture checks bytes and attachments
+from current and populated legacy profile caches with a stale `output_path`
+argument. Internal playback still uses and removes its explicit temporary
+file. Release head `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` combines at
+`e0a3bffe4d3c16e7040da62452ed10d3634ca912`. The exported patch SHA-256 is
+`9632d16f5d6256ca8310c370770cde4f0089625732ee2dcf423c45d4bc3cd5bc`.
+The combined tree also passed 116 focused tests with two Windows skips.
+On Docker Desktop ARM64, the final image used the exact release TTS module
+and passed the speech, gateway attachment, and playback probe with networking
+disabled. `make check` passed 242 tests and all four Compose models.
 
 ### Completion checks
 

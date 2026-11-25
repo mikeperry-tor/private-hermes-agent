@@ -142,7 +142,7 @@ for upgrade steps.
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| `0001-upstream-candidates` | Strict managed config, SSH trust, file errors, guarded reads and searches, SSH checkpoint refusal, executor desktop and browser transport, Code and Agent terminals and chat shells, configurable URL context, and managed tool denial (PR1-PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0001-upstream-candidates` | Strict managed config, SSH trust, file errors, guarded reads and searches, SSH checkpoint refusal, executor desktop and browser transport, Code and Agent terminals and chat shells, configurable URL context, managed tool denial, and speech output in the profile audio cache. | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
 | `0002-managed-policy` | Generates root-owned `/etc/hermes/config.yaml` and `/etc/hermes/.env` at container startup before Hermes loads profiles. | Verify effective settings under conflicting profile input, reloads, and offline jobs. |
 | `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code and Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
 | `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |

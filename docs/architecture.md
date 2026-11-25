@@ -394,6 +394,8 @@ Hermes tools and configuration provide these additional controls.
   `write_file` and `patch`. The SSH backend selects where model commands run.
   The executor mounts and runner permissions govern access to shared files.
   See [shared project permissions](configuration.md#shared-project-filesystem-permissions).
+- The model's `text_to_speech` tool writes to the active Hermes profile's audio
+  cache. Internal voice playback can supply a temporary output file.
 - Filesystem checkpoints, rollback, and checkpoint-based session diffs are
   unavailable for SSH workspaces. Hermes keeps profile checkpoint records for
   administrative inspection.

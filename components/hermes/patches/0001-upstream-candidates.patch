@@ -14100,6 +14100,66 @@ index 5d3cf1ebe..3af7bc3f4 100644
      except Exception:
          candidates = []
      hint = (f" Did you mean {', '.join(repr(c) for c in candidates)}?" if candidates
+diff --git a/tools/tts_tool.py b/tools/tts_tool.py
+index e2f522606..439a5b64e 100644
+--- a/tools/tts_tool.py
++++ b/tools/tts_tool.py
+@@ -24,7 +24,7 @@ from typing import Callable, Dict, Any, List, Optional
+
+ import copy
+
+-from hermes_constants import display_hermes_home, get_hermes_dir
++from hermes_constants import get_hermes_dir
+
+ logger = logging.getLogger(__name__)
+
+@@ -626,16 +626,9 @@ def check_tts_requirements() -> bool:
+ # --- Registry ---
+ from tools.registry import registry, tool_error
+
+-def _output_path_description(home: str) -> str:
+-    return f"Optional custom file path to save the audio. Defaults to {home}/audio_cache/<timestamp>.mp3"
+-
+-
+ def _tts_schema_overrides() -> dict:
+-    """Rebuild the ``output_path`` default hint from the ACTIVE profile at every get_definitions():
+-    the multiplexed gateway serves every profile from one process, so a path baked in at import
+-    would name the launch profile's home for everyone else (#95685)."""
++    """Expose voice discovery when the active profile uses ElevenLabs."""
+     params = copy.deepcopy(TTS_SCHEMA["parameters"])
+-    params["properties"]["output_path"]["description"] = _output_path_description(display_hermes_home())
+     if not elevenlabs_voice_selection_active():
+         return {"parameters": params}
+     from tools.tts_elevenlabs_voices import FIND_VOICES_SCHEMA
+@@ -654,7 +647,7 @@ _ELEVENLABS_VOICE_SENTENCE = "The provider is user-configured (ElevenLabs); pick
+
+ TTS_SCHEMA = {
+     "name": "text_to_speech",
+-    "description": "Convert text to speech audio. Returns a MEDIA: path that the platform delivers as native audio. Compatible providers render as a voice bubble on Telegram; otherwise audio is sent as a regular attachment. In CLI mode, saves to ~/voice-memos/. " + _CONFIGURED_VOICE_SENTENCE,
++    "description": "Convert text to speech audio. Returns a MEDIA: path that the platform delivers as native audio. Compatible providers render as a voice bubble on Telegram; otherwise audio is sent as a regular attachment. Audio is saved in the active profile's audio cache. " + _CONFIGURED_VOICE_SENTENCE,
+     "parameters": {
+         "type": "object",
+         "properties": {
+@@ -662,10 +655,6 @@ TTS_SCHEMA = {
+                 "type": "string",
+                 "description": "The text to convert to speech. Provider-specific per-request character caps apply automatically (OpenAI 4096, xAI 15000, MiniMax 10000, ElevenLabs 5k-40k depending on model); longer input is split into ordered chunks without silent truncation."
+             },
+-            "output_path": {
+-                "type": "string",
+-                "description": _output_path_description("the profile HERMES_HOME")
+-            },
+             "speed": {
+                 "type": "number",
+                 "description": "Playback speed multiplier. 1.0 = normal, 0.5 = very slow (language learning), 2.0 = fast. Range: 0.25-4.0. Overrides the speed configured in config.yaml."
+@@ -690,7 +679,7 @@ registry.register(
+     schema=TTS_SCHEMA,
+     handler=lambda args, **kw: text_to_speech_tool(
+         text=args.get("text", ""),
+-        **{k: args.get(k) for k in ("output_path", "speed", "instructions", "voice_id", "find_voices")}),
++        **{k: args.get(k) for k in ("speed", "instructions", "voice_id", "find_voices")}),
+     check_fn=check_tts_requirements,
+     emoji="🔊",
+     compat_args=("voice_id", "find_voices"),  # advertised per provider; find_voices needs no text
 diff --git a/toolsets.py b/toolsets.py
 index 588cb0f11..ed47f457d 100644
 --- a/toolsets.py

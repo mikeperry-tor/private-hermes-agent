@@ -506,10 +506,11 @@ and [hermes-upstream-prep.md](plans/hermes-upstream-prep.md).
 Candidate tests run inside temporary Docker Desktop Linux ARM64 containers
 with isolated homes, `--init`, no engine socket, and no private mounts (using
 `scripts/check` and containerized Python and Node toolchains). The release
-replay targets Hermes v0.23.3 (`caafe5389ae585ef77387a962aee05b1bcf17029`), while
-the active submission branches target `main`
-(`88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5`, with the earlier `25a1302eacb563c59eb3b7454c1a53f8c89f274c`
-base preserved for PR7).
+replay targets Hermes v0.23.3 (`caafe5389ae585ef77387a962aee05b1bcf17029`).
+The [submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit) records
+the bases for PR1 through PR7. The
+[speech output topic](plans/executor-access-consistency.md#speech-output-topic)
+records its submission and release bases.
 
 | Candidate | Recorded passing checks | Scope |
 | --- | --- | --- |
@@ -521,6 +522,7 @@ base preserved for PR7).
 | PR5: selectable URL context | 74 reference, gateway-turn, and config tests | Managed no-fetch in normal and bypass sessions, validated snapshots, malformed config handling |
 | PR6: managed tool denial | 87 policy, MCP, and discovery tests plus prompt and worker persistence tests | CLI readiness, catalogs, prompt guidance, connectors, background review, direct and deferred schemas, dispatch enforcement |
 | PR7: WebApp content privacy | Design review only | Shared renderer ownership and authenticated consent storage and API remain open |
+| Speech output placement | Hermes TTS and playback tests and a Docker Desktop ARM64 controlled audio probe | Profile cache placement, gateway audio attachments, and explicit internal playback destinations |
 
 ### Limits and test ownership
 
