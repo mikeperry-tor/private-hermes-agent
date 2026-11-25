@@ -142,7 +142,8 @@ Docker Desktop (Docker Engine 29.9.3) and on ARM64 Debian 13 with native Docker
 ext4 with POSIX ACLs. Creating a device node requires host permission, which
 was unavailable on the test hosts. See
 [native Linux Docker checks](#native-linux-docker-checks) for
-the scope of the other native Docker checks.
+the scope of the other native Docker checks. Project mounts on Docker Desktop
+through WSL are unqualified.
 
 Run `make check` for mount list and admission checks. To test read-write
 sharing on your engine, build the executor images and run the scratch

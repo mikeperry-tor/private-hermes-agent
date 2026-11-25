@@ -216,76 +216,27 @@ class ProjectMountTests(unittest.TestCase):
             self.assertEqual(projects.os.environ['PODMAN_COMPOSE_PROVIDER'], str(alias))
             self.assertEqual(projects.control_locations(provider), {alias, executable})
 
-    def test_containerd_uses_the_socket_peer_when_accessible(self):
-        path = Path('/run/containerd/containerd.sock')
-        with patch.object(Path, 'is_socket', return_value=True), \
-                patch.object(Path, 'stat', return_value=SimpleNamespace(st_uid=0, st_mode=0o755)), \
-                patch.object(projects, 'linux_service_pid', return_value=71) as peer, \
-                patch.object(projects, 'output', side_effect=AssertionError('systemd probe')):
-            self.assertEqual(projects.containerd_pid(path), 71)
-        peer.assert_called_once_with(path, 'containerd', 0)
-
-    def test_containerd_requires_unambiguous_listener_without_socket_access(self):
-        path = Path('/run/containerd/containerd.sock')
-        with tempfile.TemporaryDirectory() as directory:
-            proc = Path(directory)
-            daemon = proc / '71'
-            network = daemon / 'net'
-            network.mkdir(parents=True)
-            (daemon / 'comm').write_text('containerd\n')
-            unix = network / 'unix'
-            unix.write_text(f'000: 00000002 00000000 00010000 0001 01 123 {path}\n')
-            original_stat = Path.stat
-
-            def stat_path(entry, **kwargs):
-                if entry in (path, path.parent) or entry.parent == proc:
-                    return SimpleNamespace(st_uid=0, st_mode=0o755)
-                return original_stat(entry, **kwargs)
-
-            with patch.object(Path, 'stat', stat_path), patch.object(Path, 'is_socket', return_value=True), \
-                    patch.object(projects, 'linux_service_pid', side_effect=PermissionError), \
-                    patch.object(projects, 'output', return_value='71'):
-                self.assertEqual(projects.containerd_pid(path, proc), 71)
-                unix.write_text(f'000: 00000002 00000000 00010000 0001 01 123 {path}.other\n')
-                with self.assertRaisesRegex(RuntimeError, 'could not identify'):
-                    projects.containerd_pid(path, proc)
-                unix.write_text(f'000: 00000002 00000000 00010000 0001 01 123 {path}\n')
-                other = proc / '72'
-                other.mkdir()
-                (other / 'comm').write_text('containerd\n')
-                with self.assertRaisesRegex(RuntimeError, 'could not identify'):
-                    projects.containerd_pid(path, proc)
-
-    def test_containerd_storage_must_match_the_standard_layout(self):
-        config = "root = '/var/lib/containerd'\nstate = '/run/containerd'\n[plugins]\nroot_path = ''"
-        with patch.object(Path, 'read_bytes', return_value=b'/usr/bin/containerd\x00'), \
-                patch.object(Path, 'stat', return_value=SimpleNamespace(st_uid=0)), \
-                patch.object(projects, 'output', return_value=config) as dump:
-            self.assertEqual(projects.containerd_storage(71), (
-                Path('/usr/bin/containerd'), Path('/var/lib/containerd'), Path('/run/containerd')))
-            dump.assert_called_once_with('/usr/bin/containerd', 'config', 'dump')
-            dump.return_value = config.replace('/var/lib/containerd', '/srv/containerd')
-            with self.assertRaisesRegex(RuntimeError, 'standard root'):
-                projects.containerd_storage(71)
-            dump.return_value = config.replace("root_path = ''", "root_path = '/srv/snapshots'")
-            with self.assertRaisesRegex(RuntimeError, 'snapshotter storage'):
-                projects.containerd_storage(71)
-
-    def test_native_docker_protects_reported_runtime_executables(self):
-        info = {'SecurityOptions': [], 'DockerRootDir': '/docker/graph',
+    def test_docker_on_linux_checks_the_host_mount_table_only(self):
+        socket = Path('/run/docker.sock')
+        mountinfo = '10 1 8:1 / / rw - ext4 /dev/vda1 rw\n'
+        info = {'OperatingSystem': 'Docker Desktop', 'SecurityOptions': [], 'DockerRootDir': '/docker/graph',
                 'Runtimes': {'custom': {'path': '/custom/runtime'}, 'runc': {'path': 'runc'},
                              'io.containerd.runc.v2': {}}}
         with patch.object(projects.sys, 'platform', 'linux'), patch.dict('os.environ'), \
-                patch.object(projects, 'docker_socket', return_value=Path('/run/docker.sock')), \
-                patch.object(projects, 'output', return_value=json.dumps(info)), \
+                patch.object(projects, 'docker_socket', return_value=socket), \
+                patch.object(projects, 'output', return_value=json.dumps(info)) as output, \
                 patch.object(projects, 'docker_config_paths', return_value=()), \
-                patch.object(projects, 'linux_service_pid'), patch.object(projects, 'containerd_pid'), \
-                patch.object(projects, 'containerd_storage', return_value=()), \
-                patch.object(projects, 'process_mounts'), patch.object(Path, 'read_text', return_value=''), \
-                patch.object(Path, 'read_bytes', return_value=b'dockerd\x00--containerd=/run/containerd/containerd.sock\x00'):
-            _, protected, _ = projects.engine_views('docker', Path('/home/operator'))
-        self.assertIn(Path('/custom/runtime'), protected)
-        self.assertNotIn(Path('runc'), protected)
+                patch.object(projects, 'linux_socket_peer') as peer, \
+                patch.object(projects, 'process_mounts', side_effect=AssertionError('daemon mount probe')), \
+                patch.object(Path, 'read_text', autospec=True, return_value=mountinfo) as read, \
+                patch.object(Path, 'read_bytes', side_effect=AssertionError('daemon command line probe')):
+            views, protected, _ = projects.engine_views('docker', Path('/home/operator'))
+        self.assertEqual(views, (projects.linux_mounts(mountinfo),))
+        self.assertEqual(set(protected), {socket, Path('/docker/graph'), Path('/custom/runtime'),
+                                          Path('/var/lib/containerd'), Path('/run/containerd')})
+        output.assert_called_once_with('docker', 'info', '--format', '{{json .}}')
+        peer.assert_called_once_with(socket, 'Docker', 0)
+        read.assert_called_once_with(Path('/proc/self/mountinfo'))
 
     def test_podman_protects_paths_reported_by_the_api_and_cli(self):
         socket = Path('/run/user/71/podman/podman.sock')

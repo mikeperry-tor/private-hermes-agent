@@ -67,12 +67,17 @@ def docker_socket(home, platform):
     return address_path
 
 
-def linux_service_pid(path, process, uid, *, user=False, unit=None):
+def linux_socket_peer(path, process, uid):
     with socket.socket(socket.AF_UNIX) as connection:
         connection.connect(str(path))
         pid, owner, _ = struct.unpack('3i', connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
     if owner != uid:
         raise RuntimeError(f'{SETTING} found an unexpected owner on the local {process} socket.')
+    return pid
+
+
+def linux_service_pid(path, process, uid, *, user=False, unit=None):
+    pid = linux_socket_peer(path, process, uid)
     if unit and Path(f'/proc/{pid}/comm').read_text().strip() == 'systemd':
         systemctl = ['systemctl', *(['--user'] if user else [])]
         listens = output(*systemctl, 'show', unit + '.socket', '-p', 'Listen', '--value')
@@ -87,48 +92,6 @@ def process_mounts(pid, process):
     if not pid or Path(f'/proc/{pid}/comm').read_text().strip() != process:
         raise RuntimeError(f'{SETTING} could not identify the local {process} process.')
     return linux_mounts(Path(f'/proc/{pid}/mountinfo').read_text())
-
-
-def containerd_pid(path, proc=Path('/proc')):
-    parent = path.parent.stat()
-    if (not path.is_socket() or path.stat().st_uid != 0 or parent.st_uid != 0 or
-            parent.st_mode & 0o022):
-        raise RuntimeError(f'{SETTING} requires the standard local containerd service.')
-    try:
-        return linux_service_pid(path, 'containerd', 0)
-    except PermissionError:
-        # The default root-owned socket is inaccessible to Docker-group users.
-        # A unique root-owned daemon and its listener identify the standard service.
-        pid = int(output('systemctl', 'show', 'containerd.service', '-p', 'MainPID', '--value'))
-        candidates = []
-        for comm in proc.glob('[0-9]*/comm'):
-            try:
-                if comm.parent.stat().st_uid == 0 and comm.read_text().strip() == 'containerd':
-                    candidates.append(int(comm.parent.name))
-            except (FileNotFoundError, ProcessLookupError):
-                continue
-        if candidates == [pid] and any(
-                fields[3] == '00010000' and fields[-1] == str(path)
-                for line in (proc / str(pid) / 'net/unix').read_text().splitlines()
-                if len(fields := line.split(maxsplit=7)) == 8):
-            return pid
-        raise RuntimeError(f'{SETTING} could not identify the standard local containerd listener.') from None
-
-
-def containerd_storage(pid):
-    arguments = Path(f'/proc/{pid}/cmdline').read_bytes().rstrip(b'\x00').split(b'\x00')
-    executable = Path(os.fsdecode(arguments[0]))
-    if len(arguments) != 1 or not executable.is_absolute() or executable.stat().st_uid != 0:
-        raise RuntimeError(f'{SETTING} requires containerd to use its standard service configuration.')
-    config = output(str(executable), 'config', 'dump')
-    top_level = config.partition('\n[')[0]
-    storage = (Path('/var/lib/containerd'), Path('/run/containerd'))
-    for key, path in zip(('root', 'state'), storage):
-        if not re.search(rf"""^{key}\s*=\s*(['"]){re.escape(str(path))}\1\s*$""", top_level, re.MULTILINE):
-            raise RuntimeError(f'{SETTING} requires containerd to use its standard {key} directory at {path}.')
-    if any(value.strip() not in ("''", '""') for value in re.findall(r'^\s*root_path\s*=\s*(.*)$', config, re.MULTILINE)):
-        raise RuntimeError(f'{SETTING} requires containerd to use its standard snapshotter storage.')
-    return (executable, *storage)
 
 
 def podman_compose_provider(stderr):
@@ -212,7 +175,9 @@ def engine_views(engine, home):
             backend = Path(output('/bin/ps', '-p', str(pid), '-o', 'comm='))
             if backend.parts[-4:] != ('Docker.app', 'Contents', 'MacOS', 'com.docker.backend'):
                 raise RuntimeError(f'{SETTING} requires the local Docker Desktop backend.')
-        elif sys.platform != 'linux':
+        elif sys.platform == 'linux':
+            linux_socket_peer(path, 'Docker', 0)
+        else:
             raise RuntimeError(f'{SETTING} requires Docker Desktop on macOS or native Docker on Linux.')
         # Compose, preflight, and built-in engine helpers inherit the same endpoint.
         os.environ.pop('DOCKER_CONTEXT', None)
@@ -227,19 +192,11 @@ def engine_views(engine, home):
             return (), (path, *plugins, *docker_desktop_storage(home)), darwin_mounts()
         if any(option.startswith(('name=rootless', 'name=userns')) for option in info['SecurityOptions'] or ()):
             raise RuntimeError(f'{SETTING} requires direct UID mapping on native Docker.')
-        runtime_path = Path('/run/containerd/containerd.sock')
-        dockerd_pid = linux_service_pid(path, 'dockerd', 0, unit='docker')
-        commands = Path(f'/proc/{dockerd_pid}/cmdline').read_bytes().split(b'\x00')
-        runtime = os.fsencode(runtime_path)
-        if b'--containerd=' + runtime not in commands and (b'--containerd', runtime) not in zip(commands, commands[1:]):
-            raise RuntimeError(f'{SETTING} requires dockerd to use the local containerd socket at {runtime_path}.')
-        runtime_pid = containerd_pid(runtime_path)
-        views = (process_mounts(dockerd_pid, 'dockerd'),
-                 process_mounts(runtime_pid, 'containerd'))
         runtimes = (Path(runtime['path']) for runtime in (info.get('Runtimes') or {}).values()
                     if runtime.get('path', '').startswith('/'))
-        protected = (path, runtime_path, Path(info['DockerRootDir']),
-                     *containerd_storage(runtime_pid), *runtimes, *plugins)
+        views = ()
+        protected = (path, Path(info['DockerRootDir']), Path('/var/lib/containerd'),
+                     Path('/run/containerd'), *runtimes, *plugins)
     else:
         if sys.platform != 'linux':
             raise RuntimeError(f'{SETTING} requires rootless Podman on Linux.')

@@ -233,7 +233,7 @@ can read project files, and their write policy still limits writes to
 | Engine | Permission behavior |
 | --- | --- |
 | Docker Desktop on macOS | Use the standard local Desktop socket and a directory on the home volume that Docker Desktop can share. Check file sharing and host permissions if the engine cannot mount the directory. |
-| Native Docker on Linux | Use the standard local Docker and containerd services with direct UID mapping and standard containerd storage. The host sees `runner` as UID `10000`. |
+| Native Docker on Linux | Use the standard local Docker socket and direct UID mapping. The host sees `runner` as UID `10000`. |
 | Rootless Podman on Linux | Use the local user API socket and default user namespace. The host sees `runner` as a subordinate UID. |
 
 Check `ls -ldn` in the executor to see how the mounted project appears to
@@ -244,12 +244,6 @@ Podman, derive the host ID from the default namespace:
 runner_uid=$(podman unshare awk '$1 <= 10000 && 10000 < $1 + $3 { print $2 + 10000 - $1 }' /proc/self/uid_map)
 test -n "$runner_uid"
 ```
-
-Native Docker uses containerd's system service at
-`/run/containerd/containerd.sock`, with data in `/var/lib/containerd` and
-state in `/run/containerd`. Use the packaged service command and snapshotter
-storage paths. Restart containerd after changing its configuration so the
-running service uses the settings that startup checks on disk.
 
 On Linux, use an ACL-capable ext4, XFS, or Btrfs filesystem mounted at its
 filesystem root. Install the host ACL utilities if needed. Grant access to
@@ -328,6 +322,9 @@ hard links to protected files out of it. Keep custom engine storage,
 configuration, and host executables outside shares. When preparing a share
 from a trusted local Git repository, use `git clone --no-hardlinks` to keep
 the object files independent.
+
+With Docker, use share paths that resolve to the same directories for the
+engine and the shell running `make up`.
 
 Before attaching an extra project directory, managed startup checks the host
 source for existing device nodes, sockets, other special files, and nested

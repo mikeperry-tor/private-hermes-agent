@@ -253,8 +253,9 @@ networks. This covers `make up`, offline setup and treasury jobs, and
   `create_host_path: false`).
 
 Managed startup adds configured project binds only to the executor. It checks
-sources against the local engine's filesystem view before starting containers,
-then checks the selected mount sources again before creating the executor.
+sources from the host before starting containers. On rootless Podman, it
+also compares the API service's filesystem view. It checks the selected
+mount sources again before creating the executor.
 Project shares grant the executor write access to host files under the chosen
 directories. See [security considerations for shared projects](configuration.md#security-considerations-for-shared-projects).
 
