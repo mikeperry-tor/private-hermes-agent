@@ -456,6 +456,10 @@ CONTAINER_ENGINE=podman COMPUTER_USE_ENABLED=true WEBAPP_BROWSER_PYTHON=/path/to
   and trailing spaces), replay and reattach, resize, Ctrl-C, explicit close,
   mid-handshake tab close reaping the local SSH process, SSH key and host-key
   failures, executor outage, and fresh-shell recovery.
+- At local ingress, Chromium verifies that model reads follow the selected
+  Code tab, checks the visible output and bounded scrollback, and confirms that
+  requesting Agent output is refused. It also sends selected Agent output
+  through **Add to chat**.
 - For targeted terminal reruns, use
   `python3 tests/webapp_smoke.py --terminal-only` (lean executor) or with
   `COMPUTER_USE_ENABLED=true` (desktop executor).

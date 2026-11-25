@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import shlex
 import subprocess
@@ -9,7 +10,7 @@ import sys
 import time
 from urllib.parse import quote
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 import smoke
 from webapp_smoke import wait_ready
 
@@ -232,6 +233,92 @@ else:
 """)
 
 
+def check_model_terminal_read(page, mode):
+    """Use the renderer's selected tab and the model tool through authenticated chat."""
+    streams = []
+
+    def watch(socket):
+        if '/api/host-terminal?' in socket.url:
+            output = bytearray()
+            streams.append(output)
+
+            def append(frame):
+                if isinstance(frame, bytes):
+                    output.extend(frame)
+
+            socket.on('framereceived', append)
+
+    page.on('websocket', watch)
+    page.get_by_text('ready', exact=True).first.wait_for(timeout=30000)
+    editor = page.locator('[data-slot="composer-rich-input"]').first
+    send = page.get_by_role('button', name='Send', exact=True).first
+    editor.fill('qualification-stream')
+    send.click()
+    page.get_by_text('PRIVATE-CHAT-STREAM-OK', exact=False).first.wait_for(timeout=30000)
+    page.keyboard.press('Control+Backquote')
+    tabs = page.get_by_role('tablist', name='Terminals')
+    terminal_input = page.locator('[data-interactive-terminal]:not(.invisible) .xterm-helper-textarea')
+    prefix = mode.upper()
+    first_history, first_visible, second = [f'{prefix}-{secrets.token_hex(10)}' for _ in range(3)]
+
+    def wait_for_stream(index, marker=None):
+        for _ in range(300):
+            if len(streams) > index and streams[index] and (marker is None or marker.encode() in streams[index]):
+                return
+            page.wait_for_timeout(100)
+        raise AssertionError('Terminal did not start or print its fixture marker')
+
+    def shell(index, command, marker):
+        wait_for_stream(index)
+        terminal_input.first.focus()
+        page.keyboard.insert_text(command)
+        page.keyboard.press('Enter')
+        wait_for_stream(index, marker)
+
+    def print_marker(marker):
+        label, nonce = marker.split('-', 1)
+        return f"printf '%s-%s\\n' {label} {nonce}"
+
+    shell(0, f"{print_marker(first_history)}; seq 1 80; {print_marker(first_visible)}", first_visible)
+    previous_tab = tabs.get_by_role('tab').first
+    tabs.get_by_role('button', name='New terminal', exact=True).click()
+    expect(tabs.get_by_role('tab')).to_have_count(2)
+    shell(1, print_marker(second), second)
+    results = page.get_by_text(re.compile(r'^PRIVATE-TERMINAL-READ-(OK|WRONG|TOOL-MISSING)$'))
+
+    def read(index, marker, other_tab, excluded, view):
+        editor.fill(f'qualification-terminal-read {marker} {other_tab} {excluded} {view}')
+        send.click()
+        expect(results).to_have_count(index, timeout=45000)
+        assert results.nth(index - 1).inner_text() == 'PRIVATE-TERMINAL-READ-OK'
+
+    read(1, second, first_visible, first_history, 'viewport')
+    previous_tab.click()
+    read(2, first_visible, second, first_history, 'viewport')
+    read(3, first_history, second, first_visible, 'scrollback')
+    print(f'PASS: {mode} model terminal read checks the selected tab for viewport and scrollback', flush=True)
+
+    if mode == 'agent':
+        marker = f'AGENT-{secrets.token_hex(10)}'
+        editor.fill(f'qualification-terminal-selection {marker}')
+        shell(0, f"printf '\\033[2J\\033[H'; {print_marker(marker)}", marker)
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        screen = page.locator('[data-interactive-terminal]:not(.invisible) .xterm-screen').first
+        box = screen.bounding_box()
+        assert box is not None
+        page.mouse.move(box['x'] + 2, box['y'] + 5)
+        page.mouse.down()
+        page.mouse.move(box['x'] + min(box['width'] - 3, 360), box['y'] + 55, steps=8)
+        page.mouse.up()
+        page.get_by_role('button', name=re.compile(r'^Add to chat')).click()
+        editor.locator('[data-ref-kind="terminal"]').wait_for(timeout=10000)
+        send.click()
+        sent = page.get_by_text(re.compile(r'^PRIVATE-TERMINAL-SELECTION-(OK|WRONG)$'))
+        sent.wait_for(timeout=30000)
+        assert sent.inner_text() == 'PRIVATE-TERMINAL-SELECTION-OK'
+        print('PASS: operator can select Agent terminal output and send it to chat', flush=True)
+
+
 def run(password_path, mode):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=[
@@ -248,6 +335,8 @@ def run(password_path, mode):
                 page.wait_for_function('() => window.hermesDesktop?.terminal !== undefined')
                 receiver_mode = 'executor' if mode == 'code' else 'gateway'
                 assert page.evaluate('window.__HERMES_TERMINAL_ENVIRONMENT__') == receiver_mode
+                if origin == LOCAL:
+                    check_model_terminal_read(page, mode)
                 open_shell(page, environment='gateway' if mode == 'code' else 'executor', action='start')
                 page.wait_for_function('() => testShell.closed !== null', timeout=30000)
                 assert page.evaluate('testShell.meta === null && testShell.closed.reason.includes("environment changed")')

@@ -582,9 +582,17 @@ to match the final image. Recheck the documented reason for the empty Hermes
   and competing answers from other viewers. The desktop tool matrix passed
   all four content modes with computer use enabled and disabled. The combined
   release passed the same 147 Python tests. The Docker Desktop ARM64 package
-  built with matching TUI entrypoints. `make hermes-ui-test` passed the
-  renderer type check and 271 tests against the packaged WebApp. The real
-  browser fixture for terminal reads still needs to run against the test stack.
+  built with matching TUI entrypoints, and all 13 changed Python modules match
+  the full patch series. `make hermes-ui-test` passed the renderer type check
+  and 271 tests against the packaged WebApp.
+- Chromium 156.0.8078.4 on macOS passed the authenticated browser fixture
+  against that image on Docker Desktop ARM64. The fixture used a separate
+  internal network, OpenSSH executor, deterministic inference service, and
+  loopback proxy. It checked both Code tabs, visible and bounded scrollback
+  reads, refusal in Agent mode, and explicit sharing of Agent output through
+  **Add to chat**. Saved gateway checks covered relay sockets and renderer
+  dispatch. The full `make webapp-test` and `make chat` checks across the
+  planned engines remain open.
 - The SSH file-state design review found host filesystem reads in overwrite
   protection, read tracking, and the path checks for credentials, device
   files, instruction files, and skills. The next change uses executor file
