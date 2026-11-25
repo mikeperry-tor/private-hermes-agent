@@ -748,9 +748,25 @@ fallback, and strict staging with a removed cached cwd. Python read the
 executor bytes when a same-name file existed in Hermes. Browser model-loop
 and both-engine package checks remain open.
 
-Executor-backed discovery and optional workspace guards are under review.
-Legacy command callbacks, project context, Git actions, delegation, and
-editor session paths remain open.
+A disposable image built from the pinned release replay passed a real SSH
+chat with different files at the same path in Hermes and the executor. The
+model received the executor's instructions, file contents, and Git diff.
+The same test checked that the executor refused a symlink outside the
+project. Independent context review also found that paths in Hermes caches
+needed separate ownership checks. The native attachment follow-up binds a
+staged handle to the owning session and passed 52 focused tests. The
+full context review and runtime checks for `/init` and remapped projects
+remain open.
+
+The chat-scoped WebApp files draft passed 200 Python tests with ten Windows
+skips and 107 renderer tests. The tests cover two chats with different bytes
+at the same relative path and a download ticket after the chat moves. Real
+browser qualification is pending.
+
+Executor-backed discovery, Git actions, delegation, and optional workspace
+guards remain open. The Linux cron supervisor passed a focused fixture for
+timeout, cancellation, and cleanup of a detached descendant. The scheduled
+job lifecycle, delivery, and upgrade fixture remain open.
 
 ### Speech output topic
 
