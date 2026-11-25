@@ -1,7 +1,8 @@
 # Use the SSH executor for chat shells and project work
 
-Status: proposed. Implementation, Docker tests of the Hermes branches, and
-packaged qualification are pending.
+Status: in progress. The wrapper passes applied project destinations to both
+clients. Hermes consumers, Docker tests of the Hermes branches, and packaged
+qualification are pending.
 
 - Wrapper branch: `executor-access-consistency`. Compare the complete change
   with `a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The plan under review
@@ -498,6 +499,30 @@ to match the final image. Recheck the documented reason for the empty Hermes
 `/workspace` once session validation uses SSH.
 
 ## Qualification and completion
+
+### Phase 1 progress
+
+- Wrapper `fa21d048ed165201f0af4be393a37d51e72aed8f` transports the exact
+  attached roots through managed config. `make chat` checks the running
+  gateway's policy against the executor and uses the applied mode.
+- `make check` passed 242 tests, Compose model validation, and Python
+  compilation. `make help`, the local Markdown link check, and
+  `git diff --check` passed.
+- A network-disabled Compose fixture passed on macOS Docker Desktop 29.9.3
+  and on Linux ARM64 ext4 with Docker 29.10.0 and rootless Podman 5.4.2.
+  Each engine used Docker Compose 5.7.1. The fixture compared the raw Hermes
+  policy on both containers for nested paths with spaces, dollar signs, and
+  Unicode. It also checked an unapplied mode edit, a concurrent one-off
+  container, stopped and mismatched executor refusal, and clearing all shares.
+  The fixture exercises the host launcher with a test entrypoint. Full stack,
+  actual chat, and browser checks remain pending.
+- Independent design and wrapper reviews identified one-off service selection
+  and YAML Unicode round-trip failures. Compose now excludes one-off
+  containers from service selection, and the two YAML inputs preserve literal
+  paths. The Hermes consumer must read the strict raw managed config and
+  verify that a conflicting profile dotenv value cannot expand a path.
+
+### Completion checks
 
 1. Obtain independent design review before implementation. Confirm each
    call chain and its upstream owner. For each distinct path that can read,
