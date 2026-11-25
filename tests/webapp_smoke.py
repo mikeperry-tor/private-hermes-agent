@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned-image ingress qualification; simulated TLS, no Funnel enrollment or inference."""
+"""Pinned-image ingress checks with simulated TLS and deterministic local inference."""
 import json
 from contextlib import ExitStack
 import os

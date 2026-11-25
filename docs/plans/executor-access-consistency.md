@@ -530,10 +530,13 @@ to match the final image. Recheck the documented reason for the empty Hermes
   open. The Podman run stopped during source admission for `/run`. Its retry
   stopped while creating the Tor uplink network during the prior-release setup.
 - Linux Docker passed `make test` and `make hermes-ui-test` (218 renderer
-  tests) for the wrapper policy commit. `make webapp-test` passed its terminal
-  checks and timed out waiting for the browser chat to show `ready`. The
-  prior revision reproduced the timeout, and the retry after firewall
-  approval reached the same point.
+  tests) with the rebuilt checkpoint package. The prior revision and the
+  retry after firewall approval both timed out waiting for the browser chat
+  to show `ready`. The shared test overlay left the fresh profile's model
+  unset. The WebApp fixture now selects its deterministic local model, and
+  browser login, terminal streaming, and chat pass on Linux Docker. The
+  Docker and Podman Compose models both select that model with the operator's
+  `TEEP_ENABLED=false`.
 - The checkpoint changes are in `fix/ssh-workspace` at
   `76f7e68e2a74a3ef021cf446335dd3fa5cb8b600`. The release topic is
   `3aa5db2279f56e891e4e5108028e7603a129e7f1`, and the combined release

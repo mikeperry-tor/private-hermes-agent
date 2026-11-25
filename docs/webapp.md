@@ -441,9 +441,10 @@ Interactive opt-in and streaming media remain deferred.
   raster and size limits, and authentication and consent rules. (Does not itself
   prove Tor routing.)
 - **`make webapp-test`:** Runs against production images with seeded history,
-  local media, TCP and TLS canaries, and simulated HTTPS on ports `19120` and
-  `10000`. All four content modes run on Chromium 156.0.8078.4, Firefox 157.0,
-  and WebKit 27.2 on ARM64; Chromium additionally runs `ask` consent over HTTPS
+  deterministic local inference, local media, TCP and TLS canaries, and
+  simulated HTTPS on ports `19120` and `10000`. All four content modes run on
+  Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 on ARM64. Chromium
+  additionally runs `ask` consent over HTTPS
   plus ingress auth, cookies, origin checks, terminals, and a live WebSocket
   chat turn (Firefox and WebKit run focused HTTPS auth and navigation checks).
   Direct DNS and preconnect NetLog observation is Chromium-only. Although
