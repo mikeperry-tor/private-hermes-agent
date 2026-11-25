@@ -733,13 +733,24 @@ and move requests were refused. The updated native selection tests passed
 90 checks. The test image precedes the change to show a saved executor
 directory in session information during an outage.
 
-The picker folder-creation route, executor-backed discovery, and optional
-workspace guards are under review. The initial Python placement tests
-cover persistent kernel state, switching, separate owners, per-call
-execution, and strict staging using a local Bash transport fixture.
-Qualification of that implementation over SSH is pending. Legacy command
-callbacks, project context, Git actions, delegation, and editor session
-paths remain open.
+Native picker commit `fdf6d6c0b7c144a060b8844f6709c476f139be40` passed 31
+Python tests with two skips, 25 renderer tests, and all 22 upstream
+checks. An authenticated browser created a folder on the host-backed
+executor share, selected it, and started a chat there. The model's
+terminal returned the new executor path, and the folder stayed absent
+from Hermes. Independent review accepted the same-build managed route
+and found that older gateways need an update to expose folder creation.
+
+The Docker Desktop ARM64 Python tool fixture used real SSH. It covered
+relative reads and writes, retained state across requests and replacement
+SSH connections, isolated session owners, project switches, the per-call
+fallback, and strict staging with a removed cached cwd. Python read the
+executor bytes when a same-name file existed in Hermes. Browser model-loop
+and both-engine package checks remain open.
+
+Executor-backed discovery and optional workspace guards are under review.
+Legacy command callbacks, project context, Git actions, delegation, and
+editor session paths remain open.
 
 ### Speech output topic
 
