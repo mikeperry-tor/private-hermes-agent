@@ -605,8 +605,21 @@ to match the final image. Recheck the documented reason for the empty Hermes
   pagination, and programmatic reads. The WebApp and TUI output hashes match
   the preceding shell package. The exported
   patch SHA-256 is `1f247348e2c7fa56b5a90d2e5b2509ed93a1b3b23fd05c22916c3c8d35f59bfc`.
-  SSH search results and write guards remain open. Managed write roots and
-  shared file permissions remain in the workspace topic.
+  SSH write guards remain open. Managed write roots and shared file permissions
+  remain in the workspace topic.
+- SSH `search_files` checks candidate paths on the executor before matching,
+  counting, or paging. It keeps filenames and diagnostics separate from
+  matching lines. The native topic is `23be2f3b5705cc283dc564d272381d262d004f21`,
+  the release topic is `ae43f3bcb093799a9d89d1d9c1d80e300fd12ea5`, and the
+  combined replay is `ffc64df1dcd433cfa5efd5962df51f38a30972f1`. The combined
+  tree passed 171 focused tests with eight skips. The exported patch SHA-256
+  is `a51576f0955acfe5682c0e713e2b5a6f4bdd649896bc7b5f7246343f18e19d32`.
+  The image build produced the same WebApp and TUI receipts as the guarded
+  reader package. The Docker Desktop ARM64 image passed an isolated OpenSSH
+  and BusyBox fixture for literal paths, hidden regular files, protected
+  aliases, redaction, pagination, and multiple roots. Guarded recursive content
+  search starts a matcher for each permitted file, which adds time on broad
+  searches.
 - The classic chat now reads the shell directory from its session owner in
   both managed modes. The local topic is `c4700df74951bf75dfb9bc5b2332c7f6397d98cc`,
   the release topic is `b20fe45d957aa561175138cc3e18e6aa220cb20c`, and the

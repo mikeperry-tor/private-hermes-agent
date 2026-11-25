@@ -559,7 +559,7 @@ index 0c2e904a6..27558ff4a 100644
 
  def _stored_prompt_matches_runtime(agent, prompt: str) -> bool:
 diff --git a/agent/file_safety.py b/agent/file_safety.py
-index ebcd64520..9ac3030ab 100644
+index ebcd64520..50406a231 100644
 --- a/agent/file_safety.py
 +++ b/agent/file_safety.py
 @@ -9,11 +9,12 @@ from __future__ import annotations
@@ -591,7 +591,7 @@ index ebcd64520..9ac3030ab 100644
      if normalized in _BLOCKED_DEVICE_PATHS:
          return True
      return normalized.startswith("/proc/") and normalized.endswith(_BLOCKED_PROC_SUFFIXES)
-@@ -536,7 +537,13 @@ def is_project_env_basename(name: str) -> bool:
+@@ -536,7 +537,19 @@ def is_project_env_basename(name: str) -> bool:
      return name.casefold() in _BLOCKED_PROJECT_ENV_BASENAMES
 
 
@@ -602,11 +602,17 @@ index ebcd64520..9ac3030ab 100644
 +    return files, ("skills/.hub", *(entry[0] for entry in _READ_DENIED_DIRS))
 +
 +
++def ssh_read_path_rules() -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
++    """Path-only rules used while walking search candidates on an SSH executor."""
++    return (tuple(sorted(_BLOCKED_PROJECT_ENV_BASENAMES)),
++            tuple(sorted(_BLOCKED_DEVICE_PATHS)), _BLOCKED_PROC_SUFFIXES)
++
++
 +def get_read_block_error(path: str, *, ssh_path: bool = False) -> Optional[str]:
      """Return an error message when a read targets a denied Hermes path.
 
      Blocked: device/fd/proc files that hang reads or leak process state (``/dev/zero``,
-@@ -548,6 +555,8 @@ def get_read_block_error(path: str) -> Optional[str]:
+@@ -548,6 +561,8 @@ def get_read_block_error(path: str) -> Optional[str]:
      Callers that resolve relative paths against a non-process cwd (e.g.
      ``TERMINAL_CWD``) MUST pass an absolute path: ``resolve()`` here anchors at
      the process cwd, so a relative ``"auth.json"`` would miss the denylist.
@@ -615,7 +621,7 @@ index ebcd64520..9ac3030ab 100644
      """
      # NT/device-namespace check runs on the RAW string, before resolve():
      # on Windows, resolving \??\UNC\host\share (or \\?\UNC\, GLOBALROOT)
-@@ -557,13 +566,20 @@ def get_read_block_error(path: str) -> Optional[str]:
+@@ -557,13 +572,20 @@ def get_read_block_error(path: str) -> Optional[str]:
      nt_error = get_nt_namespace_error(path, verb="Read")
      if nt_error:
          return nt_error
@@ -11706,10 +11712,10 @@ index d18e65acc..0187fcee9 100644
          return env._build_ssh_command()
      return _plugin_exec_prefix(env, user=user, interactive=interactive)
 diff --git a/tools/file_operations.py b/tools/file_operations.py
-index f8168e070..b174e5a1a 100644
+index f8168e070..f20142e47 100644
 --- a/tools/file_operations.py
 +++ b/tools/file_operations.py
-@@ -16,14 +16,15 @@ import difflib
+@@ -16,25 +16,37 @@ import difflib
  import hashlib
  import json
  import logging
@@ -11723,11 +11729,19 @@ index f8168e070..b174e5a1a 100644
 
  from tools.binary_extensions import has_binary_extension
 -from agent.file_safety import get_write_denied_error
-+from agent.file_safety import get_write_denied_error, ssh_read_protected_entries
++from agent.file_safety import get_write_denied_error, ssh_read_path_rules, ssh_read_protected_entries
  from tools.file_operations_common import (
-     ExecuteResult, PatchResult, ReadResult, SearchResult, WriteResult,
+-    ExecuteResult, PatchResult, ReadResult, SearchResult, WriteResult,
++    ExecuteResult, PatchResult, ReadResult, SearchMatch, SearchResult, WriteResult,
      _UTF8_BOM, _detect_line_ending, _has_bom, _normalize_line_endings, _strip_bom,
-@@ -35,6 +36,188 @@ from tools import file_operations_native as _native_io
+     _strip_terminal_fence_leaks, filename_match_key, normalize_read_pagination,
+     normalize_search_pagination)
+ from tools.file_operations_lint import LINTERS_INPROC, LintMixin, _FAIL_CLOSED_INPROC_EXTS
+-from tools.file_operations_search import SearchMixin
++from tools.file_operations_search import SearchMixin, _pattern_has_regex_newline
++from tools.file_operations_ssh_path import SSH_PATH_STATE
++from tools.file_operations_ssh_search import SSH_SEARCH
+ from tools import file_operations_native as _native_io
 
  logger = logging.getLogger(__name__)
 
@@ -11740,7 +11754,370 @@ index f8168e070..b174e5a1a 100644
 +    secret_file: bool = False
 +
 +
-+_SSH_PATH_STATE = """\
+ # Controller home; SearchMixin reads it (tests monkeypatch it here).
+ _HOME = str(Path.home())
+
+@@ -752,23 +764,111 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+         (``b'\\xfe\\xff'``) embedded in a ``-c`` program. ``exec`` decodes
+         and runs it unchanged.
+         """
++        return self._exec(self._python_snippet_command(snippet, py or self._python_interpreter_cmd()))
++
++    @staticmethod
++    def _python_snippet_command(snippet: str, py: str) -> str:
+         encoded = base64.b64encode(snippet.encode("utf-8")).decode("ascii")
+-        if py is None:
+-            py = self._python_interpreter_cmd()
+-        return self._exec(
+-            f"{py} -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
++        return f"{py} -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
++
++    def _framed_ssh_file_output(self, snippet: str) -> str:
++        command = self._python_snippet_command(snippet, "python3 -I")
++        segments, status, reply = self._fenced_read(command)
++        if reply.exit_code != 0 or status != 0 or not segments:
++            raise ValueError("The SSH file operation could not verify the inspected path.")
++        return segments[0]
++
++    def _ssh_file_value(self, expression: str):
++        return json.loads(self._framed_ssh_file_output(SSH_PATH_STATE + f"\nprint(json.dumps({expression}))\n"))
++
++    def inspect_ssh_path(self, path: str, *, protect_read: bool = False) -> SSHPathState:
++        """Resolve and inspect a path in the SSH filesystem before a guarded operation."""
++        if not path.startswith(("/", "~")):
++            raise ValueError("Cannot determine the absolute SSH path. Use an absolute executor path.")
++        protected = ssh_read_protected_entries() if protect_read else None
++        try:
++            resolved, kind, info, denied, secret = self._ssh_file_value(f"inspect_path({path!r}, {protected!r})")
++            if not isinstance(resolved, str) or not resolved.startswith("/"):
++                raise ValueError
++            if type(denied) is not bool or type(secret) is not bool:
++                raise ValueError
++            if kind == "absent" and info is None:
++                return SSHPathState(resolved, kind, None, denied, secret)
++            if kind not in ("regular", "directory", "special"):
++                raise ValueError
++            if not isinstance(info, list) or len(info) != 5 or any(type(value) is not int for value in info):
++                raise ValueError
++            return SSHPathState(resolved, kind, tuple(info), denied, secret)
++        except (TypeError, ValueError):
++            raise ValueError(f"Could not inspect SSH file state for {path!r}.") from None
++
++    def read_inspected_ssh_file(self, state: SSHPathState, offset: int, limit: int) -> ReadResult:
++        """Read the page and digest from the same executor file descriptor."""
++        if state.kind == "absent":
++            return self._suggest_similar_files(state.path, ssh_path=True)
++        if state.kind != "regular" or state.metadata is None:
++            return self._not_regular_error(state.path)
++        file_size = state.metadata[2]
++        if self._is_image(state.path):
++            return self._image_redirect_result(file_size)
++        from tools.tool_output_limits import get_max_line_length
++
++        end = offset + limit - 1
++        clamp = 4 * get_max_line_length() + 1
++        try:
++            encoded, encoded_sample, total, newline, observed_size, digest = self._ssh_file_value(
++                f"read_page({state.path!r}, {state.metadata!r}, {offset}, {end}, {clamp})")
++            if type(total) is not int or type(newline) is not bool or type(observed_size) is not int:
++                raise ValueError
++            page_bytes = base64.b64decode(encoded, validate=True)
++            page = page_bytes.decode("utf-8", "replace")
++            sample = base64.b64decode(encoded_sample, validate=True)
++            checksum = bytes.fromhex(digest)
++            if len(checksum) != hashlib.sha256().digest_size:
++                raise ValueError
++        except (TypeError, ValueError):
++            return ReadResult(error=f"Could not read the inspected SSH file {state.path!r}. Read it again before editing.")
++        if self._is_likely_binary_bytes(sample):
++            text = self._try_read_utf16(state.path, offset, limit, observed_size, ssh_state=state)
++            if text is not None:
++                return text
++            return ReadResult(is_binary=True, file_size=observed_size,
++                              error=f"Cannot read binary file '{state.path}' ({describe_binary_file(sample, observed_size)}).")
++        display = _strip_terminal_fence_leaks(page)
++        read_result = self._assemble_read_result(
++            display, offset=offset, end_line=end, total_lines=total,
++            file_size=observed_size, file_ends_with_newline=newline,
+         )
++        if observed_size == file_size and display == page and page.encode("utf-8") == page_bytes:
++            read_result._snapshot = (*state.metadata, checksum)
++        return read_result
++
++    def read_inspected_ssh_bytes(self, state: SSHPathState, maximum: int) -> ReadResult:
++        """Supply a document extractor with bytes from the inspected regular file."""
++        if state.kind != "regular" or state.metadata is None:
++            return self._not_regular_error(state.path)
++        file_size = state.metadata[2]
++        if file_size > maximum:
++            return ReadResult(error=f"SSH file exceeds the {maximum}-byte read limit.", file_size=file_size)
++        try:
++            encoded = self._ssh_file_value(f"read_bytes({state.path!r}, {state.metadata!r}, {maximum})")
++            if not isinstance(encoded, str):
++                raise ValueError
++        except (TypeError, ValueError):
++            return ReadResult(error=f"Could not read the inspected SSH file {state.path!r}.")
++        return ReadResult(base64_content=encoded, file_size=file_size, is_binary=True)
+
+     def _try_read_utf16(self, path: str, offset: int, limit: int,
+-                        file_size: int) -> Optional[ReadResult]:
++                        file_size: int, *, ssh_state: SSHPathState | None = None) -> Optional[ReadResult]:
+         """Read ``path`` as UTF-16 transcoded to UTF-8, or None (caller falls back
+         to the binary-file error). Skips known-binary extensions and files over
+         10 MiB. ``path`` must already be expanded."""
+         if has_binary_extension(path) or file_size > self._UTF16_MAX_BYTES:
+             return None
+-        snippet = (
++        opener = f"open_regular(p, {ssh_state.metadata!r})" if ssh_state else "open(p, 'rb')"
++        snippet = (SSH_PATH_STATE if ssh_state else "") + (
+             "import sys, json, os\n"
+-            f"p = {json.dumps(path)}\n"
++            f"p = {path!r}\n"
+             f"offset = {int(offset)}\n"
+             f"limit = {int(limit)}\n"
+             f"MAX = {self._UTF16_MAX_BYTES}\n"
+@@ -777,7 +877,7 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+             "    size = os.path.getsize(p)\n"
+             "    if size > MAX:\n"
+             "        print('HERMES_UTF16:NO'); sys.exit(0)\n"
+-            "    with open(p, 'rb') as f:\n"
++            f"    with {opener} as f:\n"
+             "        data = f.read()\n"
+             "    sample = data[:SAMPLE]\n"
+             "    enc = None\n"
+@@ -809,13 +909,20 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+             "    print('HERMES_UTF16:NO'); sys.exit(0)\n"
+         )
+
+-        result = self._exec_python_snippet(snippet)
+-        if result.exit_code != 0 and "python3" in (result.stdout or ""):
+-            result = self._exec_python_snippet(snippet, py="python")
+-
+-        stdout = _strip_terminal_fence_leaks(result.stdout or "")
++        if ssh_state:
++            try:
++                stdout = self._framed_ssh_file_output(snippet)
++            except ValueError:
++                return None
++        else:
++            result = self._exec_python_snippet(snippet)
++            if result.exit_code != 0 and "python3" in (result.stdout or ""):
++                result = self._exec_python_snippet(snippet, py="python")
++            if result.exit_code != 0:
++                return None
++            stdout = _strip_terminal_fence_leaks(result.stdout or "")
+         marker = stdout.find("HERMES_UTF16:OK")
+-        if result.exit_code != 0 or marker < 0:
++        if marker < 0:
+             return None
+         payload = stdout[marker + len("HERMES_UTF16:OK"):].strip()
+         try:
+@@ -1198,60 +1305,78 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+             file_size=file_size, truncated=truncated, hint=hint,
+             truncated_lines=True if truncated_lines else None)
+
+-    def _unicode_variant_match(self, path: str) -> Optional[str]:
++    def _unicode_variant_match(self, path: str, *, ssh_path: bool = False) -> Optional[str]:
+         """On-disk spelling of a file whose name is unicode-equivalent to ``path``
+         (``filename_match_key``). Returns the entry only when EXACTLY one
+         matches — several candidates = homoglyph collision, guessing would read the
+         wrong file."""
+-        dir_path = os.path.dirname(path) or "."
+-        filename = os.path.basename(path)
++        path_module = posixpath if ssh_path else os.path
++        dir_path = path_module.dirname(path) or "."
++        filename = path_module.basename(path)
+         if not filename:
+             return None
+         target = filename_match_key(filename)
+-        ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null")
+-        if ls_result.exit_code != 0 or not ls_result.stdout.strip():
+-            return None
++        if ssh_path:
++            entries = self._ssh_directory_names(dir_path)
++        else:
++            ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null")
++            if ls_result.exit_code != 0 or not ls_result.stdout.strip():
++                return None
++            entries = _strip_terminal_fence_leaks(ls_result.stdout).splitlines()
+         candidates = [
+-            entry for entry in _strip_terminal_fence_leaks(ls_result.stdout).splitlines()
++            entry for entry in entries
+             if entry and entry != filename and filename_match_key(entry) == target]
+         if len(candidates) == 1:
+-            return os.path.join(dir_path, candidates[0]) if dir_path != "." or "/" in path else candidates[0]
++            return path_module.join(dir_path, candidates[0]) if dir_path != "." or "/" in path else candidates[0]
+         return None
+
+-    def _suggest_similar_files(self, path: str) -> ReadResult:
++    def _ssh_directory_names(self, path: str, limit: int | None = None) -> list[str]:
++        try:
++            entries = self._ssh_file_value(f"directory_names({path!r}, {limit!r})")
++        except ValueError:
++            return []
++        if not isinstance(entries, list) or not all(isinstance(name, str) and "/" not in name for name in entries):
++            return []
++        return entries
++
++    def _suggest_similar_files(self, path: str, *, ssh_path: bool = False) -> ReadResult:
+         """"File not found" result listing up to 5 similar names from the same directory."""
+-        dir_path = os.path.dirname(path) or "."
+-        filename = os.path.basename(path)
+-        basename_no_ext = os.path.splitext(filename)[0].lower()
+-        ext = os.path.splitext(filename)[1].lower()
++        path_module = posixpath if ssh_path else os.path
++        dir_path = path_module.dirname(path) or "."
++        filename = path_module.basename(path)
++        basename_no_ext = path_module.splitext(filename)[0].lower()
++        ext = path_module.splitext(filename)[1].lower()
+         lower_name = filename.lower()
+-        ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null | head -50")
++        if ssh_path:
++            entries = self._ssh_directory_names(dir_path, 50)
++        else:
++            ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null | head -50")
++            entries = ls_result.stdout.strip().split('\n') if ls_result.exit_code == 0 else []
+         scored: list = []  # (score, filepath) — higher is better
+-        if ls_result.exit_code == 0 and ls_result.stdout.strip():
+-            for f in ls_result.stdout.strip().split('\n'):
+-                if not f:
+-                    continue
+-                lf = f.lower()
+-                score = 0
+-                if lf == lower_name:
+-                    score = 100
+-                elif os.path.splitext(f)[0].lower() == basename_no_ext:  # config.yml vs config.yaml
+-                    score = 90
+-                elif lf.startswith(lower_name) or lower_name.startswith(lf):
+-                    score = 70
+-                elif lower_name in lf:
+-                    score = 60
+-                elif lf in lower_name and len(lf) > 2:
+-                    score = 40
+-                elif ext and os.path.splitext(f)[1].lower() == ext:
+-                    common = set(lower_name) & set(lf)
+-                    if len(common) >= max(len(lower_name), len(lf)) * 0.4:
+-                        score = 30
+-                # Near-miss spelling (AGENT.md -> AGENTS.md) the substring checks miss.
+-                if score == 0 and difflib.SequenceMatcher(None, lower_name, lf).ratio() >= 0.8:
+-                    score = 50
+-                if score > 0:
+-                    scored.append((score, os.path.join(dir_path, f)))
++        for f in entries:
++            if not f:
++                continue
++            lf = f.lower()
++            score = 0
++            if lf == lower_name:
++                score = 100
++            elif path_module.splitext(f)[0].lower() == basename_no_ext:  # config.yml vs config.yaml
++                score = 90
++            elif lf.startswith(lower_name) or lower_name.startswith(lf):
++                score = 70
++            elif lower_name in lf:
++                score = 60
++            elif lf in lower_name and len(lf) > 2:
++                score = 40
++            elif ext and path_module.splitext(f)[1].lower() == ext:
++                common = set(lower_name) & set(lf)
++                if len(common) >= max(len(lower_name), len(lf)) * 0.4:
++                    score = 30
++            # Near-miss spelling (AGENT.md -> AGENTS.md) the substring checks miss.
++            if score == 0 and difflib.SequenceMatcher(None, lower_name, lf).ratio() >= 0.8:
++                score = 50
++            if score > 0:
++                scored.append((score, path_module.join(dir_path, f)))
+         scored.sort(key=lambda x: -x[0])
+         return ReadResult(error=f"File not found: {path}", not_found=True,
+                           similar_files=[fp for _, fp in scored[:5]])
+@@ -1691,6 +1816,48 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+
+     # --- SEARCH -------------------------------------------------------------
+
++    def search_ssh(self, pattern: str, path: str, target: str, file_glob: str | None,
++                   limit: int, offset: int, output_mode: str, context: int,
++                   order: str, alternatives: tuple[str, ...] = ()) -> SearchResult:
++        from agent.redact import _is_secret_file_arg, redact_sensitive_text
++
++        if target == "files" and order not in {"discovery", "modified"}:
++            return SearchResult(error=f"Invalid file search order {order!r}.")
++        if target != "files" and output_mode not in {"content", "files_only", "count"}:
++            return SearchResult(error=f"Invalid content search output mode {output_mode!r}.")
++        args = (path, ssh_read_protected_entries(), ssh_read_path_rules(), pattern, target, file_glob,
++                output_mode, max(0, int(context or 0)), order, offset, limit,
++                _pattern_has_regex_newline(pattern), alternatives)
++        try:
++            data = json.loads(self._framed_ssh_file_output(
++                SSH_PATH_STATE + SSH_SEARCH + f"\nprint(json.dumps(search(*{args!r})))\n"))
++            if data.get("error"):
++                return SearchResult(error=data["error"])
++            result = SearchResult(total_count=data["total"], truncated=data["truncated"])
++            if data["skipped"]:
++                result.warning = "The SSH search skipped unreadable or changed paths."
++            if data.get("multiple_roots"):
++                note = "The SSH search resolved the supplied paths separately."
++                result.warning = f"{result.warning} {note}" if result.warning else note
++            if target == "files":
++                result.files = data["rows"]
++            elif output_mode == "files_only":
++                result.files = [name for name, _, _, _ in data["rows"]]
++            elif output_mode == "count":
++                result.counts = {name: count for name, _, _, count in data["rows"]}
++            else:
++                result.matches = [
++                    SearchMatch(path=name, line_number=line,
++                                content=redact_sensitive_text(
++                                    text, file_read=True,
++                                    secret_file=(secret or _is_secret_file_arg(name, ssh_path=True)
++                                                 or _is_secret_file_arg(resolved, ssh_path=True))))
++                    for name, resolved, secret, (line, text) in data["rows"]
++                ]
++            return result
++        except (KeyError, TypeError, ValueError):
++            return SearchResult(error="Could not complete the search on the selected SSH executor.")
++
+     def search(self, pattern: str, path: str = ".", target: str = "content",
+                file_glob: Optional[str] = None, limit: int = 50, offset: int = 0,
+                output_mode: str = "content", context: int = 0,
+diff --git a/tools/file_operations_search.py b/tools/file_operations_search.py
+index 9d39ec4ab..95d6e0364 100644
+--- a/tools/file_operations_search.py
++++ b/tools/file_operations_search.py
+@@ -388,6 +388,13 @@ def _pattern_has_regex_newline(pattern: str) -> bool:
+     return "\n" in pattern or bool(_REGEX_NEWLINE_ESCAPE_RE.search(pattern))
+
+
++def split_search_roots(path: str) -> list[str]:
++    """Separate a missing path into the roots it may name."""
++    if "," in path:
++        return [part.strip() for part in path.split(",") if part.strip()]
++    return path.split()
++
++
+ def _is_line_oriented_newline_error(error: Optional[str]) -> bool:
+     """Return True for rg's hard error when multiline mode is required."""
+     return bool(error) and "literal \"\\n\" is not allowed" in error and "--multiline" in error
+@@ -818,10 +825,7 @@ class SearchMixin:
+         Commas explicitly delimit paths (internal spaces preserved); without commas
+         split on whitespace. Search every existing part, merge, and note skipped
+         parts. None when it doesn't look like a multi-path string."""
+-        if "," in path:
+-            parts = [part.strip() for part in path.split(",") if part.strip()]
+-        else:
+-            parts = path.split()
++        parts = split_search_roots(path)
+         if len(parts) < 2:
+             return None
+         existing, missing = [], []
+diff --git a/tools/file_operations_ssh_path.py b/tools/file_operations_ssh_path.py
+new file mode 100644
+index 000000000..1c50584b0
+--- /dev/null
++++ b/tools/file_operations_ssh_path.py
+@@ -0,0 +1,174 @@
++"""File path and descriptor checks run on the SSH executor."""
++
++SSH_PATH_STATE = """\
 +import base64, hashlib, json, os, stat, sys
 +from contextlib import contextmanager
 +from pathlib import Path
@@ -11912,285 +12289,360 @@ index f8168e070..b174e5a1a 100644
 +    return (*state, *read_policy(path, state[0], protected))
 +
 +"""
+diff --git a/tools/file_operations_ssh_search.py b/tools/file_operations_ssh_search.py
+new file mode 100644
+index 000000000..072b0d83b
+--- /dev/null
++++ b/tools/file_operations_ssh_search.py
+@@ -0,0 +1,346 @@
++"""Executor-side search over guarded file descriptors."""
 +
- # Controller home; SearchMixin reads it (tests monkeypatch it here).
- _HOME = str(Path.home())
-
-@@ -752,23 +935,111 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
-         (``b'\\xfe\\xff'``) embedded in a ``-c`` program. ``exec`` decodes
-         and runs it unchanged.
-         """
-+        return self._exec(self._python_snippet_command(snippet, py or self._python_interpreter_cmd()))
++SSH_SEARCH = r"""
++import fnmatch
++import heapq
++from contextlib import closing
++from itertools import chain, islice
++import re
++import shutil
++import subprocess
++import tempfile
 +
-+    @staticmethod
-+    def _python_snippet_command(snippet: str, py: str) -> str:
-         encoded = base64.b64encode(snippet.encode("utf-8")).decode("ascii")
--        if py is None:
--            py = self._python_interpreter_cmd()
--        return self._exec(
--            f"{py} -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
-+        return f"{py} -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
++class SearchError(Exception):
++    pass
 +
-+    def _framed_ssh_file_output(self, snippet: str) -> str:
-+        command = self._python_snippet_command(snippet, "python3 -I")
-+        segments, status, reply = self._fenced_read(command)
-+        if reply.exit_code != 0 or status != 0 or not segments:
-+            raise ValueError("The SSH file operation could not verify the inspected path.")
-+        return segments[0]
++def blocked_path(path, rules):
++    env_names, devices, proc_suffixes = rules
++    normalized = os.path.normpath(path)
++    return (Path(path).name.casefold() in env_names or normalized in devices
++            or (normalized.startswith('/proc/') and normalized.endswith(proc_suffixes)))
 +
-+    def _ssh_file_value(self, expression: str):
-+        return json.loads(self._framed_ssh_file_output(_SSH_PATH_STATE + f"\nprint(json.dumps({expression}))\n"))
++def search_entry(path, protected, rules):
++    if blocked_path(path, rules):
++        return None
++    resolved, kind, info, denied, secret = inspect_path(path, protected)
++    if denied or blocked_path(resolved, rules) or kind == 'special':
++        return None
++    return resolved, kind, info, secret
 +
-+    def inspect_ssh_path(self, path: str, *, protect_read: bool = False) -> SSHPathState:
-+        """Resolve and inspect a path in the SSH filesystem before a guarded operation."""
-+        if not path.startswith(("/", "~")):
-+            raise ValueError("Cannot determine the absolute SSH path. Use an absolute executor path.")
-+        protected = ssh_read_protected_entries() if protect_read else None
++def search_candidates(path, root, protected, rules, skipped, hidden_files=False):
++    if root[1] == 'regular':
++        yield path, root
++        return
++    try:
++        with os.scandir(root[0]) as entries:
++            for item in entries:
++                if item.is_symlink():
++                    continue
++                if item.name.startswith('.') and (not hidden_files or not item.is_file(follow_symlinks=False)):
++                    continue
++                name = os.path.join(path, item.name)
++                try:
++                    entry = search_entry(name, protected, rules)
++                    if entry is None or entry[1] == 'absent':
++                        continue
++                    yield name, entry
++                    if entry[1] == 'directory':
++                        yield from search_candidates(name, entry, protected, rules, skipped, hidden_files)
++                except (OSError, RuntimeError):
++                    skipped[0] = True
++    except OSError:
++        skipped[0] = True
++
++def discovery_names(command, absolute, skipped, success_codes, path_error_status):
++    with tempfile.TemporaryFile() as diagnostics, subprocess.Popen(
++            command, cwd=absolute, stdout=subprocess.PIPE, stderr=diagnostics,
++            env={**os.environ, 'LC_ALL': 'C'}) as process:
 +        try:
-+            resolved, kind, info, denied, secret = self._ssh_file_value(f"inspect_path({path!r}, {protected!r})")
-+            if not isinstance(resolved, str) or not resolved.startswith("/"):
-+                raise ValueError
-+            if type(denied) is not bool or type(secret) is not bool:
-+                raise ValueError
-+            if kind == "absent" and info is None:
-+                return SSHPathState(resolved, kind, None, denied, secret)
-+            if kind not in ("regular", "directory", "special"):
-+                raise ValueError
-+            if not isinstance(info, list) or len(info) != 5 or any(type(value) is not int for value in info):
-+                raise ValueError
-+            return SSHPathState(resolved, kind, tuple(info), denied, secret)
-+        except (TypeError, ValueError):
-+            raise ValueError(f"Could not inspect SSH file state for {path!r}.") from None
++            pending = b''
++            while chunk := process.stdout.read1(65536):
++                *names, pending = (pending + chunk).split(b'\0')
++                for relative in names:
++                    yield os.fsdecode(relative).removeprefix('./')
++            if pending:
++                raise SearchError('The SSH file discovery command returned an incomplete path.')
++            status = process.wait()
++            if status not in success_codes:
++                diagnostics.seek(0)
++                reason = diagnostics.readline(4096)
++                if reason.startswith((b'rg: error parsing glob', b'error parsing glob')):
++                    raise SearchError('Invalid file glob on the SSH executor.')
++                path_failure = rb': (?:Permission denied|Operation not permitted|No such file or directory|' \
++                               rb'Not a directory|Input/output error)(?: \(os error \d+\))?$'
++                if status != path_error_status or not reason:
++                    raise SearchError('Could not discover paths on the SSH executor.')
++                while reason:
++                    if not reason.endswith(b'\n') or not re.search(path_failure, reason.rstrip(b'\r\n')):
++                        raise SearchError('Could not discover paths on the SSH executor.')
++                    reason = diagnostics.readline(4096)
++                skipped[0] = True
++        finally:
++            if process.poll() is None:
++                process.kill()
 +
-+    def read_inspected_ssh_file(self, state: SSHPathState, offset: int, limit: int) -> ReadResult:
-+        """Read the page and digest from the same executor file descriptor."""
-+        if state.kind == "absent":
-+            return self._suggest_similar_files(state.path, ssh_path=True)
-+        if state.kind != "regular" or state.metadata is None:
-+            return self._not_regular_error(state.path)
-+        file_size = state.metadata[2]
-+        if self._is_image(state.path):
-+            return self._image_redirect_result(file_size)
-+        from tools.tool_output_limits import get_max_line_length
-+
-+        end = offset + limit - 1
-+        clamp = 4 * get_max_line_length() + 1
-+        try:
-+            encoded, encoded_sample, total, newline, observed_size, digest = self._ssh_file_value(
-+                f"read_page({state.path!r}, {state.metadata!r}, {offset}, {end}, {clamp})")
-+            if type(total) is not int or type(newline) is not bool or type(observed_size) is not int:
-+                raise ValueError
-+            page_bytes = base64.b64decode(encoded, validate=True)
-+            page = page_bytes.decode("utf-8", "replace")
-+            sample = base64.b64decode(encoded_sample, validate=True)
-+            checksum = bytes.fromhex(digest)
-+            if len(checksum) != hashlib.sha256().digest_size:
-+                raise ValueError
-+        except (TypeError, ValueError):
-+            return ReadResult(error=f"Could not read the inspected SSH file {state.path!r}. Read it again before editing.")
-+        if self._is_likely_binary_bytes(sample):
-+            text = self._try_read_utf16(state.path, offset, limit, observed_size, ssh_state=state)
-+            if text is not None:
-+                return text
-+            return ReadResult(is_binary=True, file_size=observed_size,
-+                              error=f"Cannot read binary file '{state.path}' ({describe_binary_file(sample, observed_size)}).")
-+        display = _strip_terminal_fence_leaks(page)
-+        read_result = self._assemble_read_result(
-+            display, offset=offset, end_line=end, total_lines=total,
-+            file_size=observed_size, file_ends_with_newline=newline,
-         )
-+        if observed_size == file_size and display == page and page.encode("utf-8") == page_bytes:
-+            read_result._snapshot = (*state.metadata, checksum)
-+        return read_result
-+
-+    def read_inspected_ssh_bytes(self, state: SSHPathState, maximum: int) -> ReadResult:
-+        """Supply a document extractor with bytes from the inspected regular file."""
-+        if state.kind != "regular" or state.metadata is None:
-+            return self._not_regular_error(state.path)
-+        file_size = state.metadata[2]
-+        if file_size > maximum:
-+            return ReadResult(error=f"SSH file exceeds the {maximum}-byte read limit.", file_size=file_size)
-+        try:
-+            encoded = self._ssh_file_value(f"read_bytes({state.path!r}, {state.metadata!r}, {maximum})")
-+            if not isinstance(encoded, str):
-+                raise ValueError
-+        except (TypeError, ValueError):
-+            return ReadResult(error=f"Could not read the inspected SSH file {state.path!r}.")
-+        return ReadResult(base64_content=encoded, file_size=file_size, is_binary=True)
-
-     def _try_read_utf16(self, path: str, offset: int, limit: int,
--                        file_size: int) -> Optional[ReadResult]:
-+                        file_size: int, *, ssh_state: SSHPathState | None = None) -> Optional[ReadResult]:
-         """Read ``path`` as UTF-16 transcoded to UTF-8, or None (caller falls back
-         to the binary-file error). Skips known-binary extensions and files over
-         10 MiB. ``path`` must already be expanded."""
-         if has_binary_extension(path) or file_size > self._UTF16_MAX_BYTES:
-             return None
--        snippet = (
-+        opener = f"open_regular(p, {ssh_state.metadata!r})" if ssh_state else "open(p, 'rb')"
-+        snippet = (_SSH_PATH_STATE if ssh_state else "") + (
-             "import sys, json, os\n"
--            f"p = {json.dumps(path)}\n"
-+            f"p = {path!r}\n"
-             f"offset = {int(offset)}\n"
-             f"limit = {int(limit)}\n"
-             f"MAX = {self._UTF16_MAX_BYTES}\n"
-@@ -777,7 +1048,7 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
-             "    size = os.path.getsize(p)\n"
-             "    if size > MAX:\n"
-             "        print('HERMES_UTF16:NO'); sys.exit(0)\n"
--            "    with open(p, 'rb') as f:\n"
-+            f"    with {opener} as f:\n"
-             "        data = f.read()\n"
-             "    sample = data[:SAMPLE]\n"
-             "    enc = None\n"
-@@ -809,13 +1080,20 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
-             "    print('HERMES_UTF16:NO'); sys.exit(0)\n"
-         )
-
--        result = self._exec_python_snippet(snippet)
--        if result.exit_code != 0 and "python3" in (result.stdout or ""):
--            result = self._exec_python_snippet(snippet, py="python")
--
--        stdout = _strip_terminal_fence_leaks(result.stdout or "")
-+        if ssh_state:
++def discovered_candidates(command, path, absolute, kind, protected, rules, skipped):
++    success_codes, path_error_status = ((0,), 1) if kind == 'directory' else ((0, 1), 2)
++    with closing(discovery_names(command, absolute, skipped, success_codes, path_error_status)) as names:
++        for suffix in names:
++            name = os.path.join(path, suffix)
 +            try:
-+                stdout = self._framed_ssh_file_output(snippet)
-+            except ValueError:
-+                return None
-+        else:
-+            result = self._exec_python_snippet(snippet)
-+            if result.exit_code != 0 and "python3" in (result.stdout or ""):
-+                result = self._exec_python_snippet(snippet, py="python")
-+            if result.exit_code != 0:
-+                return None
-+            stdout = _strip_terminal_fence_leaks(result.stdout or "")
-         marker = stdout.find("HERMES_UTF16:OK")
--        if result.exit_code != 0 or marker < 0:
-+        if marker < 0:
-             return None
-         payload = stdout[marker + len("HERMES_UTF16:OK"):].strip()
-         try:
-@@ -1198,60 +1476,78 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
-             file_size=file_size, truncated=truncated, hint=hint,
-             truncated_lines=True if truncated_lines else None)
-
--    def _unicode_variant_match(self, path: str) -> Optional[str]:
-+    def _unicode_variant_match(self, path: str, *, ssh_path: bool = False) -> Optional[str]:
-         """On-disk spelling of a file whose name is unicode-equivalent to ``path``
-         (``filename_match_key``). Returns the entry only when EXACTLY one
-         matches — several candidates = homoglyph collision, guessing would read the
-         wrong file."""
--        dir_path = os.path.dirname(path) or "."
--        filename = os.path.basename(path)
-+        path_module = posixpath if ssh_path else os.path
-+        dir_path = path_module.dirname(path) or "."
-+        filename = path_module.basename(path)
-         if not filename:
-             return None
-         target = filename_match_key(filename)
--        ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null")
--        if ls_result.exit_code != 0 or not ls_result.stdout.strip():
--            return None
-+        if ssh_path:
-+            entries = self._ssh_directory_names(dir_path)
-+        else:
-+            ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null")
-+            if ls_result.exit_code != 0 or not ls_result.stdout.strip():
-+                return None
-+            entries = _strip_terminal_fence_leaks(ls_result.stdout).splitlines()
-         candidates = [
--            entry for entry in _strip_terminal_fence_leaks(ls_result.stdout).splitlines()
-+            entry for entry in entries
-             if entry and entry != filename and filename_match_key(entry) == target]
-         if len(candidates) == 1:
--            return os.path.join(dir_path, candidates[0]) if dir_path != "." or "/" in path else candidates[0]
-+            return path_module.join(dir_path, candidates[0]) if dir_path != "." or "/" in path else candidates[0]
-         return None
-
--    def _suggest_similar_files(self, path: str) -> ReadResult:
-+    def _ssh_directory_names(self, path: str, limit: int | None = None) -> list[str]:
-+        try:
-+            entries = self._ssh_file_value(f"directory_names({path!r}, {limit!r})")
-+        except ValueError:
-+            return []
-+        if not isinstance(entries, list) or not all(isinstance(name, str) and "/" not in name for name in entries):
-+            return []
-+        return entries
++                entry = search_entry(name, protected, rules)
++                if entry is not None and entry[1] == kind:
++                    yield name, entry
++            except (OSError, RuntimeError):
++                skipped[0] = True
 +
-+    def _suggest_similar_files(self, path: str, *, ssh_path: bool = False) -> ReadResult:
-         """"File not found" result listing up to 5 similar names from the same directory."""
--        dir_path = os.path.dirname(path) or "."
--        filename = os.path.basename(path)
--        basename_no_ext = os.path.splitext(filename)[0].lower()
--        ext = os.path.splitext(filename)[1].lower()
-+        path_module = posixpath if ssh_path else os.path
-+        dir_path = path_module.dirname(path) or "."
-+        filename = path_module.basename(path)
-+        basename_no_ext = path_module.splitext(filename)[0].lower()
-+        ext = path_module.splitext(filename)[1].lower()
-         lower_name = filename.lower()
--        ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null | head -50")
-+        if ssh_path:
-+            entries = self._ssh_directory_names(dir_path, 50)
++def rg_candidates(rg, path, absolute, glob, protected, rules, skipped):
++    command = [rg, '--no-config', '--files', '-0', '--threads=1']
++    if glob:
++        command += ['--glob', glob]
++    yield from discovered_candidates(command + ['--', '.'], path, absolute, 'regular',
++                                     protected, rules, skipped)
++
++def rg_directories(path, root, pattern, protected, rules, skipped):
++    absolute = root[0]
++    find = shutil.which('find')
++    if find:
++        command = [find, '.', '-mindepth', '1', '-type', 'd', '-name', '.*', '-prune',
++                   '-o', '-type', 'd', '-name', pattern, '-print0']
++        entries = discovered_candidates(command, path, absolute, 'directory', protected, rules, skipped)
++    else:
++        entries = ((name, entry) for name, entry in search_candidates(path, root, protected, rules, skipped)
++                   if entry[1] == 'directory' and fnmatch.fnmatchcase(os.path.basename(name), pattern))
++    git = shutil.which('git')
++    if not git:
++        yield from entries
++        return
++    git_command = [git, '-c', 'core.fsmonitor=false', '-C', absolute]
++    probe = subprocess.run(git_command + ['rev-parse', '--is-inside-work-tree'],
++                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
++    if probe.stdout.strip() != b'true':
++        yield from entries
++        return
++    while batch := list(islice(entries, 256)):
++        paths = [os.fsencode(entry[0]) for _, entry in batch]
++        ignored = subprocess.run(git_command + ['check-ignore', '-z', '--stdin'],
++                                 input=b'\0'.join(paths) + b'\0',
++                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
++        if ignored.returncode not in (0, 1):
++            skipped[0] = True
++            continue
++        excluded = set(ignored.stdout.split(b'\0'))
++        for row, encoded in zip(batch, paths):
++            if encoded not in excluded:
++                yield row
++
++def modified_order(row):
++    name, entry = row
++    return -entry[2][3], name
++
++def filename_candidates(roots, rg, glob, protected, rules, skipped):
++    for path, root in roots:
++        if not rg:
++            yield from ((name, entry) for name, entry in search_candidates(path, root, protected, rules, skipped)
++                        if not os.path.basename(name).startswith('.')
++                        and fnmatch.fnmatchcase(os.path.basename(name), glob))
++        elif root[1] == 'regular':
++            yield path, root
 +        else:
-+            ls_result = self._exec(f"ls -1 -- {self._escape_shell_arg(dir_path)} 2>/dev/null | head -50")
-+            entries = ls_result.stdout.strip().split('\n') if ls_result.exit_code == 0 else []
-         scored: list = []  # (score, filepath) — higher is better
--        if ls_result.exit_code == 0 and ls_result.stdout.strip():
--            for f in ls_result.stdout.strip().split('\n'):
--                if not f:
--                    continue
--                lf = f.lower()
--                score = 0
--                if lf == lower_name:
--                    score = 100
--                elif os.path.splitext(f)[0].lower() == basename_no_ext:  # config.yml vs config.yaml
--                    score = 90
--                elif lf.startswith(lower_name) or lower_name.startswith(lf):
--                    score = 70
--                elif lower_name in lf:
--                    score = 60
--                elif lf in lower_name and len(lf) > 2:
--                    score = 40
--                elif ext and os.path.splitext(f)[1].lower() == ext:
--                    common = set(lower_name) & set(lf)
--                    if len(common) >= max(len(lower_name), len(lf)) * 0.4:
--                        score = 30
--                # Near-miss spelling (AGENT.md -> AGENTS.md) the substring checks miss.
--                if score == 0 and difflib.SequenceMatcher(None, lower_name, lf).ratio() >= 0.8:
--                    score = 50
--                if score > 0:
--                    scored.append((score, os.path.join(dir_path, f)))
-+        for f in entries:
-+            if not f:
++            yield from rg_candidates(rg, path, root[0], None if glob == '*' else glob,
++                                     protected, rules, skipped)
++
++def filename_directories(roots, glob, protected, rules, skipped):
++    for path, root in roots:
++        if root[1] == 'directory':
++            yield from rg_directories(path, root, glob, protected, rules, skipped)
++
++def merge_discovery(files, directories):
++    file = next(files, None)
++    for directory in directories:
++        while file is not None and modified_order(file) <= modified_order(directory):
++            yield file
++            file = next(files, None)
++        yield directory
++    if file is not None:
++        yield file
++    yield from files
++
++def file_names(roots, rg, pattern, order, offset, limit, protected, rules, skipped):
++    glob = pattern.rsplit('/', 1)[-1] or '*'
++    upper = offset + limit
++    fetch = upper + 1
++    if rg:
++        glob = glob if glob.startswith('*') else '*' + glob
++    if rg and glob != '*' and subprocess.run(
++            [rg, '--no-config', '--files', '--glob', glob, '--', os.devnull],
++            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode not in (0, 1):
++        raise SearchError('Invalid file glob on the SSH executor.')
++    files = filename_candidates(roots, rg, glob, protected, rules, skipped)
++    directories = filename_directories(roots, glob, protected, rules, skipped) if rg else ()
++    if order == 'modified':
++        selected = heapq.nsmallest(fetch, chain(files, directories), key=modified_order)
++    elif rg:
++        matching_dirs = heapq.nsmallest(fetch, directories, key=modified_order)
++        with closing(files):
++            selected = list(islice(merge_discovery(files, matching_dirs), fetch))
++    else:
++        with closing(files):
++            selected = list(islice(files, fetch))
++    return {'rows': [name for name, _ in selected[offset:upper]],
++            'total': len(selected), 'truncated': len(selected) > upper, 'skipped': skipped[0]}
++
++def search_command(rg, pattern, mode, context, multiline, explicit_glob):
++    if rg:
++        args = [rg, '--no-config', '--color=never', '--no-filename', '-n']
++        if multiline:
++            args.append('--multiline')
++        if explicit_glob:
++            args += ['--glob', explicit_glob]
++        if mode == 'content':
++            args += ['--max-columns', '2000', '--max-columns-preview']
++    else:
++        grep = shutil.which('grep')
++        if not grep:
++            return None
++        args = [grep, '-nEI']
++        if pattern.startswith('(?i)'):
++            args.append('-i')
++            pattern = pattern[4:]
++    if mode == 'count':
++        args.append('-c')
++    elif mode == 'files_only':
++        args.append('-q')
++    elif mode == 'content' and context:
++        args += ['-C', str(context)]
++    return args + ['-e', pattern, '--']
++
++def binary_stream(stream):
++    first = stream.read(65536)
++    if first.startswith((b'\xff\xfe', b'\xfe\xff')):
++        stream.seek(0)
++        return False
++    for chunk in chain((first,), iter(lambda: stream.read(65536), b'')):
++        if b'\0' in chunk:
++            return True
++    stream.seek(0)
++    return False
++
++def search_stream(command, stream, mode, remaining, source='-'):
++    try:
++        process = subprocess.Popen(command + [source], stdin=stream, stdout=subprocess.PIPE,
++                                   stderr=subprocess.DEVNULL)
++    except OSError:
++        raise SearchError('Could not start the search command on the SSH executor.') from None
++    with process:
++        rows = []
++        count = 0
++        while row := process.stdout.readline(4096):
++            prefix = row
++            while not row.endswith(b'\n'):
++                row = process.stdout.readline(4096)
++                if not row:
++                    break
++            if mode == 'count':
++                count = int(prefix)
 +                continue
-+            lf = f.lower()
-+            score = 0
-+            if lf == lower_name:
-+                score = 100
-+            elif path_module.splitext(f)[0].lower() == basename_no_ext:  # config.yml vs config.yaml
-+                score = 90
-+            elif lf.startswith(lower_name) or lower_name.startswith(lf):
-+                score = 70
-+            elif lower_name in lf:
-+                score = 60
-+            elif lf in lower_name and len(lf) > 2:
-+                score = 40
-+            elif ext and path_module.splitext(f)[1].lower() == ext:
-+                common = set(lower_name) & set(lf)
-+                if len(common) >= max(len(lower_name), len(lf)) * 0.4:
-+                    score = 30
-+            # Near-miss spelling (AGENT.md -> AGENTS.md) the substring checks miss.
-+            if score == 0 and difflib.SequenceMatcher(None, lower_name, lf).ratio() >= 0.8:
-+                score = 50
-+            if score > 0:
-+                scored.append((score, path_module.join(dir_path, f)))
-         scored.sort(key=lambda x: -x[0])
-         return ReadResult(error=f"File not found: {path}", not_found=True,
-                           similar_files=[fp for _, fp in scored[:5]])
++            matched = re.match(rb'^(\d+)[:-](.*)', prefix)
++            if matched:
++                rows.append([int(matched[1]), matched[2].rstrip(b'\r').decode('utf-8', 'replace')[:500]])
++                if len(rows) >= remaining:
++                    process.kill()
++                    process.wait()
++                    return rows
++        status = process.wait()
++        if status not in (0, 1):
++            raise SearchError('File search failed. Check the pattern, file glob, and executor search command.')
++        if mode == 'count':
++            return [count] if count else []
++        return [True] if mode == 'files_only' and status == 0 else rows
++
++def search_roots(path, alternatives, protected, rules, skipped):
++    path = os.path.expanduser(path)
++    if not os.path.isabs(path):
++        raise SearchError('Cannot determine an absolute search path on the SSH executor.')
++    root = search_entry(path, protected, rules)
++    if root is None:
++        raise SearchError('Cannot search this protected or special path on the SSH executor.')
++    if root[1] != 'absent':
++        return [(path, root)], False
++    roots = []
++    for alternative in dict.fromkeys(alternatives if len(alternatives) > 1 else ()):
++        candidate = os.path.expanduser(alternative)
++        if not os.path.isabs(candidate):
++            continue
++        try:
++            entry = search_entry(candidate, protected, rules)
++        except (OSError, RuntimeError):
++            skipped[0] = True
++            continue
++        if entry is not None and entry[1] != 'absent':
++            roots.append((candidate, entry))
++    if not roots:
++        if skipped[0]:
++            raise SearchError('The SSH executor could not inspect the requested search paths.')
++        raise SearchError('Path not found: ' + path)
++    return roots, True
++
++def content_candidates(roots, rg, glob, protected, rules, skipped):
++    for path, root in roots:
++        if rg and root[1] == 'directory':
++            with closing(rg_candidates(rg, path, root[0], glob, protected, rules, skipped)) as entries:
++                for name, entry in entries:
++                    yield name, entry, True
++        else:
++            for name, entry in search_candidates(path, root, protected, rules, skipped, hidden_files=not rg):
++                if entry[1] == 'regular' and (rg or not glob or fnmatch.fnmatchcase(os.path.basename(name), glob)):
++                    yield name, entry, False
++
++def content_rows(roots, rg, pattern, glob, mode, context, offset, limit, multiline, protected, rules, skipped):
++    if multiline and not rg:
++        return {'error': 'Multiline content search requires ripgrep on the SSH executor.'}
++    command = search_command(rg, pattern, mode, context, multiline, glob)
++    if command is None:
++        return {'error': 'Content search requires ripgrep or grep on the SSH executor.'}
++    upper = offset + limit
++    total = 0
++    rows = []
++    seen = 0
++    with open(os.devnull, 'rb') as empty:
++        search_stream(command, empty, mode, 1)
++    source = '/proc/self/fd/0' if rg and multiline and os.path.isdir('/proc/self/fd') else '-'
++    entries = content_candidates(roots, rg, glob, protected, rules, skipped)
++    for name, (resolved, _kind, info, secret), recursive_rg in entries:
++        try:
++            with open_regular(resolved, info) as stream:
++                if recursive_rg and binary_stream(stream):
++                    continue
++                hits = search_stream(command, stream, mode, upper + 1 - seen, source)
++        except OSError:
++            skipped[0] = True
++            continue
++        for hit in hits:
++            total += hit if mode == 'count' else 1
++            if offset <= seen < upper:
++                rows.append([name, resolved, secret, hit])
++            seen += 1
++        if seen > upper:
++            break
++    return {'rows': rows, 'total': total, 'truncated': seen > upper, 'skipped': skipped[0]}
++
++def search(path, protected, rules, pattern, target, glob, mode, context,
++           order, offset, limit, multiline, alternatives=()):
++    try:
++        skipped = [False]
++        roots, multiple_roots = search_roots(path, alternatives, protected, rules, skipped)
++        rg = shutil.which('rg')
++        if target == 'files':
++            result = file_names(roots, rg, pattern, order, offset, limit, protected, rules, skipped)
++        else:
++            result = content_rows(roots, rg, pattern, glob, mode, context, offset, limit,
++                                  multiline, protected, rules, skipped)
++        result['multiple_roots'] = multiple_roots
++        return result
++    except SearchError as exc:
++        return {'error': str(exc)}
++"""
 diff --git a/tools/file_tools.py b/tools/file_tools.py
-index 7982b09f0..cc65c2166 100644
+index 7982b09f0..84a47fee9 100644
 --- a/tools/file_tools.py
 +++ b/tools/file_tools.py
 @@ -8,6 +8,7 @@ staleness state).
@@ -12201,13 +12653,14 @@ index 7982b09f0..cc65c2166 100644
  import json
  import logging
  import os
-@@ -23,23 +24,24 @@ from agent.tool_result_classification import GUARDRAIL_REFUSAL_KEY
+@@ -23,23 +24,25 @@ from agent.tool_result_classification import GUARDRAIL_REFUSAL_KEY
  from tools.binary_extensions import has_binary_extension
  from tools.skill_provenance import is_background_review
  from tools.file_operations import (
 -    ShellFileOperations, normalize_read_pagination, normalize_search_pagination)
 +    ShellFileOperations, SSHPathState, normalize_read_pagination, normalize_search_pagination)
  from tools.file_operations_common import DEFAULT_READ_LIMIT, count_conflict_blocks
++from tools.file_operations_search import split_search_roots
  from tools import file_state
  from hermes_platform.host import facts
  from agent.redact import _is_secret_file_arg, redact_sensitive_text
@@ -12231,7 +12684,7 @@ index 7982b09f0..cc65c2166 100644
      _patch_failure_tracker, _read_tracker, _read_tracker_lock, _record_not_found,
      _record_patch_failure, _reset_patch_failures, _task_data, _update_read_timestamp)
 
-@@ -419,7 +421,9 @@ def _special_file_kind(path) -> str | None:
+@@ -419,7 +422,9 @@ def _special_file_kind(path) -> str | None:
                  "a special (non-regular) file")
 
 
@@ -12242,7 +12695,7 @@ index 7982b09f0..cc65c2166 100644
      """Render an extractable document (.docx/.xlsx/.pdf/...) as paginated text.
 
      Returns the JSON result, a tool_error for an actionable extraction failure
-@@ -441,7 +445,6 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -441,7 +446,6 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
      wrapped, wrap_width = False, 0
      if not (archived or is_extractable_document(str(_resolved))):
          return None
@@ -12250,7 +12703,7 @@ index 7982b09f0..cc65c2166 100644
      if archived and (sync_manager := getattr(getattr(file_ops, "env", None), "_sync_manager", None)) is not None:
          # A file-synced sandbox gets new cache files on its next (rate-limited) sync; an archive written since
          # must be there before this read, or the model is told it expired.
-@@ -449,11 +452,21 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -449,11 +453,21 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
              sync_manager.sync(force=True)
          except Exception:  # health: allow BLE001 -- a failed push leaves the read to report what the sandbox has
              logger.debug("Archive sync before read failed for %s", path, exc_info=True)
@@ -12273,7 +12726,7 @@ index 7982b09f0..cc65c2166 100644
          if binary.error or binary.base64_content is None:
              raise ExtractionError(binary.error or "Document bytes unavailable")
          document_bytes = base64.b64decode(binary.base64_content, validate=True)
-@@ -505,11 +518,11 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -505,11 +519,11 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
          rendered = result_dict["content"]
          result_dict["content"] = redact_sensitive_text(
              rendered, file_read=True,
@@ -12287,7 +12740,7 @@ index 7982b09f0..cc65c2166 100644
              and not truncated_lines and not result_dict.get("truncated_lines")):
          # The whole document was shown, so a text-authorable format (.ipynb)
          # may later be overwritten by write_file; the binary-container guard
-@@ -556,7 +569,8 @@ def _dedup_stub_or_block(task_data: dict, dedup_key: tuple, path: str) -> str:
+@@ -556,7 +570,8 @@ def _dedup_stub_or_block(task_data: dict, dedup_key: tuple, path: str) -> str:
  def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_str: str,
                              offset: int, limit: int, dedup_key: tuple, *, partial: bool,
                              redacted: bool = False, end_line: int | None = None,
@@ -12297,7 +12750,7 @@ index 7982b09f0..cc65c2166 100644
      """Bookkeeping after a real (non-stub) read; returns the consecutive-read count.
 
      Per-task tracker under the lock (stub counter, history, consecutive count,
-@@ -569,14 +583,22 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
+@@ -569,14 +584,22 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
      background-review read-mark (a FULL read of a skill file counts like
      skill_view so a follow-up skill_manage(patch) is accepted).
      """
@@ -12324,7 +12777,7 @@ index 7982b09f0..cc65c2166 100644
                  _mtime_now = os.path.getmtime(resolved_str)
                  task_data.setdefault("read_timestamps", {})[resolved_str] = _mtime_now
          except OSError:
-@@ -586,23 +608,25 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
+@@ -586,23 +609,25 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
              dedup[dedup_key] = version_before
              # A narrower view does not undo knowledge of these same bytes. Do
              # not revive a baseline after a partial read of a different version.
@@ -12355,7 +12808,7 @@ index 7982b09f0..cc65c2166 100644
      try:
          file_state.record_read(task_id, resolved_str, partial=not complete)
      except Exception:
-@@ -635,6 +659,28 @@ def _read_device_base(path: str, task_id: str) -> tuple[Path | PurePosixPath | N
+@@ -635,6 +660,28 @@ def _read_device_base(path: str, task_id: str) -> tuple[Path | PurePosixPath | N
          return None, True
 
 
@@ -12384,7 +12837,7 @@ index 7982b09f0..cc65c2166 100644
  def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, task_id: str = "default") -> str:
      """Read a file with pagination and line numbers.
 
-@@ -654,17 +700,28 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -654,17 +701,28 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          if nt_err:
              return tool_error(nt_err)
          path = _hosted_tilde(path, task_id)  # a hosted read sends the path as given: ``~`` is the sandbox's home
@@ -12421,7 +12874,7 @@ index 7982b09f0..cc65c2166 100644
              kind = _special_file_kind(_resolved)
              if kind is not None:
                  return json.dumps({
-@@ -679,11 +736,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -679,11 +737,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          # credential stores). Runs BEFORE document extraction so a
          # protected SQLite store (state.db) cannot be read through the extractor. Pass the RESOLVED path: the denylist's own
          # resolve() uses the process cwd and would miss a relative "auth.json".
@@ -12438,7 +12891,7 @@ index 7982b09f0..cc65c2166 100644
          if extracted is not None:
              return extracted
 
-@@ -695,23 +755,42 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -695,23 +756,42 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
                  "Use vision_analyze for images, or terminal to inspect binary files.")
 
          resolved_str = str(_resolved)
@@ -12486,7 +12939,7 @@ index 7982b09f0..cc65c2166 100644
          result_dict = result.to_dict()
 
          # Failed reads cannot establish whole-file knowledge.
-@@ -719,9 +798,11 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -719,9 +799,11 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          if isinstance(_err, str) and _err.startswith("File not found:"):
              from tools.tool_result_storage import expired_archive_fields
              result_dict.update(expired_archive_fields(path))
@@ -12499,7 +12952,7 @@ index 7982b09f0..cc65c2166 100644
 
          # Char budget on the FORMATTED content (what enters context), BEFORE
          # redaction (skip the regex pass on huge content); truncate gracefully
-@@ -735,8 +816,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -735,8 +817,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          redacted = False
          if result.content:
              unredacted = result.content
@@ -12510,7 +12963,7 @@ index 7982b09f0..cc65c2166 100644
              redacted = result.content != unredacted
              result_dict["content"] = result.content
 
-@@ -762,12 +843,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -762,12 +844,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
              end_line = offset + limit - 1
              if isinstance(total_lines, int) and total_lines > 0:
                  end_line = min(end_line, total_lines)
@@ -12527,6 +12980,35 @@ index 7982b09f0..cc65c2166 100644
          if count >= 4:
              return tool_error(
                  f"BLOCKED: You have read this exact file region {count} times in a row. "
+@@ -1090,7 +1175,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+
+         # Pagination args (and order) are part of the key so paging through truncated
+         # results doesn't trip the repeated-search guard.
+-        search_key = ("search", pattern, target, str(path), file_glob or "", limit, offset, order)
++        search_key = ("search", pattern, target, str(path), file_glob or "",
++                      limit, offset, order, output_mode, context)
+         with _read_tracker_lock:
+             task_data = _read_tracker.setdefault(task_id, {
+                 "last_key": None, "consecutive": 0, "read_history": set()})
+@@ -1111,6 +1197,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+         if nt_err:
+             return tool_error(nt_err)
+         path = _hosted_tilde(path, task_id)
++        if uses_ssh_for_task(task_id):
++            alternatives = tuple(_anchor_ssh_path(part, task_id) for part in split_search_roots(path)
++                                 if not get_nt_namespace_error(part, verb="Search"))
++            result = _get_ssh_file_ops(task_id).search_ssh(
++                pattern, _anchor_ssh_path(path, task_id), target, file_glob,
++                limit, offset, output_mode, context, order, alternatives)
++            result_dict = result.to_dict()
++            if count >= 3:
++                result_dict["_warning"] = f"You have run this exact search {count} times consecutively."
++            if result.truncated:
++                result_dict["_hint"] = f"Results truncated. Use offset={offset + limit} to see more."
++            return json.dumps(result_dict)
+         try:
+             resolved_search_path = str(_resolve_path_for_task(path, task_id))
+         except (OSError, ValueError, RuntimeError) as exc:
 diff --git a/tools/file_tools_paths.py b/tools/file_tools_paths.py
 index 8c5c96f63..be91a25e7 100644
 --- a/tools/file_tools_paths.py

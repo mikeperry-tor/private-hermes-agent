@@ -388,6 +388,8 @@ Hermes tools and configuration provide these additional controls.
 
 - With the SSH backend, `read_file` resolves paths and checks protected files on the executor.
   It records complete, unredacted text reads by SSH endpoint and file version.
+- `search_files` checks each executor path before returning or counting matches.
+  Multiline content search requires ripgrep on the executor.
 - `HERMES_WRITE_SAFE_ROOT` limits destination paths for tools such as
   `write_file` and `patch`. The SSH backend selects where model commands run.
   The executor mounts and runner permissions govern access to shared files.

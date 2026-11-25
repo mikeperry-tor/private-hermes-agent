@@ -201,7 +201,7 @@ for `PR7`). The author identity is
 | Topic | Draft | Submission branch | Head | Review base |
 | --- | --- | --- | --- | --- |
 | PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | Upstream main |
-| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `eb93959ce81702c6156537a53d91b9c82f808546` | Upstream main |
+| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `23be2f3b5705cc283dc564d272381d262d004f21` | Upstream main |
 | PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | PR1 |
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
@@ -324,7 +324,7 @@ Upstream package boundaries:
 | Package | Purpose | Responsibilities |
 | --- | --- | --- |
 | PR1 | Preserve instance configuration policy while reading or reloading profile settings | Strict managed reads, validated snapshots, dotenv precedence and routed interpolation |
-| PR2a | Preserve SSH workspace sync and check files on the executor | Browser-profile sync exclusion, missing-path handling, and guarded `read_file` snapshots |
+| PR2a | Preserve SSH workspace sync and check files on the executor | Browser-profile sync exclusion, missing-path handling, guarded read snapshots, and filtering before search pagination |
 | PR2b | Let operators select explicit SSH client trust | `terminal.ssh_config`, shared across model SSH operations, workspace access, streams, and Doctor |
 | PR3a | Fix sandbox desktop probes, CUA placement, and Chromium recovery | Independent binary/`DISPLAY` probes and viewer blockers, CUA terminal permission/lease pinning, sandbox Chromium DevTools/`SingletonLock` recovery and two-token arg preservation |
 | PR3b | Keep desktop/browser automation on the terminal executor | `browser.require_sandbox`, executor-side browser-harness runner (`browser.executor_python`, `browser.executor_workspace`), managed `bot_desktop.executor_only` and `sandbox.json` owner binding |
@@ -353,7 +353,7 @@ For a later release, use the
 | Local branch under `stack-patches/v0.23.3/` | Head | Commits | Scope |
 | --- | --- | --- | --- |
 | `managed-config` (PR1) | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
-| `executor-desktop-browser` (PR3) | `88e56b429ec2e283e1efd33a96236177de00fc38` | 16 | SSH file reads, checkpoint refusal, and desktop and browser placement |
+| `executor-desktop-browser` (PR3) | `ae43f3bcb093799a9d89d1d9c1d80e300fd12ea5` | 17 | SSH file reads and searches, checkpoint refusal, and desktop and browser placement |
 | `executor-terminals` (PR4) | `b886b1b648231e528a174a01c35f733548debf11` | 13 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
@@ -361,7 +361,7 @@ For a later release, use the
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Local combined replay: `stack-patches/v0.23.3/combined`
-  `81c3873f1dee1ef919be6ee1b15870d92cb7a00d` (46 commits).
+  `ffc64df1dcd433cfa5efd5962df51f38a30972f1` (48 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).
