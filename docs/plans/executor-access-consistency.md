@@ -533,9 +533,10 @@ to match the final image. Recheck the documented reason for the empty Hermes
   tests) with the rebuilt checkpoint package. The prior revision and the
   retry after firewall approval both timed out waiting for the browser chat
   to show `ready`. The shared test overlay left the fresh profile's model
-  unset. The WebApp fixture now selects its deterministic local model, and
-  browser login, terminal streaming, and chat pass on Linux Docker. The
-  Docker and Podman Compose models both select that model with the operator's
+  unset. With the deterministic local model selected, `make webapp-test`
+  passed on Linux Docker, including authenticated terminal streaming, chat,
+  and all four content modes in Chromium, Firefox, and WebKit. The Docker and
+  Podman Compose models also select that model with the operator's
   `TEEP_ENABLED=false`.
 - The checkpoint changes are in `fix/ssh-workspace` at
   `76f7e68e2a74a3ef021cf446335dd3fa5cb8b600`. The release topic is
