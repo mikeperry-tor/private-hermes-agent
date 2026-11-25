@@ -289,10 +289,15 @@ The derived Hermes image builds from official Hermes v0.23.3
 `sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355`). The
 build verifies the ARM64 source stamp and renderer receipt against official
 source hash `03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`
-and writes patched renderer receipt hash
-`de3582b39cdfa7b69fb5dbf4958d3ee718ae0ed29198c7108af27df6e7e5834f`. See
-[downstream responsibility inventory](updates-and-plugins.md#downstream-responsibility-inventory)
-for the applied patches.
+before applying the [downstream patches](updates-and-plugins.md#downstream-responsibility-inventory).
+The checkpoint replay `da4ad13358a0595febabf7dcf8e85fca6a7a0d15` produces
+WebApp source hash `349ace4bb718e7992f1fb57e8c58abad2bc7f381ac2e48fb9cb59a45b56d895a`
+and TUI source hash `b6dbdf512ebae3f975a7b3f33631813c216a4ebfb46a5f4127064aa6ee0f6f80`.
+See [executor access qualification](plans/executor-access-consistency.md#phase-1-progress)
+for the checks on that package.
+
+The table records the package built from replay `553cd75ac`, with
+WebApp source hash `de3582b39cdfa7b69fb5dbf4958d3ee718ae0ed29198c7108af27df6e7e5834f`.
 
 | Check or contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
 | --- | --- | --- |

@@ -15,6 +15,13 @@ RUN set -e; for patch in /tmp/private-hermes-patches/*.patch; do git apply "$pat
 # rename fails EXDEV. Remove only this disposable build output before compiling.
 RUN rm -rf apps/desktop/dist-webapp && \
     node apps/desktop/scripts/build-webapp.mjs --no-install
+# Replace the upstream layer's TUI workspace links before pnpm installs them.
+RUN rm -rf node_modules ui-tui/node_modules ui-tui/packages/*/node_modules apps/shared/node_modules && \
+    pnpm install --frozen-lockfile --filter hermes-tui... && \
+    node scripts/build/tui.mjs --source /opt/hermes --out /tmp/private-hermes-tui && \
+    rm -rf /opt/hermes/hermes_cli/tui_dist && \
+    cp -a /tmp/private-hermes-tui/dist /opt/hermes/hermes_cli/tui_dist && \
+    cp /tmp/private-hermes-tui/package.json /opt/hermes/hermes_cli/tui_dist/package.json
 
 # Native browser session creation validates its agent-side cwd exists. This
 # empty local directory is separate from the executor mount and contains no
@@ -23,7 +30,7 @@ FROM upstream
 # COPY overlays inherited directories. Remove the old output so obsolete chunks
 # cannot survive alongside the qualified rebuilt frontend.
 RUN install -d -m 0755 -o 10000 -g 10000 /workspace && \
-    rm -rf /opt/hermes/apps/desktop/dist-webapp
+    rm -rf /opt/hermes/apps/desktop/dist-webapp /opt/hermes/ui-tui/dist /opt/hermes/hermes_cli/tui_dist
 COPY --from=webapp-build /opt/hermes/hermes_bootstrap.py /opt/hermes/hermes_bootstrap.py
 COPY --from=webapp-build /opt/hermes/hermes_cli/ /opt/hermes/hermes_cli/
 COPY --from=webapp-build /opt/hermes/docker/entrypoint-dispatch.sh /opt/hermes/docker/entrypoint-dispatch.sh
@@ -35,6 +42,7 @@ COPY --from=webapp-build /opt/hermes/tools/ /opt/hermes/tools/
 COPY --from=webapp-build /opt/hermes/tui_gateway/ /opt/hermes/tui_gateway/
 COPY --from=webapp-build /opt/hermes/model_tools.py /opt/hermes/run_agent.py /opt/hermes/toolsets.py /opt/hermes/
 COPY --from=webapp-build /opt/hermes/apps/desktop/dist-webapp/ /opt/hermes/apps/desktop/dist-webapp/
+COPY --from=webapp-build /tmp/private-hermes-tui/dist/ /opt/hermes/ui-tui/dist/
 COPY components/hermes/managed_policy.py /opt/hermes/docker/private-managed-policy.py
 COPY components/hermes/external_content.py /opt/hermes/hermes_cli/private_external_content.py
 COPY components/hermes/public_images.py /opt/hermes/hermes_cli/private_public_images.py

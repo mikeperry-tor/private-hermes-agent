@@ -201,7 +201,7 @@ for `PR7`). The author identity is
 | Topic | Draft | Submission branch | Head | Review base |
 | --- | --- | --- | --- | --- |
 | PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | Upstream main |
-| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `734837a9f07c9636566b32220467540eb1afdcd0` | Upstream main |
+| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `76f7e68e2a74a3ef021cf446335dd3fa5cb8b600` | Upstream main |
 | PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | PR1 |
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
@@ -224,10 +224,11 @@ PR7's reserved ref contains only the base commit. See the [fork repository](http
 and the [v0.23.3 release replay](#v0233-build-provenance).
 
 PR2a and PR2b apply in either order. PR3's review diff is identical on
-the updated PR2b base. Adding PR2a reproduces the combined desktop/browser
-tree with the Doctor correction. The prepared Linux ARM64 Docker image ran
-every changed Python test module plus related regressions as `hermes`
-(UID/GID 10000). PR2a passed 19 tests. PR2b passed 268 with 20 skips and
+the updated PR2b base. The original PR2a head at `734837a9f` combines
+with the desktop and browser topics and the Doctor correction. The prepared
+Linux ARM64 Docker image ran each changed Python test module and related
+regressions as `hermes` (UID/GID 10000). The original PR2a head passed
+19 tests. PR2b passed 268 with 20 skips and
 three Doctor failures. The same Doctor module on the exact PR1 base
 reproduced all three failures. The six new port regression cases passed.
 PR3 passed 477 Python tests with one skip and six desktop Vitest
@@ -235,6 +236,9 @@ tests using its frozen dependency lockfile. The combined SSH and browser
 tree, including the Doctor module, passed 590 Python tests with 21 skips
 and the same three baseline failures. Exact-tip and baseline logs are in
 `upstream_work/pr2-split-evidence/`.
+
+For checkpoint refusal and the v0.23.3 replay, see
+[executor access qualification](executor-access-consistency.md#phase-1-progress).
 
 PR2b makes Doctor probe the terminal's port when an explicit SSH file is
 selected. Omission defaults to 22, and invalid configured values fail before
@@ -349,7 +353,7 @@ For a later release, use the
 | Branch under `stack-patches/v0.23.3/` | Head | Commits | Scope |
 | --- | --- | --- | --- |
 | `managed-config` (PR1) | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
-| `executor-desktop-browser` (PR3) | `9606c0e2f313a15ebc6fe9f547f815cca3d102c7` | 14 | SSH fixes, desktop/browser placement and harness recovery |
+| `executor-desktop-browser` (PR3) | `3aa5db2279f56e891e4e5108028e7603a129e7f1` | 15 | SSH fixes, checkpoint refusal, and desktop and browser placement |
 | `executor-terminals` (PR4) | `4915d01748818b1d098caa0dbe586bf1ad4451f9` | 6 | Executor-backed WebApp terminals and pinned forwarding |
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
@@ -357,7 +361,7 @@ For a later release, use the
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Combined replay: `stack-patches/v0.23.3/combined`
-  `553cd75ac4da1c4e9cef7479d1962a026c593cda` (28 commits).
+  `da4ad13358a0595febabf7dcf8e85fca6a7a0d15` (30 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).
@@ -390,12 +394,14 @@ recovery, routed template inputs and source ownership, and terminal admission
 and receiver acknowledgement.
 
 Docker Desktop ARM64 and Debian 13 rootless Podman ARM64 pass the affected
-packaged tests. The managed-policy image build and URL/context/tool matrix use
-the current release replay. Browser, desktop, and lean and desktop terminal
+packaged tests for replay `553cd75ac`. The managed-policy image build and
+URL, context, and tool matrix use that replay. Browser, desktop, and terminal
 fixtures cover the unchanged executor and renderer code. Fresh independent
 reviews cover the combined topics, managed scope, release parity and the
 local branch handoff. Current operating limits are recorded in the
-[qualification guide](../development.md#packaged-hermes-qualification).
+[qualification guide](../development.md#packaged-hermes-qualification). See
+[executor access qualification](executor-access-consistency.md#phase-1-progress)
+for the checkpoint replay.
 
 The local submission branches and drafts are prepared. Submission and
 qualification against the first official release carrying the accepted changes

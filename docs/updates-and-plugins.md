@@ -142,7 +142,7 @@ for upgrade steps.
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop and browser transport, Code and Agent terminals, configurable URL context, and managed tool denial (PR1-PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0001-upstream-candidates` | Strict managed config, SSH trust and file errors, SSH checkpoint refusal, executor desktop and browser transport, Code and Agent terminals, configurable URL context, and managed tool denial (PR1-PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
 | `0002-managed-policy` | Generates root-owned `/etc/hermes/config.yaml` and `/etc/hermes/.env` at container startup before Hermes loads profiles. | Verify effective settings under conflicting profile input, reloads, and offline jobs. |
 | `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code and Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
 | `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |
@@ -181,6 +181,9 @@ Python lockfile plus the Pillow 13 `--no-deps` override). Hermes sends the
 runner and screenshot helper over SSH, keeps the live browser profile excluded
 from SSH sync archives, and provides an empty agent-side `/workspace` directory
 (separate from the executor's `/workspace`) for session `cwd` validation.
+
+The image rebuilds the WebApp and TUI from the patched source. The TUI launcher
+uses the rebuilt bundle at either packaged lookup path.
 
 Run `make hermes-ui-test` to execute TypeScript type-checking and focused
 renderer tests in the build stage (using `tests/fixtures/session-resume-active-turn.json`,

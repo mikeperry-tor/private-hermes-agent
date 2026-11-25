@@ -1,8 +1,9 @@
 # Use the SSH executor for chat shells and project work
 
 Status: in progress. The wrapper passes applied project destinations to both
-clients. Hermes consumers, Docker tests of the Hermes branches, and packaged
-qualification are pending.
+clients, and the candidate package refuses SSH checkpoints. The grant
+consumers, chat shell placement, structured edits, project operations,
+scheduled work, and final qualification remain open.
 
 - Wrapper branch: `executor-access-consistency`. Compare the complete change
   with `a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The plan under review
@@ -462,7 +463,7 @@ supported. Keep generic SSH guidance independent of Private Hermes paths.
 | Upstream owner | Changes to place there |
 | --- | --- |
 | PR4b, `feat/webapp-executor-terminals` at `703b3f869`, based on PR1 and PR4a | Managed operator shell selection and WebApp terminal reads. Reuse terminal placement and SSH trust readers. Keep PR4a scoped to literal SSH and OSC 7 cwd handling. |
-| PR2a, `fix/ssh-workspace` at `734837a9f`, based on submission main | SSH file-state checks, overwrite protection, and checkpoint eligibility. Keep deployment grants and project features in their own changes. |
+| PR2a, `fix/ssh-workspace` starting at `734837a9f`, based on submission main | SSH file-state checks, overwrite protection, and checkpoint eligibility. Keep deployment grants and project features in their own changes. |
 | Proposed `feat/ssh-project-workspaces` | SSH write roots and file permissions, project context and Git, WebApp files, delegation, gateway attachment delivery, Kanban workspaces, and remote Python project cwd. Separate commits by consumer. |
 | Proposed `feat/ssh-skill-shell` | Skill shell dispatch, project skill trust, credential passthrough, cwd mapping, and native skill tests. Reuse SSH and skill synchronization. |
 | Proposed `feat/ssh-cron-execution` | Cron workdirs, scripts, validation, cancellation, and executor artifact delivery. Reuse session project context where required. |
@@ -514,13 +515,38 @@ to match the final image. Recheck the documented reason for the empty Hermes
   policy on both containers for nested paths with spaces, dollar signs, and
   Unicode. It also checked an unapplied mode edit, a concurrent one-off
   container, stopped and mismatched executor refusal, and clearing all shares.
-  The fixture exercises the host launcher with a test entrypoint. Full stack,
-  actual chat, and browser checks remain pending.
+  The fixture exercises the host launcher with a test entrypoint.
 - Independent design and wrapper reviews identified one-off service selection
   and YAML Unicode round-trip failures. Compose now excludes one-off
   containers from service selection, and the two YAML inputs preserve literal
   paths. The Hermes consumer must read the strict raw managed config and
   verify that a conflicting profile dotenv value cannot expand a path.
+- Native Docker on Linux passed the lean project lifecycle with
+  `--prior-ref a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The fixture reads
+  the applied policy inside a PTY-launched `make chat`, checks recovery and
+  clearing, and opens and writes through an authenticated Code terminal.
+  Chat shell behavior and renderer readiness need their own checks. Full
+  project lifecycle coverage on Docker Desktop and rootless Podman remains
+  open. The Podman run stopped during source admission for `/run`. Its retry
+  stopped while creating the Tor uplink network during the prior-release setup.
+- Linux Docker passed `make test` and `make hermes-ui-test` (218 renderer
+  tests) for the wrapper policy commit. `make webapp-test` passed its terminal
+  checks and timed out waiting for the browser chat to show `ready`. The
+  prior revision reproduced the timeout, and the retry after firewall
+  approval reached the same point.
+- The checkpoint changes are in `fix/ssh-workspace` at
+  `76f7e68e2a74a3ef021cf446335dd3fa5cb8b600`. The release topic is
+  `3aa5db2279f56e891e4e5108028e7603a129e7f1`, and the combined release
+  replay is `da4ad13358a0595febabf7dcf8e85fca6a7a0d15`. The focused Python
+  suite passed 699 tests on each source tree in Linux ARM64 Docker as UID 10000.
+  `scripts/check` passed all 22 checks for the production source change.
+  The TUI and Desktop type checks passed with Node 26.12.1 and pnpm 12.15.0.
+  The submission TUI passed 2,015 tests and the Desktop UI passed 14,260.
+  Whole-branch Python suites and final combined qualification remain open.
+- Independent checkpoint reviews checked early refusal, both automatic tool
+  hooks, local checkpoint retention, and routed undo. The explicit
+  `verification.status` RPC still needs executor-backed project facts in
+  phase 2.
 
 ### Completion checks
 

@@ -1,6 +1,6 @@
 Runtime and renderer changes from the upstream PR1–PR6 combined replay.
 Base: caafe5389ae585ef77387a962aee05b1bcf17029
-Head: 553cd75ac4da1c4e9cef7479d1962a026c593cda
+Head: da4ad13358a0595febabf7dcf8e85fca6a7a0d15
 
 diff --git a/agent/agent_init.py b/agent/agent_init.py
 index fa4c1e24a000e9273b889982236fe675059d3ac1..d48bdd3083dfb4f3b38c35e981e352d335d2442e 100644
@@ -247,6 +247,36 @@ index 83d5bb2c08b60aa930298c1d9bb6982962412d1a..037509d62cdc8847e103888510d70578
                  conversation_history=_digest_history(messages_snapshot) if _routed else messages_snapshot,
              )
      finally:
+diff --git a/agent/checkpoints/manager.py b/agent/checkpoints/manager.py
+index f39334cc679ae901f75b940b2303f2a544f4a2ff..d578451718419ff4ee86c28f9b637673ba04ee6c 100644
+--- a/agent/checkpoints/manager.py
++++ b/agent/checkpoints/manager.py
+@@ -924,12 +924,20 @@ class CheckpointManager:
+         """Reset per-turn dedup.  Call at the start of each agent iteration."""
+         self._checkpointed_dirs.clear()
+
+-    def unsupported_backend_reason(self, task_id: str = "default") -> Optional[str]:
+-        """Explain why host checkpoints are off limits for a container-backed session.
++    @staticmethod
++    def unsupported_backend_reason(task_id: str = "default", *, allow_host_listing: bool = False) -> Optional[str]:
++        """Explain why a session cannot use the host checkpoint store."""
++        from tools.file_tools_paths import container_backend_for_task, uses_ssh_for_task
++        from tools.terminal_scope import TerminalPolicyUnavailable
+
+-        Classifies the task's backend at call time (nothing is remembered), so /rollback is
+-        refused before the first mutation and follows a backend change within the session."""
+-        from tools.file_tools_paths import container_backend_for_task
++        try:
++            ssh = uses_ssh_for_task(task_id)
++        except TerminalPolicyUnavailable:
++            return "Filesystem checkpoints are unavailable when the terminal policy cannot be read."
++        if ssh:
++            return "Filesystem checkpoints and rollback are unavailable for terminal.backend=ssh."
++        if allow_host_listing:
++            return None
+         backend = container_backend_for_task(task_id)
+         if backend is None:
+             return None
 diff --git a/agent/context_references.py b/agent/context_references.py
 index 9521c8d3391099d9c75f51b831898e3a4b9c9399..1f6656491ce554eef5a3534a0b76bd2c233cd305 100644
 --- a/agent/context_references.py
@@ -1141,10 +1171,26 @@ index e0c2987eea6a350d550a6df9bbe11c00f52a3b4b..a50e480f19cb8630d0a80008b9349087
              # user-initiated capability change in an eternal session.
              parts.append(epoch_line(_agent_home(agent)))
 diff --git a/agent/tool_executor.py b/agent/tool_executor.py
-index 55cbaae263b4297a8b3676b546f35919155fcb5f..9cbec49a52bf188f986d453fc8b69cab9015fcbc 100644
+index 55cbaae263b4297a8b3676b546f35919155fcb5f..a4b44a74df6c50cb297789e5effd45e7032de39e 100644
 --- a/agent/tool_executor.py
 +++ b/agent/tool_executor.py
-@@ -402,6 +402,10 @@ def _unwrap_tool_search_call(
+@@ -98,11 +98,12 @@ def _ensure_file_checkpoint(agent, function_name: str, function_args: dict, effe
+     file_path = function_args.get("path", "")
+     if not file_path:
+         return
++    from agent.checkpoints.manager import CheckpointManager
+     from agent.file_safety import is_nt_namespace_path
+-    from tools.file_tools_paths import _resolve_path_for_task, container_backend_for_task
++    from tools.file_tools_paths import _resolve_path_for_task
+
+-    if container_backend_for_task(effective_task_id or "default") is not None:
+-        return  # container paths: nothing to checkpoint on the host
++    if CheckpointManager.unsupported_backend_reason(effective_task_id or "default"):
++        return
+
+     # Resolving an NT-namespace path is itself the NTLM-leak trigger; leave the
+     # tool's raw-string guard to refuse it without a checkpoint stat.
+@@ -402,6 +403,10 @@ def _unwrap_tool_search_call(
          from tools import tool_search as _ts
          if function_name != _ts.TOOL_CALL_NAME:
              return function_name, function_args, None
@@ -1155,7 +1201,7 @@ index 55cbaae263b4297a8b3676b546f35919155fcb5f..9cbec49a52bf188f986d453fc8b69cab
          underlying, underlying_args, err = _ts.resolve_underlying_call(function_args)
          if err or not underlying:
              return function_name, function_args, None
-@@ -696,11 +700,11 @@ def _dispatch_authorized_once(
+@@ -696,11 +701,11 @@ def _dispatch_authorized_once(
          elif callback is not None:
              callback()
 
@@ -1170,7 +1216,7 @@ index 55cbaae263b4297a8b3676b546f35919155fcb5f..9cbec49a52bf188f986d453fc8b69cab
      if block_message is None:
          block_message, block_error_type = scope_block, "tool_scope_block"
      if block_message is None:
-@@ -779,8 +783,8 @@ def _run_agent_tool_execution_middleware(
+@@ -779,8 +784,8 @@ def _run_agent_tool_execution_middleware(
 
      trace = middleware_trace if middleware_trace is not None else []
      state = _ManagedToolResult(result=None, args=function_args, middleware_trace=trace, blocked=False, dispatched=False)
@@ -1181,6 +1227,17 @@ index 55cbaae263b4297a8b3676b546f35919155fcb5f..9cbec49a52bf188f986d453fc8b69cab
          # Refused in a hosted scope before Relay and every request/execution middleware: no
          # host-side callback sees, rewrites or acts on a call that will not run.
          state.dispatched = True
+@@ -1055,8 +1060,8 @@ def _begin_tool_execution(agent, ref: _ToolCallRef, display_index: int | None) -
+         elif function_name == "terminal":
+             command = function_args.get("command", "")
+             if _is_destructive_command(command):
+-                from tools.file_tools_paths import container_backend_for_task
+-                if container_backend_for_task(effective_task_id or "default") is None:
++                from agent.checkpoints.manager import CheckpointManager
++                if not CheckpointManager.unsupported_backend_reason(effective_task_id or "default"):
+                     from agent.runtime_cwd import scope_terminal_cwd
+                     cwd = function_args.get("workdir") or scope_terminal_cwd() or os.getcwd()
+                     agent._checkpoint_mgr.ensure_checkpoint(cwd, f"before terminal: {command[:60]}")
 diff --git a/agent/turn_context.py b/agent/turn_context.py
 index a9627f246ae6717f3ac7a101119af1c86f3dd941..1643ed2997fca6ce8cd4b0219849ba0f0e7ee77a 100644
 --- a/agent/turn_context.py
@@ -1197,6 +1254,57 @@ index a9627f246ae6717f3ac7a101119af1c86f3dd941..1643ed2997fca6ce8cd4b0219849ba0f
          # Import-cost gate: MCP tools are only registered by code that already imported
          # ``tools.mcp_tool`` (~0.4s); not in sys.modules => nothing to do.
          if not getattr(agent, "_skip_mcp_refresh", False) and "tools.mcp_tool" in sys.modules:
+diff --git a/agent/turn_explainers.py b/agent/turn_explainers.py
+index 3c291196ab24b28279650c78b40c9a4687631f92..8e19902e88b5e26758432fc4746fa150d6f1ddba 100644
+--- a/agent/turn_explainers.py
++++ b/agent/turn_explainers.py
+@@ -132,6 +132,12 @@ class TurnExplainersMixin:
+         if not targets:
+             return
+         landed = file_mutation_result_landed(tool_name, result)
++        from tools.file_tools_paths import uses_ssh_for_task
++        from tools.terminal_scope import TerminalPolicyUnavailable
++        try:
++            ssh = uses_ssh_for_task(task_id or "default")
++        except TerminalPolicyUnavailable:
++            return
+         if landed:
+             landed_paths = _extract_landed_file_mutation_paths(tool_name, args, result)
+             changed = getattr(self, "_turn_file_mutation_paths", None)
+@@ -140,12 +146,14 @@ class TurnExplainersMixin:
+             # Feed the checkpoint agent-write ledger so /rollback's safe mode can tell
+             # Hermes-authored content from later user hand-edits.
+             mgr = getattr(self, "_checkpoint_mgr", None)
+-            if mgr is not None and getattr(mgr, "enabled", False):
+-                from tools.file_tools_paths import container_backend_for_task
+-                if container_backend_for_task(task_id or "default") is None:  # container paths carry no host ledger entry
++            if not ssh and mgr is not None and getattr(mgr, "enabled", False):
++                from agent.checkpoints.manager import CheckpointManager
++                if not CheckpointManager.unsupported_backend_reason(task_id or "default"):
+                     for _p in landed_paths:
+                         with suppress(Exception):
+                             mgr.record_agent_write(_p)
++        if ssh:
++            return  # The failure verifier requires filesystem metadata from the file's backend.
+         if is_error and not landed:
+             # Keep the FIRST error per path unless a later success replaces it.
+             preview = _extract_error_preview(result)
+diff --git a/agent/turn_stop_gates.py b/agent/turn_stop_gates.py
+index 7ac100a13bb500d13a71a05283ac6bc9b0ebef5b..653b98a188c3e626e65b727149ef07c7501fd4b4 100644
+--- a/agent/turn_stop_gates.py
++++ b/agent/turn_stop_gates.py
+@@ -38,8 +38,10 @@ def _verify_on_stop_nudge(agent) -> Optional[str]:
+         from agent.verification_stop import (
+             build_verify_on_stop_nudge, verify_on_stop_enabled
+         )
++        from tools.file_tools_paths import uses_ssh_for_task
+
+-        if verify_on_stop_enabled():
++        task_id = getattr(agent, "_current_task_id", None) or getattr(agent, "session_id", None) or "default"
++        if verify_on_stop_enabled() and not uses_ssh_for_task(task_id):
+             return build_verify_on_stop_nudge(
+                 session_id=getattr(agent, "session_id", None),
+                 changed_paths=getattr(agent, "_turn_file_mutation_paths", set()),
 diff --git a/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.test.ts b/apps/desktop/src/app/right-sidebar/terminal/cwd-tracking.test.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..e9157c1b01d8fdde2eb38d8332174f45b80a7e41
@@ -1670,6 +1778,25 @@ index fcd894cc793605386ac45a03779673a829f8867a..a834643bd956ae2f9b2ad12f672e3426
      return
    }
 
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts
+index 866183fe20f5024743aaff4928d671789a788353..da56a339153ad13a4ecfb82c5beeb793aa73d5b8 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/slash-desktop-commands.ts
+@@ -346,6 +346,14 @@ export function desktopReadCommandHandlers<C extends { arg: string }>(env: Deskt
+
+         out.render(text)
+       } catch (err) {
++        if (err instanceof Error && err.message === 'unsupported_terminal_backend') {
++          const data = (err as { data?: { detail?: unknown; field?: unknown } }).data
++
++          if (data?.field === 'checkpoint' && typeof data.detail === 'string' && data.detail) {
++            return out.render(data.detail)
++          }
++        }
++
+         out.render(errorText(err))
+       }
+     },
 diff --git a/apps/desktop/src/global.d.ts b/apps/desktop/src/global.d.ts
 index 27f9da1086b3ff9eff50ec748bb53230e711b882..9d114132073f1bdf4d545fad62fa2171bed7a540 100644
 --- a/apps/desktop/src/global.d.ts
@@ -2624,6 +2751,132 @@ index 432af68e2973e30f6101d5aae93c8ae4b599cda7..d85ded311f612a0e2c05cab2572e1162
          "container_cpu": "TERMINAL_CONTAINER_CPU",
          "container_memory": "TERMINAL_CONTAINER_MEMORY",
          "container_disk": "TERMINAL_CONTAINER_DISK",
+diff --git a/gateway/session_tui_ops.py b/gateway/session_tui_ops.py
+index 24bcc3e19c68cdc38d35df0ef6e4974a45e0f87e..fe7dc540feaf202914fe02b09881a7b66f79e1de 100644
+--- a/gateway/session_tui_ops.py
++++ b/gateway/session_tui_ops.py
+@@ -250,15 +250,23 @@ async def rollback(connection, ref, params, *, kind):
+         cwd = policy.cwd
+         if not mgr.enabled and kind in ('list', 'session_diff'):
+             return {'enabled': False, 'checkpoints': []} if kind == 'list' else {'enabled': False}
+-        # Host checkpoints are not a container-backed session's tree (main's _container_checkpoint_refusal),
+-        # classified under the session's frozen terminal policy, not the owner's ambient one.
++        # Classify with the session's frozen terminal policy before looking up a checkpoint.
+         from agent.runtime_scope import bind_terminal_policy
+         from tools.terminal_scope import reset_terminal_scope
+         token = bind_terminal_policy(terminal, profile_home=authority.profile_id)
+         try:
+             refusal = mgr.unsupported_backend_reason(task_id)
++            workspace_refusal = mgr.unsupported_backend_reason(task_id, allow_host_listing=True) if refusal else None
+         finally:
+             reset_terminal_scope(token)
++        if kind == 'list' and workspace_refusal:
++            if params.get('undo_since') is not None:
++                return {'enabled': True, 'checkpoints': []}
++            raise AuthorityRefusal('unsupported_terminal_backend', field='checkpoint', detail=workspace_refusal)
++        if workspace_refusal and kind == 'diff':
++            raise AuthorityRefusal('unsupported_terminal_backend', field='checkpoint', detail=workspace_refusal)
++        if workspace_refusal and kind == 'restore':
++            return {'success': False, 'error': workspace_refusal}
+         if kind == 'list':
+             # The TUI renders ``message``; the manager calls it ``reason``.
+             listed = {'enabled': True, 'checkpoints': [
+@@ -298,9 +306,9 @@ async def rollback(connection, ref, params, *, kind):
+             if rendered := render_diff(raw, 80):
+                 payload['rendered'] = rendered
+             return payload
++        # Main's whole-tree /rollback keeps the user's hand-edits unless ``--all`` (``all``) says otherwise.
+         if refusal:
+             return {'success': False, 'error': refusal}
+-        # Main's whole-tree /rollback keeps the user's hand-edits unless ``--all`` (``all``) says otherwise.
+         from agent.checkpoints.undo_hint import checkpoint_taken_at
+         taken.append(checkpoint_taken_at(cwd, target))
+         return mgr.restore(cwd, target, file_path=file_path or None,
+diff --git a/gateway/slash_commands.py b/gateway/slash_commands.py
+index cfe79f834025c1261f8ea29c6fa2450c61076edd..450894f6f1d4b647cd5a56b6ca64f145b6a1d1c9 100644
+--- a/gateway/slash_commands.py
++++ b/gateway/slash_commands.py
+@@ -749,16 +749,14 @@ class GatewaySlashCommandsMixin(
+         mgr = self._checkpoint_manager(event.source)
+         if mgr is None:
+             return t("gateway.rollback.not_enabled")
+-        cwd = self._terminal_cwd()
+         # --all / --force: classic full restore, overwriting user edits too.
+         tokens = event.get_command_args().strip().split()
+         restore_all = any(tok.lower() in ("--all", "--force") for tok in tokens)
+         arg = " ".join(tok for tok in tokens if tok.lower() not in ("--all", "--force"))
+-        # Container-backed session: host checkpoints belong to another tree, so a restore is
+-        # refused; the bare listing stays visible, prefixed with the reason (same as the CLI).
+         reason = mgr.unsupported_backend_reason()
+-        if reason and arg:
++        if reason and (arg or mgr.unsupported_backend_reason(allow_host_listing=True)):
+             return reason
++        cwd = self._terminal_cwd()
+         checkpoints = mgr.list_checkpoints(cwd)
+         if not arg:
+             listing = format_checkpoint_list(checkpoints, cwd)
+@@ -791,7 +789,6 @@ class GatewaySlashCommandsMixin(
+         mode = "working"
+         for low in args:
+             mode = _DIFF_MODE_BY_ARG.get(low, mode)
+-        cwd = self._terminal_cwd()
+         if mode == "session":
+             # Cumulative checkpoint-baseline diff.
+             mgr = self._checkpoint_manager(event.source)
+@@ -799,10 +796,10 @@ class GatewaySlashCommandsMixin(
+                 return t("gateway.diff.not_enabled")
+             if reason := mgr.unsupported_backend_reason():  # host baseline is not this session's tree
+                 return reason
+-            result = await asyncio.to_thread(mgr.session_diff, cwd)
++            result = await asyncio.to_thread(mgr.session_diff, self._terminal_cwd())
+         else:
+             from tools.working_diff import collect_working_diff
+-            result = await asyncio.to_thread(collect_working_diff, cwd, mode)
++            result = await asyncio.to_thread(collect_working_diff, self._terminal_cwd(), mode)
+         if not result.get("success"):
+             return t("gateway.diff.failed", error=result.get("error") or t("gateway.diff.err_default"))
+         return self._render_diff_result(result, stat_only)
+diff --git a/gateway/slash_commands_session.py b/gateway/slash_commands_session.py
+index b6840cf960706f944219e3f70bcedb8fe0a78ab1..d86ed8e83426c4aaa6dffeac456b87af26f99ed9 100644
+--- a/gateway/slash_commands_session.py
++++ b/gateway/slash_commands_session.py
+@@ -778,14 +778,30 @@ class GatewaySessionCommandsMixin:
+         preview = target_text[:200] + "..." if len(target_text) > 200 else target_text
+         reply = t("gateway.undo.removed", turns=result["turns_undone"],
+                   count=result["rewound_count"], preview=preview)
+-        if (mgr := self._checkpoint_manager(source)) is not None:
+-            # Same manager and cwd /rollback lists.
+-            from agent.checkpoints.undo_hint import format_undo_rollback_hint, undo_changed_files
+-            files = await asyncio.to_thread(undo_changed_files, mgr, self._terminal_cwd(), result.get("undo_since"))
+-            if line := format_undo_rollback_hint(files):
+-                reply += "\n" + line
++        if (since := result.get("undo_since")) and (line := await asyncio.to_thread(
++                self._undo_checkpoint_hint, source, since)):
++            reply += "\n" + line
+         return reply
+
++    def _undo_checkpoint_hint(self, source, since) -> str:
++        from agent.checkpoints.undo_hint import format_undo_rollback_hint, undo_changed_files
++        from gateway.run import _profile_runtime_scope
++        from hermes_cli.config_backend import ConfigBackendUnavailable
++        from tui_gateway.launch_profile_policy import launch_profile_scope_if_multiplexed
++
++        try:
++            home = self._profile_scope_key_for_source(source)
++            scope = (_profile_runtime_scope(home, hydrate_secrets=False) if home is not None
++                     else launch_profile_scope_if_multiplexed())
++            with scope:
++                mgr = self._checkpoint_manager(source)
++                if mgr is not None and not mgr.unsupported_backend_reason():
++                    return format_undo_rollback_hint(
++                        undo_changed_files(mgr, self._terminal_cwd(), since, task_id=None))
++        except (Exception, ConfigBackendUnavailable):  # health: allow BLE001 -- the hint follows a committed rewind
++            logger.debug("undo rollback hint skipped", exc_info=True)
++        return ""
++
+     # --------------------------------------------------------------------- /compress
+
+     async def _handle_compress_command(self, event: MessageEvent) -> str:
 diff --git a/hermes_cli/banner.py b/hermes_cli/banner.py
 index 1a8b5402077807a9021037f805db67876ceea664..c540cc055385bc837438cefb3369b44153cdb9ab 100644
 --- a/hermes_cli/banner.py
@@ -2726,7 +2979,7 @@ index 8414d5a8b3f4b91c428077cb71a2a8dc720368b5..7668b12f5ad8c2115abb9023ca6f48f2
      """Validate a /browser connect URL: ``(cdp_url, port)`` or None after printing the error.
      A ``/devtools/browser/<id>`` path is kept verbatim; anything else is reduced to the origin."""
 diff --git a/hermes_cli/cli_commands_mixin.py b/hermes_cli/cli_commands_mixin.py
-index a6320d5e7a4fc3d7568fa92c15f057680f51a7be..f4e5965f7faca427ad6f8f67ad1c20db0d37bbdc 100644
+index a6320d5e7a4fc3d7568fa92c15f057680f51a7be..89508b3863a998f5a0d540569cc905ab7d5f8deb 100644
 --- a/hermes_cli/cli_commands_mixin.py
 +++ b/hermes_cli/cli_commands_mixin.py
 @@ -40,7 +40,7 @@ from hermes_cli.cli_session_switch import (
@@ -2747,6 +3000,20 @@ index a6320d5e7a4fc3d7568fa92c15f057680f51a7be..f4e5965f7faca427ad6f8f67ad1c20db
      if normalized is None:
          return
      cdp_url, port = normalized
+@@ -416,11 +416,9 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
+         # --all / --force: classic full restore, overwriting user edits too.
+         restore_all = any(a.lower() in ("--all", "--force") for a in args)
+         args = [a for a in args if a.lower() not in ("--all", "--force")]
+-        if reason := mgr.unsupported_backend_reason():  # CLI: no session key, the "default" container
+-            # Container-backed session: any host checkpoint listed here belongs to another tree,
+-            # so diff/restore are refused; the list stays visible for local administration.
++        if reason := mgr.unsupported_backend_reason():
+             print(f"  {reason}")
+-            if args:
++            if args or mgr.unsupported_backend_reason(allow_host_listing=True):
+                 return
+         if not args:
+             # No checkpoints for this dir → cross-project view (writes may sit under the session cwd).
 diff --git a/hermes_cli/cli_config_load.py b/hermes_cli/cli_config_load.py
 index cdffbab48993a0ecd53bc56db7a07c9bd3afdf54..8ac7d5baf4a4d6816c2e90db93945dcf6ceae5d0 100644
 --- a/hermes_cli/cli_config_load.py
@@ -3519,6 +3786,29 @@ index c446e30c2f72a9a88963adfcf8bb0aaf3f7520bf..9a9d426eeb2c803ba4b844f80dd2913f
 +    return [*fixed, *base_ssh_options(endpoint.control_path, connect_timeout_s, strict_host_key=bool(ssh_config)),
 +            *host_args(endpoint, explicit_port=bool(ssh_config)),
              "--", endpoint.target, remote_command]
+
+
+diff --git a/hermes_cli/gateway_rollback.py b/hermes_cli/gateway_rollback.py
+index b821de6acca62d049b2d526c11831f218a894e85..b932d4d273ffec6259365070b18ffd934a088029 100644
+--- a/hermes_cli/gateway_rollback.py
++++ b/hermes_cli/gateway_rollback.py
+@@ -10,7 +10,7 @@ from __future__ import annotations
+ import os
+
+ from agent.i18n import t
+-from hermes_cli.gateway_client import GatewayClientError
++from hermes_cli.gateway_client import GatewayClientError, GatewayRPCError
+
+
+ def _t(key, **kw):
+@@ -47,6 +47,9 @@ def rollback(cli, connection, command):
+             params["all"] = True  # main's --all/--force: also revert the user's hand-edits
+         _restored(cli, connection, connection.call("rollback.restore", **params), params.get("file_path"))
+     except GatewayClientError as exc:
++        if (isinstance(exc, GatewayRPCError) and str(exc) == "unsupported_terminal_backend"
++                and exc.data.get("field") == "checkpoint"):
++            return print(f"  {exc.data.get('detail') or 'Filesystem checkpoints are unavailable for this session.'}")
+         print(f"  ❌ {exc}")
 
 
 diff --git a/hermes_cli/managed_scope.py b/hermes_cli/managed_scope.py
@@ -8748,6 +9038,41 @@ index d18e65acc741ee2d781d98587fee46fffb5de8b9..0187fcee9e4b399e43f4fa64ec446e61
      if isinstance(env, SSHEnvironment):
          return env._build_ssh_command()
      return _plugin_exec_prefix(env, user=user, interactive=interactive)
+diff --git a/tools/file_tools_paths.py b/tools/file_tools_paths.py
+index 8c5c96f6367938f72cab4b732060a868ed9c8dce..1c447e7875e02e06af3e272b0171b9ac1956ff43 100644
+--- a/tools/file_tools_paths.py
++++ b/tools/file_tools_paths.py
+@@ -113,6 +113,15 @@ def container_backend_for_task(task_id: str = "default") -> str | None:
+     return _terminal_env_type_for_task(task_id) if _uses_container_paths(task_id) else None
+
+
++def uses_ssh_for_task(task_id: str) -> bool:
++    """Check the scoped SSH policy before consulting the task's live backend."""
++    from tools.terminal_scope import get_terminal_scope, terminal_env
++
++    if get_terminal_scope() is not None and terminal_env("TERMINAL_ENV").lower() == "ssh":
++        return True
++    return _terminal_env_type_for_task(task_id) == "ssh"
++
++
+ def _normalize_without_host_deref(path: str | Path | PurePosixPath) -> PurePosixPath:
+     """Normalize path syntax without following host symlinks: container paths are
+     meaningful inside the sandbox, and a host-side ``/workspace`` symlink must not rewrite them."""
+diff --git a/tools/file_tools_read_tracking.py b/tools/file_tools_read_tracking.py
+index 64366ae045e0c129da214d29a9afa3eaec3b2c74..772048c3a6500568dfb3070d0abfc7278b00a2a6 100644
+--- a/tools/file_tools_read_tracking.py
++++ b/tools/file_tools_read_tracking.py
+@@ -502,7 +502,10 @@ def _mark_verification_stale(task_id: str, resolved_paths: list[str],
+     try:
+         from agent.coding_context import project_facts_for
+         from agent.verification_evidence import mark_workspace_edited
++        from tools.file_tools_paths import uses_ssh_for_task
+
++        if uses_ssh_for_task(task_id):
++            return
+         parents = [str(Path(p).parent) for p in paths]
+         cwd = (next((c for c in parents if project_facts_for(c)), None)
+                or _authoritative_workspace_root(task_id) or parents[0])
 diff --git a/tools/hosted_tool_policy.py b/tools/hosted_tool_policy.py
 index 4e4d1e287db50f1a832caffb0d8b315e9fb2cf31..94d6148bd0d1a0cd0726f7a61d5df1a8d408265e 100644
 --- a/tools/hosted_tool_policy.py
@@ -9449,6 +9774,40 @@ index 2a54e7e1460736226b46b8b8c169d9e54f3c6166..d35a058aba6ce2a4f606540770c10724
 
 
  def _stamp_sandbox_home(env_obj, provider, cwd) -> None:
+diff --git a/tools/terminal_tool_result.py b/tools/terminal_tool_result.py
+index 970bfd6a2548464dd52c65778e6e3bd73c1557ee..0a4a74d102c232011cd3a85133ae3ace887deaa9 100644
+--- a/tools/terminal_tool_result.py
++++ b/tools/terminal_tool_result.py
+@@ -7,6 +7,7 @@ notes/hints, spill redaction, verification evidence) + exit-code tables. Lazy
+ import json
+ import logging
+ import os
++import posixpath
+ import re
+ import signal
+ from contextlib import contextmanager
+@@ -257,9 +258,11 @@ def finalize_foreground_result(
+     failure_hint = _failure_hint(command, returncode, output, exit_note)
+     # cwd echo when the command changed directory (gated on the observation
+     # flag so an interrupted command can't echo another session's cwd).
++    ssh = env_type == "ssh" or getattr(env, "_hermes_backend_name", None) == "ssh"
++    normalize_cwd = posixpath.normpath if ssh else os.path.realpath
+     changed_cwd = None
+     with _quiet("cwd comparison"):
+-        if observed_cwd and command_cwd and os.path.realpath(str(observed_cwd)) != os.path.realpath(str(command_cwd)):
++        if observed_cwd and command_cwd and normalize_cwd(str(observed_cwd)) != normalize_cwd(str(command_cwd)):
+             changed_cwd = str(observed_cwd)
+     # rc=130 is an interrupt only with the executor's marker — a command can
+     # legitimately `exit 130` itself. An interrupted approved run keeps the
+@@ -275,7 +278,7 @@ def finalize_foreground_result(
+         ("environment_recreated", _ENV_RECREATED_NOTE if result.get("environment_recreated") else None),
+         ("cwd_fallback", _cwd_fallback_note(result.get("cwd_fallback"))),
+         *_redact_spill_file(result.get("full_output_path"), result.get("output_total_chars"), command),
+-        ("verification_evidence", _verification_evidence(
++        ("verification_evidence", None if ssh else _verification_evidence(
+             command, command_cwd, session_id or task_id or effective_task_id or "default",
+             returncode, output, result.get("pipeline_status"))),
+         ("approval", approval_note or None),
 diff --git a/tools/tool_search.py b/tools/tool_search.py
 index ea4edbf0fca694cddf35c453befc8a557b88c5bc..84b252ba0228f2f46d3185cb9fc50d4a08c46206 100644
 --- a/tools/tool_search.py
@@ -9731,6 +10090,30 @@ index 588cb0f11784c964499f23726dd9d8e69662b8b1..ed47f457d362883799588f4463c97c7a
 
 
  def agent_tool_drops(agent: Any) -> frozenset:
+diff --git a/tui_gateway/checkpoints.py b/tui_gateway/checkpoints.py
+index db7c80c494b731ba9a39b4b03b8a5b46a45c4d12..d16ab0d0a692c9d432939e138038b53b8e34ece9 100644
+--- a/tui_gateway/checkpoints.py
++++ b/tui_gateway/checkpoints.py
+@@ -52,7 +52,7 @@ def _resolve_checkpoint_hash(mgr, cwd: str, ref: str) -> str:
+
+ def undo_rollback_hint_for(session: dict, target_message: dict, kept_history: list) -> dict | None:
+     """``/undo``'s changed-files line for a sidecar session (``agent/checkpoints/undo_hint.py``): the same
+-    manager, cwd and container refusal its ``rollback.*`` methods use. None: no line.
++    manager, cwd and backend refusal its ``rollback.*`` methods use. None: no line.
+
+     The store is the SESSION's profile's (``_resolve_checkpoint_base`` reads the bound HERMES_HOME), so the
+     whole read runs under that profile's runtime scope: an RPC thread otherwise holds the launch profile's."""
+@@ -62,8 +62,8 @@ def undo_rollback_hint_for(session: dict, target_message: dict, kept_history: li
+     from agent.checkpoints.undo_hint import undo_hint_payload, undo_span_start
+     from tui_gateway import server  # method bodies are bound onto server.py's globals (method_ctx.py)
+
+-    def hint(mgr, cwd):  # under the same profile scope rollback.restore runs in (_with_checkpoints)
+-        if server._container_checkpoint_refusal(session, mgr, cwd):
++    def hint(mgr, cwd, refusal):
++        if refusal:
+             return None
+         since = undo_span_start((target_message or {}).get("timestamp"), kept_history)
+         return undo_hint_payload(mgr, cwd, since, task_id=None)
 diff --git a/tui_gateway/methods_browser.py b/tui_gateway/methods_browser.py
 index 33e5da9335fde0ec5b8b789103724f1fc8b407f4..e1452ac8a6c2f9c0910266aa75794609d0e6f2c8 100644
 --- a/tui_gateway/methods_browser.py
@@ -9798,6 +10181,79 @@ index bfd4f8691c97ac230aa1e539f7cb66c8e4a7ce84..2a85de7aa93d898b19a7ed207051fbd6
      if _bd_runtime.install_command() is None:
          return _err(rid, _DISPLAY_ERR, "no supported package manager (apt-get, dnf, pacman) on this host")
      profile_key = hermes_home_key()
+diff --git a/tui_gateway/methods_tools.py b/tui_gateway/methods_tools.py
+index c3f95d21fa281be3849568f2393dbc88d91f16a5..807e8a4fd8e5106a8a9ea43e90a89eb821be270d 100644
+--- a/tui_gateway/methods_tools.py
++++ b/tui_gateway/methods_tools.py
+@@ -1120,14 +1120,16 @@ def _(rid, params: dict) -> dict:
+
+ @_rpc("rollback.list", live_session=True, fail_code=5020)
+ def _(rid, params: dict, session) -> dict:
+-    def go(mgr, cwd):
++    def go(mgr, cwd, refusal):
+         if not mgr.enabled:
+             return _ok(rid, {"enabled": False, "checkpoints": []})
++        if refusal:
++            return _err(rid, 5020, refusal)
+         # The TUI renders ``message``; the manager calls it ``reason``.
+         rows = [{"hash": c.get("hash", ""), "timestamp": c.get("timestamp", ""), "message": c.get("reason", "")}
+                 for c in mgr.list_checkpoints(cwd)]
+         return _ok(rid, {"enabled": True, "checkpoints": rows})
+-    return _with_checkpoints(session, go)
++    return _with_checkpoints(session, go, allow_host_listing=True)
+
+
+ @_rpc("rollback.restore", live_session=True, fail_code=5021)
+@@ -1143,9 +1145,9 @@ def _(rid, params: dict, session) -> dict:
+     if not file_path and session.get("running"):
+         return _err(rid, 4009, busy_message("rollback restore", bool(session.get("_manual_compress_active"))))
+
+-    def go(mgr, cwd):
+-        if reason := _container_checkpoint_refusal(session, mgr, cwd):
+-            return {"success": False, "error": reason}
++    def go(mgr, cwd, refusal):
++        if refusal:
++            return {"success": False, "error": refusal}
+         # A whole-tree restore keeps the user's hand-edits unless ``all`` (main's --all), as on the owner.
+         commit = _resolve_checkpoint_hash(mgr, cwd, target)
+         taken = _tools_mod("agent.checkpoints.undo_hint").checkpoint_taken_at(cwd, commit)
+@@ -1176,10 +1178,9 @@ def _(rid, params: dict, session) -> dict:
+     if not (target := params.get("hash", "")):
+         return _err(rid, 4014, "hash required")
+
+-    def go(mgr, cwd):
+-        # Host tree vs host checkpoint is not this session's diff either (same refusal as /rollback diff).
+-        if reason := _container_checkpoint_refusal(session, mgr, cwd):
+-            return _err(rid, 5022, reason)
++    def go(mgr, cwd, refusal):
++        if refusal:
++            return _err(rid, 5022, refusal)
+         r = mgr.diff(cwd, _resolve_checkpoint_hash(mgr, cwd, target))
+         raw = r.get("diff", "")[:4000]
+         payload = {"stat": r.get("stat", ""), "diff": raw}
+@@ -1189,22 +1190,6 @@ def _(rid, params: dict, session) -> dict:
+     return _with_checkpoints(session, go)
+
+
+-def _container_checkpoint_refusal(session, mgr, cwd) -> str | None:
+-    """Why host checkpoints are off limits for a container-backed session, else ``None``.
+-
+-    Classifies with the identity and scopes a turn binds (prompt_turn.py): the session key is the
+-    tool-call task id, the session context drives the terminal registry lookup, and the profile
+-    scope supplies the terminal policy; otherwise a cached launch-profile environment or the launch
+-    config would answer for another profile's session."""
+-    task_id = session.get("session_key") or "default"
+-    tokens = _set_session_context(task_id, cwd=cwd)
+-    try:
+-        with _session_profile_runtime_scope(session):
+-            return mgr.unsupported_backend_reason(task_id)
+-    finally:
+-        _clear_session_context(tokens)
+-
+-
+ @method("browser.manage")
+ @_profile_scoped
+ def _(rid, params: dict) -> dict:
 diff --git a/tui_gateway/server.py b/tui_gateway/server.py
 index 3df83a2ef41703a8ae998333e00a70d7cf78db06..d56cf815a2c9e2bcf536547d8bca63e1c39ecc4b 100644
 --- a/tui_gateway/server.py
@@ -9836,3 +10292,60 @@ index 3df83a2ef41703a8ae998333e00a70d7cf78db06..d56cf815a2c9e2bcf536547d8bca63e1
          except Exception:
              logger.warning("failed to persist live session system prompt for session %s", session_key, exc_info=True)
          finally:
+diff --git a/tui_gateway/session_registry.py b/tui_gateway/session_registry.py
+index 7578264fabfffbf5fe6d6aebadc24539249c548a..0988264c7b262ba3eec694038bd8a807ed2a5ca1 100644
+--- a/tui_gateway/session_registry.py
++++ b/tui_gateway/session_registry.py
+@@ -426,11 +426,19 @@ def _any_live_session_claims_key(target: str) -> bool:
+     return False
+
+
+-def _with_checkpoints(session, fn):
+-    """``fn(mgr, cwd)`` under the session's profile scope: the store is ``<profile home>/checkpoints``
+-    (``_resolve_checkpoint_base`` reads the bound HERMES_HOME), the one the session's turns wrote to."""
++def _with_checkpoints(session, fn, *, allow_host_listing=False):
++    """Call ``fn(mgr, cwd, refusal)`` under the session's profile scope."""
++    mgr = session["agent"]._checkpoint_mgr
++    task_id = session.get("session_key") or "default"
+     with _session_profile_runtime_scope(session, hydrate_secrets=False):
+-        return fn(session["agent"]._checkpoint_mgr, _session_cwd(session))
++        tokens = _set_session_context(task_id, cwd=str(session.get("cwd") or ""))
++        try:
++            refusal = (mgr.unsupported_backend_reason(task_id, allow_host_listing=True)
++                       if allow_host_listing else mgr.unsupported_backend_reason(task_id))
++        finally:
++            _clear_session_context(tokens)
++        cwd = "" if refusal else _session_cwd(session)
++        return fn(mgr, cwd, refusal)
+
+
+ # ── Methods: session ─────────────────────────────────────────────────
+diff --git a/ui-tui/src/app/userMessages.ts b/ui-tui/src/app/userMessages.ts
+index 862082942208d00f9b210db3a73992d5e60b26e8..34904cc3c14d3a72275a6627f9a2d8431bebf401 100644
+--- a/ui-tui/src/app/userMessages.ts
++++ b/ui-tui/src/app/userMessages.ts
+@@ -167,6 +167,12 @@ export const describeRpcError = (err: unknown): string => {
+   const { code, message } = rpcShape(err)
+   const text = message ?? (typeof err === 'string' && err.trim() ? err : t('rpc.requestFailed'))
+
++  const data = (err as { data?: { detail?: unknown; field?: unknown } } | null)?.data
++
++  if (text === 'unsupported_terminal_backend' && data?.field === 'checkpoint') {
++    return typeof data.detail === 'string' && data.detail ? data.detail : t('userMessages.rpc.checkpointWorkspaceUnavailable')
++  }
++
+   if (isVersionSkewError(err)) {
+     logReplacedWireText(code, text)
+
+diff --git a/ui-tui/src/i18n/en/userMessages.ts b/ui-tui/src/i18n/en/userMessages.ts
+index bf9a1b3b5291d7118d1c9089c27616361f821960..2434e4d1c6b74ac535fdbc66ffcc00201f31a17a 100644
+--- a/ui-tui/src/i18n/en/userMessages.ts
++++ b/ui-tui/src/i18n/en/userMessages.ts
+@@ -37,6 +37,7 @@ export const userMessagesEn = {
+     },
+
+     rpc: {
++      checkpointWorkspaceUnavailable: 'Filesystem checkpoints are unavailable for this terminal workspace.',
+       /** `{0}` = the session's terminal backend (docker, ssh, ...). shell.exec runs on the gateway host. */
+       shellBackendRefused: (backend: string) =>
+         `!commands run on the gateway host, but this session's terminal backend is ${backend}, so the command was not run. Ask the agent to run it instead; the agent's terminal runs inside ${backend}.`,

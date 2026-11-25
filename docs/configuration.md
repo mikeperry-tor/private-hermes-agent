@@ -217,8 +217,8 @@ keeping shares, or moving or replacing a shared directory, even if its path
 stays the same. Then run `make up`. To remove all shares, clear the setting
 and run `make up`.
 
-A new `make chat` uses the running stack's terminal mode and checks the executor's
-attached shares. Apply changes before opening a chat that needs those shares.
+A new `make chat` checks that the executor's attached shares match the running
+gateway's policy. Apply changes before opening a chat that needs those shares.
 
 With shares configured, the executor stays stopped after an exit. Run
 `make up` to check the project sources and start it again. If the executor's

@@ -391,6 +391,9 @@ execution boundary:
   `write_file` and `patch`. The SSH backend selects where model commands run.
   The executor mounts and runner permissions govern access to shared files.
   See [shared project permissions](configuration.md#shared-project-filesystem-permissions).
+- Filesystem checkpoints, rollback, and checkpoint-based session diffs are
+  unavailable for SSH workspaces. Hermes keeps profile checkpoint records for
+  administrative inspection.
 - Python `code_execution.mode: strict` changes staging and interpreter
   selection, not OS containment.
 - Iron-proxy can broker SDK credentials and enforce HTTP destination rules, but
