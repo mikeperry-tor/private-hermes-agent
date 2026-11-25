@@ -217,6 +217,9 @@ keeping shares, or moving or replacing a shared directory, even if its path
 stays the same. Then run `make up`. To remove all shares, clear the setting
 and run `make up`.
 
+A new `make chat` uses the running stack's terminal mode and checks the executor's
+attached shares. Apply changes before opening a chat that needs those shares.
+
 With shares configured, the executor stays stopped after an exit. Run
 `make up` to check the project sources and start it again. If the executor's
 network namespace owner also needs recovery, follow the
@@ -633,7 +636,10 @@ together while preserving persistent data. Run `make build` after modifying
 tracked implementation files.
 
 Use the same full `make down` and `make up` sequence to recover from an
-`agent-net` or `executor-net` failure. Restarting only a namespace owner can
+`agent-net` or `executor-net` failure or an interrupted deployment. Close
+open `make chat` sessions before shutdown. If shutdown fails, correct the
+error and repeat `make down`. Once shutdown completes, correct any startup
+error, run `make up`, and reopen chat. Restarting only a namespace owner can
 leave its application containers attached to an obsolete namespace (see
 [failure behavior and shared-namespace restarts](architecture.md#failure-behavior-and-shared-namespace-restarts)).
 Never add `--volumes` (`-v`) during recovery.

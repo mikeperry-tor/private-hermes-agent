@@ -1,5 +1,6 @@
 """Deployment settings handed to native Hermes terminal and tool policy."""
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 
@@ -55,3 +56,9 @@ class ManagedPolicyTests(unittest.TestCase):
         for name in ("WEBAPP_TERMINAL_ENVIRONMENT", "WEBAPP_EXTERNAL_CONTENT", "COMPUTER_USE_ENABLED"):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, name):
                 managed.policy(dict(SERVING, **{name: ""}))
+
+    def test_applied_roots_are_published_as_literal_path_data(self):
+        roots = ["/workspace", "/mnt/projects/nested/a ${NAME} $$ \U0001f680"]
+        config, dotenv = managed.policy(dict(SERVING, PRIVATE_HERMES_EXECUTOR_ROOTS=json.dumps(roots)))
+        self.assertEqual(config["terminal"]["ssh_workspace_roots"], roots)
+        self.assertNotIn("TERMINAL_SSH_WORKSPACE_ROOTS", dotenv)

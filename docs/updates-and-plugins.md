@@ -159,6 +159,10 @@ At startup, the Hermes entrypoint writes `/etc/hermes/config.yaml` and
 - The SSH file backend, endpoint, and OpenSSH client config, plus executor-only
   desktop, Chromium sandbox, operator terminal mode, `context_references.fetch_urls: false`,
   and the `tools.disabled` list.
+- The executor workspace destinations. `make up` verifies the attached mounts
+  and publishes only `/workspace` and the exact project destinations.
+  `make chat` compares the running gateway's list with the executor's mounts
+  before copying the destinations into its managed config.
 - Cleared `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` values (applied on top
   of Compose defaults and reapplied across profile reloads) so the namespace
   firewall and `tor` gateway remain the single enforcement point for local

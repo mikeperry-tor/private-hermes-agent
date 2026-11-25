@@ -66,7 +66,7 @@ down:
 	python3 scripts/stack.py down
 
 chat:
-	python3 scripts/stack.py compose run --rm --no-deps hermes chat
+	python3 scripts/stack.py chat
 
 gateway: up
 

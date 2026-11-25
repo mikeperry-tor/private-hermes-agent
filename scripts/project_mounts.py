@@ -34,13 +34,19 @@ def parse_mounts(value):
         if not separator or not source.startswith('/') or not valid_path_characters(source + target):
             raise ValueError(f'{SETTING} entry {index} must be an absolute host:executor path pair.')
         destination = PurePosixPath(target)
-        if (str(destination) != target or '..' in destination.parts or
-                destination == PROJECTS or not destination.is_relative_to(PROJECTS)):
+        if not valid_destination(target):
             raise ValueError(f'{SETTING} entry {index} must use a normalized path below {PROJECTS}/.')
         if any(overlaps(destination, other) for other in mounts):
             raise ValueError(f'{SETTING} entry {index} overlaps another executor destination.')
         mounts[destination] = Path(source)
     return mounts
+
+
+def valid_destination(path):
+    destination = PurePosixPath(path)
+    return (str(destination) == path and '..' not in destination.parts
+            and destination != PROJECTS and destination.is_relative_to(PROJECTS)
+            and valid_path_characters(path))
 
 
 def overlaps(first, second):
@@ -485,7 +491,10 @@ def project_override(mounts, root):
                 'bind': {'create_host_path': False, 'recursive': 'disabled'}} for target, source in mounts.items()]
     with tempfile.TemporaryDirectory(prefix='.executor-projects-', dir=root) as directory:
         path = Path(directory) / 'projects.json'
-        path.write_text(json.dumps({'services': {'executor': {'restart': 'no', 'volumes': volumes}}}))
+        # Compose parses the overlay as YAML, which rejects JSON surrogate pairs.
+        model = {'services': {'executor': {'restart': 'no', 'volumes': volumes}}}
+        escapes = {ord(char): f'\\u{ord(char):04x}' for char in '\u2028\u2029\ufffe\uffff'}
+        path.write_text(json.dumps(model, ensure_ascii=False).translate(escapes), encoding='utf-8')
         yield (str(path),)
 
 

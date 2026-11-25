@@ -35,10 +35,13 @@ class ProjectMountTests(unittest.TestCase):
             root = Path(directory)
             source = root / 'project $x'
             source.mkdir()
-            mounts = {Path('/mnt/projects/$x'): source}
+            target = '/mnt/projects/nested/$x \U0001f680'
+            mounts = {Path(target): source}
             with projects.project_override(mounts, root) as extra:
                 override = Path(extra[0])
-                model = json.loads(override.read_text())
+                serialized = override.read_text(encoding='utf-8')
+                self.assertIn(target.replace('$', '$$'), serialized)
+                model = json.loads(serialized)
                 self.assertEqual(override.parent.stat().st_mode & 0o777, 0o700)
                 projects.check_project_model(model, mounts)
                 project = model['services']['executor']['volumes'][0]
@@ -337,13 +340,67 @@ class ProjectMountTests(unittest.TestCase):
 
     def test_mount_changes_require_shutdown(self):
         mounts = {Path('/mnt/projects/p'): Path('/source')}
-        original = [{'Destination': '/mnt/projects/p', 'Source': '/source'},
-                    {'Destination': '/workspace', 'Source': '/workspace'}]
+        original = [self.bind('/mnt/projects/p'), self.bind('/workspace')]
         with patch.object(stack, 'capture', side_effect=['abc', json.dumps(original)]):
             stack.require_same_project_mounts(['compose'], mounts)
-        with patch.object(stack, 'capture', side_effect=['abc', '[]']):
+        with patch.object(stack, 'capture', side_effect=['abc', json.dumps([self.bind('/workspace')])]):
             with self.assertRaisesRegex(ValueError, 'make down'):
                 stack.require_same_project_mounts(['compose'], mounts)
+
+    @staticmethod
+    def bind(destination):
+        return {'Destination': destination, 'Source': '/source', 'Type': 'bind', 'RW': True}
+
+    def test_read_applied_destinations_without_widening_nested_paths(self):
+        nested = '/mnt/projects/parent/name ${NAME} $$'
+        volumes = [self.bind(path) for path in ('/workspace', nested, '/mnt/projects-other')]
+        with patch.object(stack, 'capture', return_value=json.dumps(volumes)):
+            self.assertEqual(stack.executor_roots(stack.attached_project_mounts('abc')),
+                             ['/workspace', nested])
+        with patch.object(stack, 'capture', return_value=json.dumps([self.bind('/workspace')])):
+            self.assertEqual(stack.executor_roots(stack.attached_project_mounts('abc')),
+                             ['/workspace'])
+        for malformed in (None, [], [*volumes, self.bind('/mnt/projects')], [*volumes, self.bind(nested)],
+                          [*volumes, self.bind('/mnt/projects/parent//other')],
+                          [*volumes, dict(self.bind('/mnt/projects/other'), RW=False)]):
+            with self.subTest(malformed=malformed), patch.object(stack, 'capture', return_value=json.dumps(malformed)):
+                with self.assertRaisesRegex(RuntimeError, 'verify the executor mounts'):
+                    stack.attached_project_mounts('abc')
+
+    def test_chat_uses_running_gateway_settings_and_attached_roots(self):
+        root = '/mnt/projects/nested/with space ${NAME}'
+        entries = ['WEBAPP_TERMINAL_ENVIRONMENT=code', 'WEBAPP_EXTERNAL_CONTENT=ask', 'COMPUTER_USE_ENABLED=true',
+                   f'{stack.EXECUTOR_ROOTS}={json.dumps(["/workspace", root])}']
+        with patch.object(stack, 'maintenance_compose', return_value=['docker', 'compose']), \
+                patch.object(stack, 'check_engine'), patch.object(stack, 'running_service', side_effect=['gateway', 'executor']), \
+                patch.object(stack, 'attached_project_mounts', return_value={root: '/private/source'}), \
+                patch.object(stack, 'capture', return_value=json.dumps(entries)), \
+                patch.object(stack, 'inspect_launch', return_value=({'services': {}}, True)), \
+                patch.object(stack, 'prepare_launch') as prepare, patch.object(stack, 'run') as run:
+            stack.start_chat()
+            command = run.call_args.args[0]
+            self.assertEqual(command[:5], ['env', *entries])
+            self.assertEqual(command[-5:], ['run', '--rm', '--no-deps', 'hermes', 'chat'])
+            self.assertNotIn('/private/source', repr(command))
+            prepare.assert_called_once()
+
+    def test_chat_refuses_missing_or_mismatched_gateway_policy(self):
+        entries = ['WEBAPP_TERMINAL_ENVIRONMENT=code', 'WEBAPP_EXTERNAL_CONTENT=ask', 'COMPUTER_USE_ENABLED=false']
+        for policy in ([], [f'{stack.EXECUTOR_ROOTS}=["/workspace", "/mnt/projects/other"]'],
+                       [f'{stack.EXECUTOR_ROOTS}=null']):
+            with self.subTest(policy=policy), patch.object(stack, 'maintenance_compose', return_value=['compose']), \
+                    patch.object(stack, 'check_engine'), patch.object(stack, 'running_service', side_effect=['gateway', 'executor']), \
+                    patch.object(stack, 'attached_project_mounts', return_value={}), \
+                    patch.object(stack, 'capture', return_value=json.dumps(entries + policy)), patch.object(stack, 'run') as run:
+                with self.assertRaisesRegex(RuntimeError, 'verify the applied chat settings'):
+                    stack.start_chat()
+                run.assert_not_called()
+
+    def test_running_service_requires_exactly_one_running_container(self):
+        for result in (['abc', 'paused'], ['abc', 'restarting'], [''], ['abc\ndef']):
+            with self.subTest(result=result), patch.object(stack, 'capture', side_effect=result):
+                with self.assertRaisesRegex(RuntimeError, 'running hermes service'):
+                    stack.running_service(['compose'], 'hermes')
 
     def test_invalid_setting_blocks_managed_startup_only(self):
         configuration = SimpleNamespace(executor_bind_mounts='broken')
