@@ -384,9 +384,10 @@ setting. Saved gateway terminals keep their separate remote-Hermes path.
 
 The same applied setting selects the shell for `!command` in classic and TUI
 chat. Reopen `make chat` after applying a change. In Code mode, `!pwd` uses the
-chat's last executor directory or starts in `/workspace`. In either mode, saved
-`quick_commands` of type `exec` run in the executor when invoked from
-`make chat`. The model's terminal tool uses the executor in both modes.
+chat's last executor directory or starts in `/workspace`. In Agent mode, `!pwd`
+uses the chat's directory in Hermes. In either mode, saved `quick_commands` of
+type `exec` run in the chat's executor directory. The model's terminal tool
+uses the executor in both modes.
 
 The model's `read_terminal` tool reads visible output and scrollback from the
 selected **Code** terminal when its gateway and profile match the focused chat.

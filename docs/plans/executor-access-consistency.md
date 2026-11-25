@@ -1,10 +1,10 @@
 # Use the SSH executor for chat shells and project work
 
 Status: in progress. The wrapper passes applied project destinations to both
-clients. The candidate package places classic and TUI operator shells and
-refuses SSH checkpoints. The WebApp model terminal reader, grant consumers,
-structured edits, project operations, scheduled work, and final qualification
-remain open.
+clients. The candidate package places classic and TUI operator shells,
+restricts WebApp model reads to verified Code terminals, and refuses SSH
+checkpoints. Classic shell interruption, grant consumers, structured edits,
+project operations, scheduled work, and final qualification remain open.
 
 - Wrapper branch: `executor-access-consistency`. Compare the complete change
   with `a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The plan under review
@@ -599,6 +599,14 @@ to match the final image. Recheck the documented reason for the empty Hermes
   state to establish a complete read baseline and refuses writes when SSH
   cannot establish the target state. Managed write roots and shared file
   permissions remain in the workspace topic.
+- The classic chat now reads the shell directory from its session owner in
+  both managed modes. The local topic is `c4700df74951bf75dfb9bc5b2332c7f6397d98cc`,
+  the release topic is `b20fe45d957aa561175138cc3e18e6aa220cb20c`, and the
+  combined replay is `e814d30ab1180c0e1589f32c30965f2022ba6bc7`. The submission
+  and combined release each passed 69 focused Python tests. Independent review
+  found that classic Ctrl+C could clear the draft or exit without cancelling
+  the worker's SSH command. That path and the external editor's command
+  submission remain open, along with the full `make chat` lifecycle test.
 
 ### Completion checks
 

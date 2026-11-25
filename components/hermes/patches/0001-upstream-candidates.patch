@@ -3172,16 +3172,17 @@ index 8f82454ab..cc12bcff1 100644
 
  /** Registry source currently served by the window primary socket, when known. */
 diff --git a/apps/shared/src/gateway-contract.generated.ts b/apps/shared/src/gateway-contract.generated.ts
-index 8ebfef5d9..93af210cc 100644
+index 8ebfef5d9..18f4e5ba7 100644
 --- a/apps/shared/src/gateway-contract.generated.ts
 +++ b/apps/shared/src/gateway-contract.generated.ts
-@@ -4802,6 +4802,19 @@ export interface CanonicalShellExecParams {
+@@ -4802,6 +4802,20 @@ export interface CanonicalShellExecParams {
    command: string
    profile?: string | null
  }
 +export interface ShellCwdParams {
 +  session_id: string
 +  profile?: string | null
++  executor?: boolean
 +}
 +export interface ShellCwdResult {
 +  environment: 'executor' | 'gateway'
@@ -3195,7 +3196,7 @@ index 8ebfef5d9..93af210cc 100644
  export interface PromptReceiptParams {
    session_id: string
    admission_id: string
-@@ -5786,6 +5799,13 @@ export interface VaultCodeRequestParams {
+@@ -5786,6 +5800,13 @@ export interface VaultCodeRequestParams {
    site?: string | null
    hint?: string | null
  }
@@ -3209,7 +3210,7 @@ index 8ebfef5d9..93af210cc 100644
  export interface ReadRangeRequestParams {
    session_id: string
    start?: number | null
-@@ -7250,7 +7270,11 @@ export interface CanonicalRpcMethods {
+@@ -7250,7 +7271,11 @@ export interface CanonicalRpcMethods {
    'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
    /** One page of a stored conversation's display rows across its compression lineage (live rows and rows a compaction archived, each logical message once, and each compaction handoff as a `row_kind: 'compaction'` row at its position), from the oldest or the newest. Never attaches the caller. A page holds at most `limit` (1-500) rows, compaction rows included, plus up to 64 tool results of the call at its edge, and at most 2 MiB of JSON, cut between tool groups (a single larger row keeps only its role, kind, time, ids and the head of its text, and carries `truncated`). Oldest order: read on until a page is empty, then poll with the same `next_cursor` for the rows written since; `reset: true` means the rows the cursor covered changed shape, so the reply starts again from the first page. Latest order: read on until `next_cursor` is null; its cursor stays valid across later compactions and turns. A rotated lineage past `sessions.max_resume_messages` pages only its current segment (a cursor from before it crossed, or a latest-order cursor from before a compaction rotated that segment, answers `reset: true`). With `subagent_id`: a delegated child of the session (running: through the parent's roster; finished: through its stored row, when its ancestry reaches this conversation); a foreign or unknown child is `available: false`. Refusals: invalid_params (a cursor issued for another session, child or order, or not by this read), not_found, permission_denied, profile_mismatch. */
    'session.transcript': { params: StoredTranscriptParams; result: StoredTranscriptResult }
@@ -3222,7 +3223,7 @@ index 8ebfef5d9..93af210cc 100644
    'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
    /** Adopt a registered execution after verifying the live producer claim. */
    'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
-@@ -7311,6 +7335,8 @@ export const CANONICAL_RPC_METHODS = [
+@@ -7311,6 +7336,8 @@ export const CANONICAL_RPC_METHODS = [
    'session.stats',
    'session.steer',
    'session.transcript',
@@ -3231,7 +3232,7 @@ index 8ebfef5d9..93af210cc 100644
    'shell.exec',
    'worker.adopt',
    'worker.persist',
-@@ -7343,7 +7369,7 @@ export interface ServerRequestMap {
+@@ -7343,7 +7370,7 @@ export interface ServerRequestMap {
    /** Masked sudo password for the terminal tool. */
    sudo: { params: SudoRequestParams; result: ValueResult }
    /** Read the visible in-app terminal buffer (JSON text answer). */
@@ -3241,7 +3242,7 @@ index 8ebfef5d9..93af210cc 100644
    'theme.apply': { params: ThemeApplyRequestParams; result: ValueResult }
    /** Show an accent or layout picker card in the chat and wait for the pick. */
 diff --git a/apps/shared/src/gateway-contract.openrpc.json b/apps/shared/src/gateway-contract.openrpc.json
-index 9fd571061..11247dad5 100644
+index 9fd571061..b0b216de4 100644
 --- a/apps/shared/src/gateway-contract.openrpc.json
 +++ b/apps/shared/src/gateway-contract.openrpc.json
 @@ -18696,6 +18696,12 @@
@@ -3257,7 +3258,7 @@ index 9fd571061..11247dad5 100644
        "ErrorPayload": {
          "additionalProperties": false,
          "description": "Every ``_emit(\"error\", \u2026)`` site sets exactly ``message``.",
-@@ -43117,6 +43123,88 @@
+@@ -43117,6 +43123,93 @@
          "title": "SharedMetricsUpdateRunResult",
          "type": "object"
        },
@@ -3305,6 +3306,11 @@ index 9fd571061..11247dad5 100644
 +            ],
 +            "default": null,
 +            "title": "Profile"
++          },
++          "executor": {
++            "default": false,
++            "title": "Executor",
++            "type": "boolean"
 +          }
 +        },
 +        "required": [
@@ -3346,7 +3352,7 @@ index 9fd571061..11247dad5 100644
        "ShellExecParams": {
          "additionalProperties": false,
          "properties": {
-@@ -46210,6 +46298,68 @@
+@@ -46210,6 +46303,68 @@
          "title": "TerminalOutputPayload",
          "type": "object"
        },
@@ -3415,7 +3421,7 @@ index 9fd571061..11247dad5 100644
        "TerminalResizeParams": {
          "additionalProperties": false,
          "properties": {
-@@ -51316,9 +51466,45 @@
+@@ -51316,9 +51471,45 @@
          }
        }
      },
@@ -3462,7 +3468,7 @@ index 9fd571061..11247dad5 100644
        "params": [
          {
            "name": "params",
-@@ -51561,7 +51747,7 @@
+@@ -51561,7 +51752,7 @@
          {
            "name": "params",
            "schema": {
@@ -3472,10 +3478,10 @@ index 9fd571061..11247dad5 100644
          }
        ],
 diff --git a/cli.py b/cli.py
-index 38c072ba4..31ee7fc93 100644
+index 38c072ba4..38509f685 100644
 --- a/cli.py
 +++ b/cli.py
-@@ -1255,12 +1255,18 @@ class HermesCLI(CLIBacktrackMixin, CLIInitMixin, CLITuiRuntimeMixin, CLIProcessN
+@@ -1255,12 +1255,17 @@ class HermesCLI(CLIBacktrackMixin, CLIInitMixin, CLITuiRuntimeMixin, CLIProcessN
              # the env is sanitized because this process holds every API key.
              from tools.environments.local import build_subprocess_env
              from hermes_cli._subprocess_compat import windows_hide_flags
@@ -3485,11 +3491,10 @@ index 38c072ba4..31ee7fc93 100644
 -                creationflags=windows_hide_flags(),  # no console flash on Windows (#56747),
 -                check=False,
 -            )
-+            from hermes_cli.managed_operator_shell import placement, run_executor
++            from hermes_cli.managed_operator_shell import classic_shell_cwd, placement, run_executor
 +            selected = placement()
 +            if selected is not None:
-+                from tools.terminal_tool import get_session_cwd
-+                result = run_executor(selected, exec_cmd, get_session_cwd(self.session_id), timeout=30)
++                result = run_executor(selected, exec_cmd, classic_shell_cwd(self, selected, executor=True), timeout=30)
 +            else:
 +                result = subprocess.run(
 +                    exec_cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -3774,7 +3779,7 @@ index 7056aca55..7c8f5f0be 100644
              break
      with _lock:
 diff --git a/gateway/session_shell.py b/gateway/session_shell.py
-index 4d75c5a58..a644f1be2 100644
+index 4d75c5a58..59964e0ce 100644
 --- a/gateway/session_shell.py
 +++ b/gateway/session_shell.py
 @@ -1,18 +1,11 @@
@@ -3817,7 +3822,7 @@ index 4d75c5a58..a644f1be2 100644
      authorize(connection, ref, params, 'session:control')
      authority = connection.authority
      authority._require_admission_open()
-@@ -42,37 +32,88 @@ async def shell_exec(connection, ref, params):
+@@ -42,37 +32,90 @@ async def shell_exec(connection, ref, params):
      policy = policy_for_source(authority.runner, live.source)
      if policy is None:
          raise AuthorityRefusal('permission_denied')
@@ -3838,14 +3843,16 @@ index 4d75c5a58..a644f1be2 100644
 +
 +async def shell_cwd(connection, ref, params):
 +    """Read the managed shell directory from the owner of this chat."""
-+    if set(params) - {'session_id', 'profile'} or not ref.session_id:
++    if (set(params) - {'session_id', 'profile', 'executor'} or not ref.session_id
++            or not isinstance(params.get('executor', False), bool)):
 +        raise AuthorityRefusal('invalid_params')
 +    live, policy, selected = _operator_session(connection, ref, params)
 +    if selected is None:
 +        raise AuthorityRefusal('operator_shell_unavailable')
 +    from gateway.session_terminal_cwd import operator_ssh_cwd
 +    try:
-+        cwd = operator_ssh_cwd(connection.authority.runner, live.route, policy) if selected.mode == 'executor' else policy.cwd
++        cwd = (operator_ssh_cwd(connection.authority.runner, live.route, policy)
++               if selected.mode == 'executor' or params.get('executor') is True else policy.cwd)
 +    except OperatorShellUnavailable as exc:
 +        raise AuthorityRefusal('operator_shell_unavailable', detail=str(exc)) from None
 +    return {'environment': selected.mode, 'cwd': cwd}
@@ -4214,10 +4221,10 @@ index b6840cf96..d86ed8e83 100644
 
      async def _handle_compress_command(self, event: MessageEvent) -> str:
 diff --git a/hermes_cli/bang_shell.py b/hermes_cli/bang_shell.py
-index 454429f29..5d75627bf 100644
+index 454429f29..7dacec13e 100644
 --- a/hermes_cli/bang_shell.py
 +++ b/hermes_cli/bang_shell.py
-@@ -97,13 +97,17 @@ def _bang_env() -> dict:
+@@ -97,14 +97,18 @@ def _bang_env() -> dict:
      return build_subprocess_env()
 
 
@@ -4230,12 +4237,14 @@ index 454429f29..5d75627bf 100644
      """
      emit = writer or (lambda line: print(line, end="" if line.endswith("\n") else "\n"))
      run_cwd = os.path.expanduser(cwd) if cwd else None
+-    if run_cwd and not os.path.isdir(run_cwd):
 +    if strict_cwd and (not run_cwd or not os.path.isdir(run_cwd)):
 +        emit("!: the session's gateway directory is unavailable")
 +        return 127
-     if run_cwd and not os.path.isdir(run_cwd):
++    if not strict_cwd and run_cwd and not os.path.isdir(run_cwd):
          run_cwd = None
      try:
+         from hermes_cli._subprocess_compat import windows_hide_flags
 diff --git a/hermes_cli/banner.py b/hermes_cli/banner.py
 index 1a8b54020..c540cc055 100644
 --- a/hermes_cli/banner.py
@@ -4387,7 +4396,7 @@ index cdffbab48..8ac7d5baf 100644
          "docker_shm_size", "docker_mount_cwd_to_workspace", "docker_network", "docker_run_as_host_user",
          "docker_snap_compat",
 diff --git a/hermes_cli/cli_info_mixin.py b/hermes_cli/cli_info_mixin.py
-index 5fbca2899..8afbfe6a8 100644
+index 5fbca2899..1a25bac4e 100644
 --- a/hermes_cli/cli_info_mixin.py
 +++ b/hermes_cli/cli_info_mixin.py
 @@ -11,6 +11,7 @@ import concurrent.futures
@@ -4459,11 +4468,11 @@ index 5fbca2899..8afbfe6a8 100644
 -            USAGE_HINT, bang_shell_enabled, check_bang_approval, is_bang_command,
 +            DEFAULT_TIMEOUT, USAGE_HINT, bang_shell_enabled, check_bang_approval, is_bang_command,
              parse_bang_command, resolve_bang_cwd, run_bang_command)
-+        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement, run_executor
++        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, classic_shell_cwd, placement, run_executor
 
          if not is_bang_command(text):
              return False
-@@ -553,10 +560,30 @@ class CLIInfoMixin:
+@@ -553,10 +560,32 @@ class CLIInfoMixin:
              self._console_print(f"[bold red]{_escape(str(message))}[/]")
              return True
 
@@ -4478,11 +4487,13 @@ index 5fbca2899..8afbfe6a8 100644
 +
 +        try:
 +            selected = placement()
-+            if selected is None or selected.mode == "gateway":
++            cwd = classic_shell_cwd(self, selected) if selected is not None else None
++            if selected is None:
 +                exit_code = run_bang_command(command, cwd=resolve_bang_cwd(session_id), writer=emit)
++            elif selected.mode == "gateway":
++                exit_code = run_bang_command(command, cwd=cwd, writer=emit, strict_cwd=True)
 +            else:
-+                from tools.terminal_tool import get_session_cwd
-+                result = run_executor(selected, command, get_session_cwd(session_id), timeout=DEFAULT_TIMEOUT, emit=emit)
++                result = run_executor(selected, command, cwd, timeout=DEFAULT_TIMEOUT, emit=emit)
 +                for line in result.stderr.splitlines():
 +                    emit(line)
 +                exit_code = result.returncode
@@ -5158,7 +5169,7 @@ index 4b1c5b9b3..421aaae03 100644
      # A real fetch attempt happened (success OR error): mark the home so the 3-5 import-time calls per
      # startup don't re-fetch / re-print (error retries are opt-in via reset_secret_source_cache()).
 diff --git a/hermes_cli/gateway_chat_view.py b/hermes_cli/gateway_chat_view.py
-index e9ea49802..d0727635f 100644
+index e9ea49802..c6cfe68e1 100644
 --- a/hermes_cli/gateway_chat_view.py
 +++ b/hermes_cli/gateway_chat_view.py
 @@ -2,6 +2,7 @@
@@ -5205,13 +5216,13 @@ index e9ea49802..d0727635f 100644
  class GatewayChatView:
      def __init__(self, client, snapshot, *, quiet=False, emitter=None, usage_file=None):
          self.usage_file = usage_file
-@@ -363,6 +393,41 @@ class GatewayChatView:
+@@ -363,6 +393,40 @@ class GatewayChatView:
                          await self._recover(admission, sid)
          return receipt
 
 +    async def shell_line(self, text):
 +        from hermes_cli.bang_shell import DEFAULT_TIMEOUT, USAGE_HINT, check_bang_approval, parse_bang_command, run_bang_command
-+        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, placement
++        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, owner_shell_cwd, placement
 +
 +        try:
 +            selected = placement()
@@ -5226,16 +5237,15 @@ index e9ea49802..d0727635f 100644
 +                print(approval.get("message") or approval.get("description") or "Command denied.", file=sys.stderr)
 +                return True
 +            owner = await self.client.rpc("shell.cwd", session_id=self.session_id)
-+            if owner.get("environment") != selected.mode:
-+                raise OperatorShellUnavailable("The chat and its owner have different managed shell settings.")
++            cwd = owner_shell_cwd(selected, owner)
 +            if selected.mode == "gateway":
 +                previous = signal.signal(signal.SIGINT, signal.default_int_handler)
 +                try:
-+                    code = run_bang_command(command, cwd=owner.get("cwd"), strict_cwd=True)
++                    code = run_bang_command(command, cwd=cwd, strict_cwd=True)
 +                finally:
 +                    signal.signal(signal.SIGINT, previous)
 +            else:
-+                code = await _interactive_executor_shell(selected, command, owner.get("cwd"), DEFAULT_TIMEOUT)
++                code = await _interactive_executor_shell(selected, command, cwd, DEFAULT_TIMEOUT)
 +            if code:
 +                print(f"! exited {code}", file=sys.stderr)
 +        except OperatorShellUnavailable as exc:
@@ -5247,7 +5257,7 @@ index e9ea49802..d0727635f 100644
      async def command(self, text):
          command, _, rest = text.partition(" ")
          if command in {"/quit", "/exit", "/detach"}:
-@@ -614,6 +679,8 @@ class GatewayChatView:
+@@ -614,6 +678,8 @@ class GatewayChatView:
                          if text.startswith("/"):
                              if not await self.command(text):
                                  return 0
@@ -5592,10 +5602,10 @@ index b821de6ac..b932d4d27 100644
 
 diff --git a/hermes_cli/managed_operator_shell.py b/hermes_cli/managed_operator_shell.py
 new file mode 100644
-index 000000000..c50973725
+index 000000000..aa59bc4d4
 --- /dev/null
 +++ b/hermes_cli/managed_operator_shell.py
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,241 @@
 +"""Run operator commands using the deployment's managed terminal placement."""
 +
 +from __future__ import annotations
@@ -5647,6 +5657,36 @@ index 000000000..c50973725
 +    if mode not in ("gateway", "executor") or not isinstance(terminal, dict):
 +        raise _terminal_error()
 +    return Placement(mode, terminal)
++
++
++def classic_shell_cwd(cli, selected: Placement, *, executor: bool = False) -> str | None:
++    """Confirm managed placement and read the directory from the classic session's owner."""
++    from hermes_cli.gateway_client import GatewayClientError
++    from hermes_cli.gateway_side import connection_for
++
++    connection = connection_for(cli)
++    if connection is None or not cli.session_id:
++        raise OperatorShellUnavailable("The chat owner is unavailable. Reopen the chat to run a shell command.")
++    params = {"session_id": cli.session_id}
++    if executor and selected.mode == "gateway":
++        params["executor"] = True
++    try:
++        owner = connection.call("shell.cwd", **params)
++    except GatewayClientError as exc:
++        raise OperatorShellUnavailable("Could not confirm shell placement with the chat owner.") from exc
++    return owner_shell_cwd(selected, owner, executor=executor)
++
++
++def owner_shell_cwd(selected: Placement, owner, *, executor: bool = False) -> str | None:
++    """Check the owner's placement and directory, including an explicit null default."""
++    if not isinstance(owner, dict) or owner.get("environment") != selected.mode:
++        raise OperatorShellUnavailable("The chat and its owner have different managed shell settings.")
++    if "cwd" not in owner or (owner["cwd"] is not None and not isinstance(owner["cwd"], str)):
++        raise OperatorShellUnavailable("The chat owner did not return a shell directory.")
++    cwd = owner["cwd"]
++    if selected.mode == "gateway" and not executor and (not cwd or not os.path.isabs(cwd) or "\x00" in cwd):
++        raise OperatorShellUnavailable("The chat owner did not return an administrative shell directory.")
++    return cwd
 +
 +
 +# Hold stdin open while the SSH client owns the command. EOF (including a
@@ -12396,16 +12436,17 @@ index ad84cc1cc..bde092a4d 100644
  server_request("preview.read", params=ReadRangeRequestParams, result=ValueResult,
                 doc="Read the in-app browser preview's text (JSON text answer).")
 diff --git a/tui_gateway/contracts/tools_commands.py b/tui_gateway/contracts/tools_commands.py
-index d672daeef..c762a4bdb 100644
+index d672daeef..9d3b08d51 100644
 --- a/tui_gateway/contracts/tools_commands.py
 +++ b/tui_gateway/contracts/tools_commands.py
 @@ -8,10 +8,12 @@ known to emit plus ``extra="allow"`` so a new upstream key never trips the stric
 
  from __future__ import annotations
 
+-from pydantic import Field
 +from typing import Literal
 +
- from pydantic import Field
++from pydantic import Field, StrictBool
 
  from .base import JsonValue, Params, Result, WireEnum
 -from .common import UndoRollbackHint
@@ -12413,7 +12454,7 @@ index d672daeef..c762a4bdb 100644
  from .registry import canonical_method, method
 
 
-@@ -178,8 +180,30 @@ class CanonicalShellExecParams(Params):
+@@ -178,8 +180,31 @@ class CanonicalShellExecParams(Params):
 
 
  canonical_method("shell.exec", params=CanonicalShellExecParams, result=ShellExecResult,
@@ -12425,6 +12466,7 @@ index d672daeef..c762a4bdb 100644
 +class ShellCwdParams(Params):
 +    session_id: str
 +    profile: str | None = None
++    executor: StrictBool = False
 +
 +
 +class ShellCwdResult(Result):

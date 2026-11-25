@@ -354,14 +354,14 @@ For a later release, use the
 | --- | --- | --- | --- |
 | `managed-config` (PR1) | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
 | `executor-desktop-browser` (PR3) | `3aa5db2279f56e891e4e5108028e7603a129e7f1` | 15 | SSH fixes, checkpoint refusal, and desktop and browser placement |
-| `executor-terminals` (PR4) | `96adab1f9c9dfb6755e8cfe3bf2ebe4b28fea54b` | 10 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
+| `executor-terminals` (PR4) | `b20fe45d957aa561175138cc3e18e6aa220cb20c` | 11 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Combined replay: `stack-patches/v0.23.3/combined`
-  `de311262cab1760d4b6c63c0c8dd91d3a34be60d` (38 commits).
+  `e814d30ab1180c0e1589f32c30965f2022ba6bc7` (40 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).
