@@ -620,6 +620,11 @@ to match the final image. Recheck the documented reason for the empty Hermes
   aliases, redaction, pagination, and multiple roots. Guarded recursive content
   search starts a matcher for each permitted file, which adds time on broad
   searches.
+- The lean project fixture upgraded populated state on Debian ARM64 with
+  native Docker 29.10.0 and rootless Podman 5.4.2. It verified classic chat and
+  TUI shell and shortcut placement in Code and Agent modes, an authenticated
+  WebApp write to the host project, and the return to Code mode. Docker used
+  the guarded search package. Podman used the preceding classic shell package.
 - The classic chat now reads the shell directory from its session owner in
   both managed modes. The local topic is `c4700df74951bf75dfb9bc5b2332c7f6397d98cc`,
   the release topic is `b20fe45d957aa561175138cc3e18e6aa220cb20c`, and the

@@ -2,18 +2,22 @@
 """Check project sharing through Make, the authenticated executor, and upgrades."""
 import argparse
 from contextlib import suppress
+import fcntl
 import io
 import json
 import os
 from pathlib import Path
 import pty
+import select
 import shlex
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tarfile
 import tempfile
+import termios
 import time
 from urllib.request import urlopen
 import uuid
@@ -26,6 +30,12 @@ TARGET = '/mnt/projects/shared project'
 POLICY_TARGET = '/mnt/projects/nested/literal ${PROJECT_NAME} \U0001f680'
 POLICY_READER = ('import json; from hermes_cli.managed_scope import load_managed_config; '
                  'print(json.dumps(load_managed_config(strict=True)))')
+GATEWAY_READER = ('from hermes_cli.gateway_runtime import discover_gateway_endpoint; '
+                  'from hermes_constants import get_hermes_home; '
+                  'result = discover_gateway_endpoint(get_hermes_home()); '
+                  'print(result.state, result.reason_code or "")')
+# Recreating the gateway repeatedly can trigger Hermes's 300-second backoff.
+GATEWAY_BACKOFF_MAX_SECONDS = 300
 
 
 def extract_revision(checkout, revision):
@@ -82,6 +92,7 @@ def managed_probe(scratch, backend, variant, prior, browser):
         listener.bind(('127.0.0.1', 0))
         port = listener.getsockname()[1]
     base = {**os.environ, 'CONTAINER_ENGINE': backend, 'COMPOSE_PROJECT_NAME': project,
+            'COMPOSE_ENV_FILES': '',
             'COMPUTER_USE_ENABLED': 'true' if variant == 'desktop' else 'false',
             'TEEP_ENABLED': 'false', 'TOR_ONION_ENABLED': 'false', 'TAILSCALE_FUNNEL_ENABLED': 'false',
             'WEBAPP_BIND': '127.0.0.1', 'WEBAPP_PORT': str(port), 'WEBAPP_USERNAME': 'admin',
@@ -117,18 +128,70 @@ def managed_probe(scratch, backend, variant, prior, browser):
                          '/run/executor-auth/ssh_host_ed25519_key', '/home/runner', '/workspace')
         return agent, executor
 
-    def assert_chat_policy(environment, roots, mode='executor'):
+    def configure_chat(interface):
+        code = f"""from hermes_cli.config import load_config, save_config
+from hermes_cli.observability.shared_metrics_consent import save_consent
+from hermes_cli.prune_advisor import decide, undecided
+config = load_config()
+config.setdefault('display', {{}})['interface'] = {('cli' if interface == 'classic' else interface)!r}
+config['model'] = {{'provider': 'custom', 'default': 'no-inference', 'base_url': 'http://127.0.0.1:1/v1'}}
+config.setdefault('quick_commands', {{}})['placement-probe'] = {{
+    'type': 'exec', 'command': "test ! -d /opt/data && printf 'PRIVATE-QUICK-%s\\\\n' EXECUTOR",
+}}
+save_config(config)
+save_consent(False, False)
+assert decide(False) and not undecided()
+"""
+        stack('exec', '-T', '--user', '10000:10000', 'hermes', '/opt/hermes/.venv/bin/python', '-c', code)
+
+    def log_chat_gateway():
+        with suppress(subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            container = stack('ps', '-q', 'hermes', timeout=10)
+            if container:
+                diagnostic = subprocess.run([*engine_command(), 'logs', '--tail', '40', container],
+                                            text=True, capture_output=True, timeout=10)
+                print(diagnostic.stdout + diagnostic.stderr, file=sys.stderr, flush=True)
+                starts = stack('exec', '-T', '--user', '10000:10000', 'hermes',
+                               'sh', '-c', 'test ! -f /opt/data/gateway-starts.log || '
+                               'tail -n 10 /opt/data/gateway-starts.log', timeout=10)
+                if starts:
+                    print('Recent fixture gateway start times:', starts, file=sys.stderr, flush=True)
+
+    def assert_chat_policy(environment, roots, mode='executor', interface=None):
         python = ['/opt/hermes/.venv/bin/python', '-c', POLICY_READER]
         gateway = json.loads(stack('exec', '-T', '--user', '10000:10000', 'hermes', *python))
         assert gateway['terminal']['ssh_workspace_roots'] == roots, gateway['terminal']['ssh_workspace_roots']
         assert gateway['webapp']['terminal_environment'] == mode
         previous = set(stack('ps', '-a', '-q', 'hermes', timeout=10).splitlines())
+        if interface:
+            configure_chat(interface)
+            deadline = time.monotonic() + GATEWAY_BACKOFF_MAX_SECONDS + 75
+            while True:
+                state = stack('exec', '-T', '--user', '10000:10000', 'hermes',
+                              '/opt/hermes/.venv/bin/python', '-c', GATEWAY_READER, timeout=10)
+                if state == 'ready':
+                    break
+                if time.monotonic() >= deadline:
+                    log_chat_gateway()
+                    raise AssertionError(f'The running gateway did not become ready ({state}).')
+                time.sleep(.5)
         master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 120, 0, 0))
         os.set_blocking(master, False)
         container = None
         output = bytearray()
+
+        def expect(marker, chat):
+            deadline = time.monotonic() + 75
+            while marker not in output and chat.poll() is None and time.monotonic() < deadline:
+                if select.select([master], [], [], .25)[0]:
+                    with suppress(BlockingIOError):
+                        output.extend(os.read(master, 65536))
+            assert marker in output, f'Chat did not show {marker!r}: {output[-6000:].decode(errors="replace")}'
+
         try:
-            with subprocess.Popen(['make', 'chat'], cwd=checkout, env=environment,
+            with subprocess.Popen(['make', 'chat'], cwd=checkout,
+                                  env={**environment, 'TERM': 'xterm-256color'},
                                   stdin=slave, stdout=slave, stderr=slave, start_new_session=True) as chat:
                 try:
                     for _ in range(80):
@@ -144,6 +207,34 @@ def managed_probe(scratch, backend, variant, prior, browser):
                                                      container, *python], text=True, capture_output=True, timeout=10)
                             if result.returncode == 0 and (client := json.loads(result.stdout)):
                                 assert client == gateway
+                                if interface:
+                                    if interface == 'classic':
+                                        expect(b'Welcome to Hermes Agent', chat)
+                                        expect(b'\x1b[?2004h', chat)
+                                    else:
+                                        # The idle window title includes the fixture model after the session attaches.
+                                        expect(b'\x1b]2;\xe2\x9c\x93 no-inference', chat)
+
+                                    def submit(command):
+                                        output.clear()
+                                        os.write(master, command)
+                                        if interface == 'classic':
+                                            expect(command.rsplit(b' ', 1)[-1], chat)
+                                        os.write(master, b'\r')
+
+                                    submit(b"!test -d /opt/data && m=GATEWAY || m=EXECUTOR; printf 'PRIVATE-SHELL-%s\\n' \"$m\"")
+                                    expect(b'PRIVATE-SHELL-' + mode.upper().encode(), chat)
+                                    submit(b'/placement-probe')
+                                    expect(b'PRIVATE-QUICK-EXECUTOR', chat)
+                                    submit(b'/quit')
+                                    deadline = time.monotonic() + 20
+                                    while chat.poll() is None and time.monotonic() < deadline:
+                                        if select.select([master], [], [], .25)[0]:
+                                            with suppress(BlockingIOError):
+                                                output.extend(os.read(master, 65536))
+                                    assert chat.poll() == 0, output[-6000:].decode(errors='replace')
+                                    print(f'PASS: {backend} {variant} {interface} chat uses {mode} shell and an executor shortcut',
+                                          flush=True)
                                 return
                         time.sleep(.25)
                     raise AssertionError(f'Chat managed policy did not appear: {output.decode(errors="replace")}')
@@ -159,6 +250,9 @@ def managed_probe(scratch, backend, variant, prior, browser):
                             with suppress(ProcessLookupError):
                                 os.killpg(chat.pid, signal.SIGKILL)
                             chat.wait()
+        except AssertionError:
+            log_chat_gateway()
+            raise
         finally:
             os.close(slave)
             os.close(master)
@@ -184,7 +278,8 @@ def managed_probe(scratch, backend, variant, prior, browser):
         make('up', configured)
         executor = stack('ps', '-q', 'executor')
         roots = ['/workspace', *sorted([TARGET, POLICY_TARGET])]
-        assert_chat_policy({**base, 'WEBAPP_TERMINAL_ENVIRONMENT': 'agent'}, roots)
+        assert_chat_policy({**base, 'WEBAPP_TERMINAL_ENVIRONMENT': 'agent'}, roots, interface='classic')
+        assert_chat_policy(configured, roots, interface='tui')
 
         def restart_policy(container):
             return run(*engine_command(), 'inspect', '--format', '{{.HostConfig.RestartPolicy.Name}}',
@@ -259,6 +354,12 @@ else:
         ssh('test ! -e ' + shlex.quote(TARGET))
         assert_chat_policy(configured, ['/workspace'])
         assert (source / 'agent.txt').read_text() == 'agent project'
+        agent_mode = {**base, 'WEBAPP_TERMINAL_ENVIRONMENT': 'agent'}
+        make('up', agent_mode)
+        for interface in ('classic', 'tui'):
+            assert_chat_policy(agent_mode, ['/workspace'], mode='gateway', interface=interface)
+        make('up')
+        assert_chat_policy(base, ['/workspace'], interface='classic')
         print(f'PASS: {backend} {variant} managed project lifecycle', flush=True)
     finally:
         if (checkout / '.env').exists():
