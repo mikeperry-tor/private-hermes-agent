@@ -697,10 +697,10 @@ native Docker and rootless Podman verified executable permissions, a new
 file's inherited ACL, both users' effective access, and refusal of a
 read-only file. The Debian ARM64 Docker 29.10.0 lean upgrade fixture passed
 the full lifecycle for the implementation in `57fda81`. The same fixture
-passed on rootless Podman 5.4.2 in lean mode and on native Docker in desktop
-mode. It covered classic and TUI shell placement, managed model writes, the
-WebApp approval card and editor, host ACL checks, and recovery after the
-executor stopped. The rootless Podman desktop run is in progress.
+passed on native Docker and rootless Podman 5.4.2 with both lean and desktop
+executors. It covered classic and TUI shell placement, managed model writes,
+the WebApp approval card and editor, host ACL checks, and recovery after the
+executor stopped.
 
 The follow-up writer cleanup `ceb61c4d4c3880ac5482584f706db9d5cc37aa5d`
 splits SSH dispatch and tests and narrows handled errors. It passed 280
@@ -723,14 +723,23 @@ canonical and legacy session ownership, root validation, Git metadata, and
 the WebApp picker. Keep saved sessions and project records available when a
 mount is removed. Resolve work and metadata against applied roots in SSH
 before adopting a directory. Reuse the existing transport and directory
-and project caches. A diagnostic image with the current gateway code
-verified authenticated creation, workspace moves, exact create retries,
-and history reopen during a real SSH stop and restart. Independent review
-identified the classic and Ink launch paths, the OpenSSH connection after
-network loss, and local project context readers as remaining dependencies.
-The canonical follow-up and the picker folder-creation route are in
-development. Legacy selection and resume, discovery, editor session paths,
-and project context remain open.
+and project caches. A Docker Desktop ARM64 diagnostic image verified
+classic `hermes chat --in` with an executor-only directory, authenticated
+browser creation and moves in two chats, and saved create retries and
+history during an executor network outage. Both chats kept their selected
+directories after reconnection. History also stayed readable after the
+managed backend or roots disappeared from the test config, while create
+and move requests were refused. The updated native selection tests passed
+90 checks. The test image precedes the change to show a saved executor
+directory in session information during an outage.
+
+The picker folder-creation route, executor-backed discovery, and optional
+workspace guards are under review. The initial Python placement tests
+cover persistent kernel state, switching, separate owners, per-call
+execution, and strict staging using a local Bash transport fixture.
+Qualification of that implementation over SSH is pending. Legacy command
+callbacks, project context, Git actions, delegation, and editor session
+paths remain open.
 
 ### Speech output topic
 
