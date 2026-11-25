@@ -3,8 +3,8 @@
 Status: in progress. The wrapper passes applied project destinations to both
 clients. The candidate package places classic and TUI operator shells,
 restricts WebApp model reads to verified Code terminals, and refuses SSH
-checkpoints. Classic shell interruption, grant consumers, structured edits,
-project operations, scheduled work, and final qualification remain open.
+checkpoints. The `make chat` lifecycle checks, grant consumers, structured
+edits, project operations, scheduled work, and final qualification remain open.
 
 - Wrapper branch: `executor-access-consistency`. Compare the complete change
   with `a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`. The plan under review
@@ -463,7 +463,7 @@ supported. Keep generic SSH guidance independent of Private Hermes paths.
 
 | Upstream owner | Changes to place there |
 | --- | --- |
-| PR4b, `feat/webapp-executor-terminals` at `703b3f869`, based on PR1 and PR4a | Managed operator shell selection and WebApp terminal reads. Reuse terminal placement and SSH trust readers. Keep PR4a scoped to literal SSH and OSC 7 cwd handling. |
+| PR4b, `feat/webapp-executor-terminals` starting at `703b3f869`, based on PR1 and PR4a | Managed operator shell selection and WebApp terminal reads. Reuse terminal placement and SSH trust readers. Keep PR4a scoped to literal SSH and OSC 7 cwd handling. |
 | PR2a, `fix/ssh-workspace` starting at `734837a9f`, based on submission main | SSH file-state checks, overwrite protection, and checkpoint eligibility. Keep deployment grants and project features in their own changes. |
 | Proposed `feat/ssh-project-workspaces` | SSH write roots and file permissions, project context and Git, WebApp files, delegation, gateway attachment delivery, Kanban workspaces, and remote Python project cwd. Separate commits by consumer. |
 | Proposed `feat/ssh-skill-shell` | Skill shell dispatch, project skill trust, credential passthrough, cwd mapping, and native skill tests. Reuse SSH and skill synchronization. |
@@ -591,8 +591,8 @@ to match the final image. Recheck the documented reason for the empty Hermes
   loopback proxy. It checked both Code tabs, visible and bounded scrollback
   reads, refusal in Agent mode, and explicit sharing of Agent output through
   **Add to chat**. Saved gateway checks covered relay sockets and renderer
-  dispatch. The full `make webapp-test` and `make chat` checks across the
-  planned engines remain open.
+  dispatch. Full WebApp qualification on Docker Desktop and rootless Podman
+  remains open.
 - The SSH file-state design review found host filesystem reads in overwrite
   protection, read tracking, and the path checks for credentials, device
   files, instruction files, and skills. The next change uses executor file
@@ -603,10 +603,27 @@ to match the final image. Recheck the documented reason for the empty Hermes
   both managed modes. The local topic is `c4700df74951bf75dfb9bc5b2332c7f6397d98cc`,
   the release topic is `b20fe45d957aa561175138cc3e18e6aa220cb20c`, and the
   combined replay is `e814d30ab1180c0e1589f32c30965f2022ba6bc7`. The submission
-  and combined release each passed 69 focused Python tests. Independent review
-  found that classic Ctrl+C could clear the draft or exit without cancelling
-  the worker's SSH command. That path and the external editor's command
-  submission remain open, along with the full `make chat` lifecycle test.
+  and combined release each passed 69 focused Python tests. An isolated
+  Docker Desktop run used a separate gateway owner and OpenSSH executor. A
+  model terminal `cd` changed the directory for the classic Code shell and
+  for saved executor shortcuts in both modes. Linux ARM64 Docker 29.10.0
+  passed `make test` and the Chromium, Firefox, and WebKit matrix in
+  `make webapp-test` on wrapper `8de44f6f1a69f0717c218f8ec522d28696f89393`.
+- Classic Ctrl+C stops the foreground SSH command and preserves the draft.
+  Cancelling a wait for the session owner leaves the gateway free to
+  reconnect. Ctrl+G sends shell commands and saved shortcuts through the
+  REPL worker. Independent reviews checked command-palette and Backtrack
+  priority, pending reconnect, and editor submission. The source and release
+  both passed 156 focused tests before the follow-up for reconnect deadline
+  expiry. The native topic is `506b54bd4afc3693de0a60828d2d0232b9f81903`,
+  the release topic is `b886b1b648231e528a174a01c35f733548debf11`, and the
+  combined replay is `58f19c2b7d7b98979a705910514567fa1053be80`. The updated
+  native and combined trees both passed 45 focused tests. The tracked
+  patch SHA-256 is `f88665db0f2aef4d6c204c7964c88e2b79b0343dd1820188e6cca7837ad2dd16`.
+  A classic PTY on Docker Desktop ARM64 used the wrapper image and OpenSSH
+  to verify foreground process termination, draft retention, and Ctrl+G
+  submission for executor shortcuts in both modes and for a Code `!` command.
+  The full `make chat` lifecycle test remains open.
 
 ### Completion checks
 

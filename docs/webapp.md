@@ -389,6 +389,10 @@ uses the chat's directory in Hermes. In either mode, saved `quick_commands` of
 type `exec` run in the chat's executor directory. The model's terminal tool
 uses the executor in both modes.
 
+In classic chat, Ctrl+C stops a foreground executor shell command and keeps
+any draft in the composer. Saving a shell command from the Ctrl+G editor
+submits it through the same command path as Enter.
+
 The model's `read_terminal` tool reads visible output and scrollback from the
 selected **Code** terminal when its gateway and profile match the focused chat.
 The WebApp refuses reads from **Agent** terminals and tabs whose placement it

@@ -290,7 +290,7 @@ The derived Hermes image builds from official Hermes v0.23.3
 build verifies the ARM64 source stamp and renderer receipt against official
 source hash `03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`
 before applying the [downstream patches](updates-and-plugins.md#downstream-responsibility-inventory).
-The executor access replay `e814d30ab1180c0e1589f32c30965f2022ba6bc7` produces
+The executor access replay `58f19c2b7d7b98979a705910514567fa1053be80` produces
 WebApp source hash `18a05aad0be750ec2becb54a42fc71cfec80192c990a7233964cdeabc465739d`
 and TUI source hash `07604be7ad1b3d8e6b27127491f4fd70eabf03b9fe4607deac6e448c7c378309`.
 See [executor access qualification](plans/executor-access-consistency.md#phase-1-progress)

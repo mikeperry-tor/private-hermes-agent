@@ -206,7 +206,7 @@ for `PR7`). The author identity is
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
 | PR4a Literal SSH/OSC 7 working directories | `PR4a-terminal-ssh-cwd.md` | `fix/terminal-ssh-cwd` | `868773aa8ba037511134868cf9a9c3bbf90a1337` | Upstream main |
-| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `703b3f869152b432e58937b13497c09ac55a3cab` | PR1 + PR4a |
+| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `506b54bd4afc3693de0a60828d2d0232b9f81903` | PR1 + PR4a |
 | PR5 URL reference fetching | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `c3a6b8a0bc49a16b907f98917cfbc50c5cd84e4e` | PR1 |
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
@@ -354,14 +354,14 @@ For a later release, use the
 | --- | --- | --- | --- |
 | `managed-config` (PR1) | `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` | 3 | Strict reader and dotenv authority |
 | `executor-desktop-browser` (PR3) | `3aa5db2279f56e891e4e5108028e7603a129e7f1` | 15 | SSH fixes, checkpoint refusal, and desktop and browser placement |
-| `executor-terminals` (PR4) | `b20fe45d957aa561175138cc3e18e6aa220cb20c` | 11 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
+| `executor-terminals` (PR4) | `b886b1b648231e528a174a01c35f733548debf11` | 13 | WebApp terminals and model reads, pinned forwarding, and managed chat shells |
 | `url-reference-fetching` (PR5) | `90a40b357b1c0ed9ba8cafae3fe8209373a098b4` | 5 | Selectable inline URL context fetching |
 | `deployment-restrictions` (PR6) | `a414ff274857412d7d4b42b96596beb7b4cbde10` | 7 | Managed tool denial, prompt/worker policy and review |
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Combined replay: `stack-patches/v0.23.3/combined`
-  `e814d30ab1180c0e1589f32c30965f2022ba6bc7` (40 commits).
+  `58f19c2b7d7b98979a705910514567fa1053be80` (44 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
   `cf27eab..a9f24a0`).

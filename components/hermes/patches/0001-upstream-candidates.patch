@@ -3478,7 +3478,7 @@ index 9fd571061..b0b216de4 100644
          }
        ],
 diff --git a/cli.py b/cli.py
-index 38c072ba4..38509f685 100644
+index 38c072ba4..ef13c4afe 100644
 --- a/cli.py
 +++ b/cli.py
 @@ -1255,12 +1255,17 @@ class HermesCLI(CLIBacktrackMixin, CLIInitMixin, CLITuiRuntimeMixin, CLIProcessN
@@ -3491,10 +3491,10 @@ index 38c072ba4..38509f685 100644
 -                creationflags=windows_hide_flags(),  # no console flash on Windows (#56747),
 -                check=False,
 -            )
-+            from hermes_cli.managed_operator_shell import classic_shell_cwd, placement, run_executor
++            from hermes_cli.managed_operator_shell import placement, run_classic_executor
 +            selected = placement()
 +            if selected is not None:
-+                result = run_executor(selected, exec_cmd, classic_shell_cwd(self, selected, executor=True), timeout=30)
++                result = run_classic_executor(self, selected, exec_cmd, timeout=30)
 +            else:
 +                result = subprocess.run(
 +                    exec_cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -4321,6 +4321,23 @@ index 1a8b54020..c540cc055 100644
      # The availability check walks the GLOBAL registry, so it includes toolsets outside this
      # agent's platform set (e.g. `discord` on a CLI session) which must never surface in
      # "Available Tools". Restrict to enabled toolsets; an enabled toolset with unmet deps
+diff --git a/hermes_cli/cli_backtrack.py b/hermes_cli/cli_backtrack.py
+index 1ad8f55d0..c4bff61a3 100644
+--- a/hermes_cli/cli_backtrack.py
++++ b/hermes_cli/cli_backtrack.py
+@@ -301,12 +301,6 @@ class CLIBacktrackMixin:
+             return None  # the press cancelled the pending edit; never exit on it
+         return super()._tui_clear_or_exit(event)
+
+-    def _tui_handle_ctrl_c(self, event):
+-        if self._backtrack_state:
+-            self._close_backtrack_picker()
+-            return None
+-        return super()._tui_handle_ctrl_c(event)
+-
+     def _tui_hint_text(self):
+         hint = super()._tui_hint_text()
+         if hint or self._backtrack_state:
 diff --git a/hermes_cli/cli_browser_gateway.py b/hermes_cli/cli_browser_gateway.py
 index 8414d5a8b..7668b12f5 100644
 --- a/hermes_cli/cli_browser_gateway.py
@@ -4396,7 +4413,7 @@ index cdffbab48..8ac7d5baf 100644
          "docker_shm_size", "docker_mount_cwd_to_workspace", "docker_network", "docker_run_as_host_user",
          "docker_snap_compat",
 diff --git a/hermes_cli/cli_info_mixin.py b/hermes_cli/cli_info_mixin.py
-index 5fbca2899..1a25bac4e 100644
+index 5fbca2899..51b441ee0 100644
 --- a/hermes_cli/cli_info_mixin.py
 +++ b/hermes_cli/cli_info_mixin.py
 @@ -11,6 +11,7 @@ import concurrent.futures
@@ -4461,18 +4478,20 @@ index 5fbca2899..1a25bac4e 100644
                  except Exception:
                      logger.debug("banner snapshot save failed", exc_info=True)
 
-@@ -530,8 +536,9 @@ class CLIInfoMixin:
+@@ -530,8 +536,11 @@ class CLIInfoMixin:
          """
          from cli import _rich_text_from_ansi
          from hermes_cli.bang_shell import (
 -            USAGE_HINT, bang_shell_enabled, check_bang_approval, is_bang_command,
 +            DEFAULT_TIMEOUT, USAGE_HINT, bang_shell_enabled, check_bang_approval, is_bang_command,
              parse_bang_command, resolve_bang_cwd, run_bang_command)
-+        from hermes_cli.managed_operator_shell import OperatorShellUnavailable, classic_shell_cwd, placement, run_executor
++        from hermes_cli.managed_operator_shell import (
++            OperatorShellUnavailable, classic_shell_cwd, placement, run_classic_executor,
++        )
 
          if not is_bang_command(text):
              return False
-@@ -553,10 +560,32 @@ class CLIInfoMixin:
+@@ -553,10 +562,32 @@ class CLIInfoMixin:
              self._console_print(f"[bold red]{_escape(str(message))}[/]")
              return True
 
@@ -4487,13 +4506,13 @@ index 5fbca2899..1a25bac4e 100644
 +
 +        try:
 +            selected = placement()
-+            cwd = classic_shell_cwd(self, selected) if selected is not None else None
 +            if selected is None:
 +                exit_code = run_bang_command(command, cwd=resolve_bang_cwd(session_id), writer=emit)
 +            elif selected.mode == "gateway":
++                cwd = classic_shell_cwd(self, selected)
 +                exit_code = run_bang_command(command, cwd=cwd, writer=emit, strict_cwd=True)
 +            else:
-+                result = run_executor(selected, command, cwd, timeout=DEFAULT_TIMEOUT, emit=emit)
++                result = run_classic_executor(self, selected, command, timeout=DEFAULT_TIMEOUT, emit=emit)
 +                for line in result.stderr.splitlines():
 +                    emit(line)
 +                exit_code = result.returncode
@@ -4509,6 +4528,115 @@ index 5fbca2899..1a25bac4e 100644
          if exit_code:
              self._console_print(f"[dim]{t('cli.shell.exited', code=str(exit_code))}[/]")
          return True
+diff --git a/hermes_cli/cli_modal_mixin.py b/hermes_cli/cli_modal_mixin.py
+index 8924726dd..5bbd0dde2 100644
+--- a/hermes_cli/cli_modal_mixin.py
++++ b/hermes_cli/cli_modal_mixin.py
+@@ -130,7 +130,8 @@ class CLIModalMixin:
+         """Submit the draft an external editor left in ``buffer`` (Ctrl+G done-callback), mirroring
+         the `enter` keybinding: empty save ignored, bang/slash dispatched, else queued. Runs on the
+         prompt_toolkit loop, so it must stay cheap/non-blocking."""
+-        from cli import _DIM, _RST, _cprint, _looks_like_slash_command
++        from cli import _cprint, _looks_like_slash_command
++        from hermes_cli.bang_shell import is_bang_command
+         try:
+             text = (getattr(buffer, "text", "") or "").strip()
+         except Exception:
+@@ -145,28 +146,13 @@ class CLIModalMixin:
+             if app is not None:
+                 app.invalidate()
+
+-        # `!<command>` shell mode is checked before slash dispatch, matching the Enter path.
+-        try:
+-            if self.handle_bang_shell(text):
+-                _done()
++        if is_bang_command(text) or _looks_like_slash_command(text):
++            if app is not None and self._tui_enter_inline_command(app, buffer, text, has_images=False):
+                 return
+-        except Exception as exc:
+-            _cprint(f"  {_DIM}{t('cli.editor.shell_command_failed', error=exc)}{_RST}")
++            self._pending_input.put(text)
+             _done()
+             return
+
+-        if _looks_like_slash_command(text):
+-            try:
+-                if not self.process_command(text):
+-                    self._should_exit = True
+-                    if app is not None and app.is_running:
+-                        app.exit()
+-            except Exception as exc:
+-                _cprint(f"  {_DIM}{t('cli.editor.command_failed', error=exc)}{_RST}")
+-            finally:
+-                _done()
+-            return
+-
+         if self._agent_running:
+             # Agent busy → honour the configured busy-input behaviour (interrupt/steer remain
+             # reachable via the normal Enter path).
+diff --git a/hermes_cli/cli_tui_mixin.py b/hermes_cli/cli_tui_mixin.py
+index 8c17eca07..e07ab2720 100644
+--- a/hermes_cli/cli_tui_mixin.py
++++ b/hermes_cli/cli_tui_mixin.py
+@@ -924,9 +924,17 @@ class CLITuiMixin:
+             event.app.exit()
+
+     def _tui_handle_ctrl_c(self, event):
+-        """Ctrl+C priority: cancel voice recording → cancel foreground UI/overlay prompt or the wait for a
+-        command on its own gateway socket (a plugin command, /cron) → clear a typed draft, even mid-run (a correction must never kill the turn)
++        """Ctrl+C priority: cancel the executor shell while keeping the draft → close backtrack
++        → cancel voice recording → cancel a foreground prompt or a command on its own gateway socket (a plugin command,
++        /cron) → clear a typed draft, even mid-run (a correction must never kill the turn)
+         → interrupt the running agent → force exit (second press within 2s) → when idle and empty, exit."""
++        interrupt_shell = getattr(self, "_operator_shell_interrupt", None)
++        if interrupt_shell is not None:
++            interrupt_shell()
++            return
++        if getattr(self, "_backtrack_state", None):
++            self._close_backtrack_picker()
++            return
+         now = time.time()
+         if self._tui_cancel_voice_recording(event):
+             return
+@@ -1424,7 +1432,7 @@ class CLITuiMixin:
+         has_images = bool(self._attached_images)
+         if not (text or has_images):
+             return
+-        if self._tui_enter_inline_command(event, text, has_images):
++        if self._tui_enter_inline_command(event.app, buf, text, has_images):
+             return
+         # Snapshot and clear attached images; bundle text + images as a tuple when present.
+         images = list(self._attached_images)
+@@ -1443,7 +1451,7 @@ class CLITuiMixin:
+         self._inline_pastes(buf)
+         buf.reset(append_to_history=True)
+
+-    def _tui_enter_inline_command(self, event, text: str, has_images: bool) -> bool:
++    def _tui_enter_inline_command(self, app, buf, text: str, has_images: bool) -> bool:
+         """Run /model, /steer, /bg, /btw directly on the UI thread; True when handled.
+
+         /model needs the prompt_toolkit terminal-handoff helpers of the interactive pickers.
+@@ -1460,16 +1468,16 @@ class CLITuiMixin:
+         if self._should_handle_model_command_inline(text, has_images=has_images):
+             if not self.process_command(text):
+                 self._should_exit = True
+-                if event.app.is_running:
+-                    event.app.exit()
++                if app.is_running:
++                    app.exit()
+         elif (self._should_handle_steer_command_inline(text, has_images=has_images)
+               or self._should_handle_background_command_inline(text, has_images=has_images)
+               or self._should_handle_stop_command_inline(text, has_images=has_images)):
+             self.process_command(text)
+         else:
+             return False
+-        event.app.current_buffer.reset(append_to_history=True)
+-        event.app.invalidate()
++        buf.reset(append_to_history=True)
++        app.invalidate()
+         return True
+
+     def _tui_enter_while_busy(self, text: str, images: list, payload, mode: str | None = None) -> None:
 diff --git a/hermes_cli/config.py b/hermes_cli/config.py
 index f27e0640f..719196f1b 100644
 --- a/hermes_cli/config.py
@@ -5266,6 +5394,114 @@ index e9ea49802..c6cfe68e1 100644
                          else:
                              # Same scrollback shape as the in-process CLI: the typed prompt line is
                              # erased on submit and the message lands as a `●` preview row.
+diff --git a/hermes_cli/gateway_connection.py b/hermes_cli/gateway_connection.py
+index fe3a5c1cf..246ae2ad6 100644
+--- a/hermes_cli/gateway_connection.py
++++ b/hermes_cli/gateway_connection.py
+@@ -34,7 +34,7 @@ _KEY_NOT_TAKEN = frozenset({"admission_conflict", "permission_denied"})
+
+
+ class CallStopped(GatewayClientError):
+-    """The caller stopped waiting (:meth:`GatewayConnection.call_until`); the request was sent."""
++    """The caller stopped waiting for a connection or a reply."""
+
+
+ def _resume_plain(exc, session_id, typed):
+@@ -209,23 +209,38 @@ class GatewayConnection:
+         return state
+
+     # -- lifecycle ---------------------------------------------------------------------------
+-    def start(self, timeout=90):
++    def start(self, timeout=90, *, abandon=None):
+         deadline = time.monotonic() + timeout
++
++        def check_abandoned():
++            if abandon is not None and abandon():
++                raise CallStopped("gateway connection")
++
++        def wait_for(wait, done):
++            while not done():
++                check_abandoned()
++                remaining = deadline - time.monotonic()
++                if remaining <= 0:
++                    raise GatewayClientError("Gateway connection timed out; no local fallback")
++                wait(remaining if abandon is None else min(remaining, 0.1))
++            check_abandoned()
++
+         while True:
+             with self._start_lock:
++                check_abandoned()
+                 if self.final:
+                     if self._error is not None:
+                         raise self._error
+                     return
+                 thread = self._thread
+-                if thread is not None and self.closed and thread.is_alive() and thread is not threading.current_thread():
+-                    # ``_run`` reports ready before its thread returns: that life is over, so let it
+-                    # end instead of reading it as a dial in progress (and re-raising its stale error).
+-                    thread.join(max(deadline - time.monotonic(), 0))
+-                if thread is None or not thread.is_alive():
++                retiring = (thread is not None and self.closed and thread.is_alive()
++                            and thread is not threading.current_thread())
++                if not retiring and (thread is None or not thread.is_alive()):
+                     from agent.memory_provider import spawn_context_thread
+
+                     if thread is not None:
++                        if time.monotonic() >= deadline:
++                            raise GatewayClientError("Gateway connection timed out; no local fallback")
+                         # The gateway hung up, or the last redial failed: dial again (``connect_gateway``
+                         # starts a gateway when none is running) and resubscribe this viewer's sessions.
+                         self._error = None
+@@ -233,15 +248,15 @@ class GatewayConnection:
+                         self.closed = False
+                     thread = self._thread = spawn_context_thread(self._run, name="hermes-gateway-loop")
+                     thread.start()
+-            # Every caller waits out a dial in progress, its own or another thread's.
+-            if not self._ready.wait(max(deadline - time.monotonic(), 0)):
+-                raise GatewayClientError("Gateway connection timed out; no local fallback")
+-            if self._error is not None:
+-                raise self._error
+-            if self.client is not None or self.final:
+-                return
+-            # Hung up right after that dial: let its loop end, then dial again.
+-            thread.join(max(deadline - time.monotonic(), 0))
++            if not retiring:
++                # Every caller waits out a dial in progress, its own or another thread's.
++                wait_for(self._ready.wait, self._ready.is_set)
++                if self._error is not None:
++                    raise self._error
++                if self.client is not None or self.final:
++                    return
++            # A completed dial can report readiness before its thread exits.
++            wait_for(thread.join, lambda: not thread.is_alive())
+             if time.monotonic() >= deadline:
+                 raise GatewayClientError("Gateway connection timed out; no local fallback")
+
+@@ -406,11 +421,13 @@ class GatewayConnection:
+         state.attached_gaps = gaps  # a gap during this resume (or a wait given up) still owes one
+         return snapshot
+
+-    def _send(self, method, budget, params):
++    def _send(self, method, budget, params, *, abandon=None):
+         """``(future, epoch)`` of one request sent on the live socket (see :meth:`call_tagged`)."""
+         if self._thread is not None and threading.current_thread() is self._thread:
+             raise RuntimeError("GatewayConnection.call() on the gateway loop thread would deadlock")
+-        self.start()
++        self.start(abandon=abandon)
++        if abandon is not None and abandon():
++            raise CallStopped(method)
+         live, loop = self._live, self.loop
+         if live is None or loop is None:
+             raise GatewayClientError(NOT_SENT)
+@@ -485,7 +502,7 @@ class GatewayConnection:
+         budget = DEFAULT_RPC_TIMEOUT if timeout is None else timeout
+         if abandon is not None and abandon():
+             raise CallStopped(method)
+-        future, epoch = self._send(method, budget, params)
++        future, epoch = self._send(method, budget, params, abandon=abandon)
+         deadline = time.monotonic() + budget + 5
+         try:
+             while abandon is not None and not wait([future], 0.1).done and time.monotonic() < deadline:
 diff --git a/hermes_cli/gateway_connections_normalize.py b/hermes_cli/gateway_connections_normalize.py
 index 340523a3c..b00c5c8c0 100644
 --- a/hermes_cli/gateway_connections_normalize.py
@@ -5602,10 +5838,10 @@ index b821de6ac..b932d4d27 100644
 
 diff --git a/hermes_cli/managed_operator_shell.py b/hermes_cli/managed_operator_shell.py
 new file mode 100644
-index 000000000..aa59bc4d4
+index 000000000..67759e56d
 --- /dev/null
 +++ b/hermes_cli/managed_operator_shell.py
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,274 @@
 +"""Run operator commands using the deployment's managed terminal placement."""
 +
 +from __future__ import annotations
@@ -5618,6 +5854,7 @@ index 000000000..aa59bc4d4
 +from pathlib import Path
 +import shutil
 +import subprocess
++from threading import Event, Lock
 +import uuid
 +
 +
@@ -5659,9 +5896,10 @@ index 000000000..aa59bc4d4
 +    return Placement(mode, terminal)
 +
 +
-+def classic_shell_cwd(cli, selected: Placement, *, executor: bool = False) -> str | None:
++def classic_shell_cwd(cli, selected: Placement, *, executor: bool = False, abandon=None) -> str | None:
 +    """Confirm managed placement and read the directory from the classic session's owner."""
 +    from hermes_cli.gateway_client import GatewayClientError
++    from hermes_cli.gateway_connection import CallStopped
 +    from hermes_cli.gateway_side import connection_for
 +
 +    connection = connection_for(cli)
@@ -5671,7 +5909,9 @@ index 000000000..aa59bc4d4
 +    if executor and selected.mode == "gateway":
 +        params["executor"] = True
 +    try:
-+        owner = connection.call("shell.cwd", **params)
++        owner = connection.call("shell.cwd", abandon=abandon, **params)
++    except CallStopped:
++        raise KeyboardInterrupt from None
 +    except GatewayClientError as exc:
 +        raise OperatorShellUnavailable("Could not confirm shell placement with the chat owner.") from exc
 +    return owner_shell_cwd(selected, owner, executor=executor)
@@ -5792,12 +6032,41 @@ index 000000000..aa59bc4d4
 +    return subprocess.CompletedProcess(argv, int(code), stdout, before + trailing)
 +
 +
-+def run_executor(selected: Placement, command: str, cwd: str | None, *, timeout: int,
-+                 emit=None) -> subprocess.CompletedProcess:
++def run_classic_executor(cli, selected: Placement, command: str, *, timeout: int,
++                         emit=None) -> subprocess.CompletedProcess:
++    """Run an SSH command on the classic REPL worker and accept cancellation from the UI."""
++    stopped = Event()
++    binding = Lock()
++    cancel_task = None
++
++    def interrupt():
++        with binding:
++            if stopped.is_set():
++                return
++            stopped.set()
++            if cancel_task is not None:
++                with suppress(RuntimeError):
++                    cancel_task()
++
++    async def run(cwd):
++        nonlocal cancel_task
++        with binding:
++            if stopped.is_set():
++                raise asyncio.CancelledError
++            loop, task = asyncio.get_running_loop(), asyncio.current_task()
++            cancel_task = lambda: loop.call_soon_threadsafe(task.cancel)
++        return await run_executor_async(selected, command, cwd, timeout=timeout, emit=emit)
++
++    cli._operator_shell_interrupt = interrupt
 +    try:
-+        return asyncio.run(run_executor_async(selected, command, cwd, timeout=timeout, emit=emit))
++        cwd = classic_shell_cwd(cli, selected, executor=True, abandon=stopped.is_set)
++        return asyncio.run(run(cwd))
++    except asyncio.CancelledError:
++        raise KeyboardInterrupt from None
 +    except TimeoutError:
 +        raise subprocess.TimeoutExpired("ssh", timeout) from None
++    finally:
++        cli._operator_shell_interrupt = None
 +
 +
 +async def _stream_lines(stream, emit) -> None:
