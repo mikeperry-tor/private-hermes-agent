@@ -696,10 +696,11 @@ produced HTTP 503 and left the bytes intact. A publisher probe under Debian
 native Docker and rootless Podman verified executable permissions, a new
 file's inherited ACL, both users' effective access, and refusal of a
 read-only file. The Debian ARM64 Docker 29.10.0 lean upgrade fixture passed
-the full lifecycle for the implementation in `57fda81`. It covered classic
-and TUI shell placement, managed model writes, the WebApp approval card and
-editor, host ACL checks, and recovery after the executor stopped. Rootless
-Podman and desktop lifecycle checks remain open.
+the full lifecycle for the implementation in `57fda81`. The same fixture
+passed on rootless Podman 5.4.2 in lean mode and on native Docker in desktop
+mode. It covered classic and TUI shell placement, managed model writes, the
+WebApp approval card and editor, host ACL checks, and recovery after the
+executor stopped. The rootless Podman desktop run is in progress.
 
 The follow-up writer cleanup `ceb61c4d4c3880ac5482584f706db9d5cc37aa5d`
 splits SSH dispatch and tests and narrows handled errors. It passed 280
@@ -722,9 +723,14 @@ canonical and legacy session ownership, root validation, Git metadata, and
 the WebApp picker. Keep saved sessions and project records available when a
 mount is removed. Resolve work and metadata against applied roots in SSH
 before adopting a directory. Reuse the existing transport and directory
-and project caches. The project probe and canonical policy work are in
+and project caches. A diagnostic image with the current gateway code
+verified authenticated creation, workspace moves, exact create retries,
+and history reopen during a real SSH stop and restart. Independent review
+identified the classic and Ink launch paths, the OpenSSH connection after
+network loss, and local project context readers as remaining dependencies.
+The canonical follow-up and the picker folder-creation route are in
 development. Legacy selection and resume, discovery, editor session paths,
-and renderer routing remain open.
+and project context remain open.
 
 ### Speech output topic
 
