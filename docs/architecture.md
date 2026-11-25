@@ -390,8 +390,12 @@ Hermes tools and configuration provide these additional controls.
   It records complete, unredacted text reads by SSH endpoint and file version.
 - `search_files` checks each executor path before returning or counting matches.
   Multiline content search requires ripgrep on the executor.
-- `HERMES_WRITE_SAFE_ROOT` limits destination paths for tools such as
-  `write_file` and `patch`. The SSH backend selects where model commands run.
+- `HERMES_WRITE_SAFE_ROOT` limits structured writes in the filesystem where
+  each edit runs. SSH file tools inspect the executor's requested path,
+  resolved file, and directory entry. A whole-file replacement requires the
+  task to have read every page without redaction or written the current version.
+  The executor checks the version before publishing. SSH patches use the
+  executor's permissions and keep instruction-file approvals.
   The executor mounts and runner permissions govern access to shared files.
   See [shared project permissions](configuration.md#shared-project-filesystem-permissions).
 - The model's `text_to_speech` tool writes to the active Hermes profile's audio

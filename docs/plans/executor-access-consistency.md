@@ -605,8 +605,7 @@ to match the final image. Recheck the documented reason for the empty Hermes
   pagination, and programmatic reads. The WebApp and TUI output hashes match
   the preceding shell package. The exported
   patch SHA-256 is `1f247348e2c7fa56b5a90d2e5b2509ed93a1b3b23fd05c22916c3c8d35f59bfc`.
-  SSH write guards remain open. Managed write roots and shared file permissions
-  remain in the workspace topic.
+  Managed write roots and shared file permissions remain in the workspace topic.
 - SSH `search_files` checks candidate paths on the executor before matching,
   counting, or paging. It keeps filenames and diagnostics separate from
   matching lines. The native topic is `23be2f3b5705cc283dc564d272381d262d004f21`,
@@ -620,6 +619,19 @@ to match the final image. Recheck the documented reason for the empty Hermes
   aliases, redaction, pagination, and multiple roots. Guarded recursive content
   search starts a matcher for each permitted file, which adds time on broad
   searches.
+- Structured SSH edits inspect and verify executor files before staging changes.
+  The native tip is `d4919743c0b0623ca26ca3178460a10283d4ef5c` and the release
+  tip is `214381873955bbfef268b7ce69cb0174f3ce551b`. Combined head
+  `88fbc94607e9d12e25959a7f13a8fb3f9c7a3d3b` exports 188 runtime paths with
+  patch SHA-256 `95ab133bb93cb1496aa8ae564cb216ee3fa810a0101ebed2ea421e5caab70df8`.
+  The native tests passed 279 with nine skips and the release tests passed 282
+  with nine skips, including the speech placement tests. The Docker Desktop ARM64
+  image passed the pinned Alpine OpenSSH probe with separate filesystems and
+  the exact packaged modules. The probe checked complete and stale versions,
+  instruction approval, protected file refusal, and V4A edits. An independent
+  native review accepted the writer after checking entry and referent versions,
+  redacted output, instruction aliases, and lint diagnostics. The managed
+  grant and shared-permission changes follow in the workspace topic.
 - The lean project fixture upgraded populated state on Debian ARM64 with
   native Docker 29.10.0 and rootless Podman 5.4.2. It verified classic chat and
   TUI shell and shortcut placement in Code and Agent modes, an authenticated
@@ -657,6 +669,17 @@ to match the final image. Recheck the documented reason for the empty Hermes
   and a Code WebApp write to a shared project. The gateway remained absent
   from owner discovery after the final Code recreation in that fixture. A
   shorter Code to Agent to Code fixture passed on the same engine.
+
+### Managed project workspace topic
+
+The `feat/ssh-project-workspaces` grant and file-permission changes combine
+PR1 `d4aa66920ce76794a580a877b6e4383ffc94b72d` with guarded writes on
+PR2a `d4919743c0b0623ca26ca3178460a10283d4ef5c`. The WebApp editor uses the
+configured SSH connection from PR2b `db7587772b60966eed365d0cce892be59c6d1273`.
+The topics share main `88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5` and combine
+at `0bf150642e637a644696d43c39e10e1cbc136014`. Their release equivalents are
+PR1 `32abdfde7c1968d4d8ebd6cd3e16a3d35e4b04d7` and the SSH topic
+`214381873955bbfef268b7ce69cb0174f3ce551b`, which carries PR2a and PR2b.
 
 ### Speech output topic
 

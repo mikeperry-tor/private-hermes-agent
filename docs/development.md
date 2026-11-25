@@ -515,7 +515,7 @@ records its submission and release bases.
 | Candidate | Recorded passing checks | Scope |
 | --- | --- | --- |
 | PR1: managed configuration | Config and profile unit tests, and Docker and Podman managed-policy image fixtures | Strict reads, dotenv bootstrap and reload precedence, routed interpolation, secret ownership |
-| PR2a: SSH workspace fixes | Sync tests, packaged shell and HTTP checks, and [guarded SSH file tools](plans/executor-access-consistency.md#phase-1-progress) | Browser-profile sync exclusion, missing-file `ENOENT` and 404, read baselines, and filtering before search pagination |
+| PR2a: SSH workspace fixes | Sync tests, packaged shell and HTTP checks, and [guarded SSH file tools](plans/executor-access-consistency.md#phase-1-progress) | Browser-profile sync exclusion, missing-file `ENOENT` and 404, read baselines, search filtering, and executor version and path checks before edits |
 | PR2b: explicit SSH client config | SSH environment and config tests, and packaged shell checks | Pinned SSH client options across terminal, workspace, streams, and Doctor |
 | PR3: executor desktop and browser | 224 Python tests, 6 desktop renderer tests, browser and SSH suites, live SSH Chromium checks | Cold executor discovery, viewer identity, warm CUA driver, named-profile RFB, raw CDP refusal, vault lease, scratch, screenshots, sandboxing |
 | PR4: operator terminals and exact `cwd` | 80 Python tests, 95 terminal renderer tests, live SSH checks | Placement pinning, rollback refusal, Bash and `cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |

@@ -559,7 +559,7 @@ index 0c2e904a6..27558ff4a 100644
 
  def _stored_prompt_matches_runtime(agent, prompt: str) -> bool:
 diff --git a/agent/file_safety.py b/agent/file_safety.py
-index ebcd64520..50406a231 100644
+index ebcd64520..761c6baa7 100644
 --- a/agent/file_safety.py
 +++ b/agent/file_safety.py
 @@ -9,11 +9,12 @@ from __future__ import annotations
@@ -576,7 +576,40 @@ index ebcd64520..50406a231 100644
  from typing import Optional
 
  from hermes_cli.home_data_layout import (
-@@ -513,12 +514,12 @@ _BLOCKED_PROC_SUFFIXES = (
+@@ -270,10 +271,7 @@ def build_write_denied_paths(home: str) -> set[str]:
+     # ``~/.ssh/config`` is deliberately NOT hard-denied: no key bytes, and editing
+     # it is routine. It can carry ProxyCommand / Match exec, so it goes through the
+     # approval gate instead (_approval_paths_by_key).
+-    home_files = (
+-        (".ssh", "authorized_keys"), (".ssh", "id_rsa"), (".ssh", "id_ed25519"),
+-        *((name,) for name in HOME_CREDENTIAL_FILES),
+-    )
++    home_files = (*SSH_KEY_FILES, *HOME_CREDENTIAL_FILES)
+     # Secret material under HERMES_HOME, on the active profile, every sibling profile
+     # and the global root: overwriting the root .env leaks credentials across every profile that
+     # inherits it, and the root Anthropic PKCE store is still read by default /
+@@ -290,9 +288,9 @@ def build_write_denied_paths(home: str) -> set[str]:
+         *SECRET_CACHE_STORES,
+     )
+     paths = [
+-        *(os.path.join(home, *f) for f in home_files),
++        *(os.path.join(home, *f.split("/")) for f in home_files),
+         *(str(base / f) for base in _credential_store_dirs() for f in hermes_files),
+-        "/etc/sudoers", "/etc/passwd", "/etc/shadow",
++        *WRITE_PROTECTED_SYSTEM_FILES,
+     ]
+     return {os.path.realpath(p) for p in paths}
+
+@@ -300,6 +298,8 @@ def build_write_denied_paths(home: str) -> set[str]:
+ # Home-root single-file credential stores. Also hidden by the dashboard Files API (hermes_cli.web_routers.files);
+ # agent/redact.py treats a read of one as secret-bearing output. ``_netrc`` is the name curl and git use on Windows.
+ HOME_CREDENTIAL_FILES = (".netrc", "_netrc", ".pgpass", ".npmrc", ".pypirc", ".git-credentials")
++SSH_KEY_FILES = (".ssh/authorized_keys", ".ssh/id_rsa", ".ssh/id_ed25519")
++WRITE_PROTECTED_SYSTEM_FILES = ("/etc/sudoers", "/etc/passwd", "/etc/shadow")
+
+ # Home-relative credential directories (POSIX paths). Also dropped from profile exports (hermes_cli.profiles)
+ # and hidden by the dashboard Files API.
+@@ -513,12 +513,12 @@ _BLOCKED_PROC_SUFFIXES = (
      "/mem", "/auxv", "/pagemap")
 
 
@@ -591,7 +624,7 @@ index ebcd64520..50406a231 100644
      if normalized in _BLOCKED_DEVICE_PATHS:
          return True
      return normalized.startswith("/proc/") and normalized.endswith(_BLOCKED_PROC_SUFFIXES)
-@@ -536,7 +537,19 @@ def is_project_env_basename(name: str) -> bool:
+@@ -536,7 +536,19 @@ def is_project_env_basename(name: str) -> bool:
      return name.casefold() in _BLOCKED_PROJECT_ENV_BASENAMES
 
 
@@ -612,7 +645,7 @@ index ebcd64520..50406a231 100644
      """Return an error message when a read targets a denied Hermes path.
 
      Blocked: device/fd/proc files that hang reads or leak process state (``/dev/zero``,
-@@ -548,6 +561,8 @@ def get_read_block_error(path: str) -> Optional[str]:
+@@ -548,6 +560,8 @@ def get_read_block_error(path: str) -> Optional[str]:
      Callers that resolve relative paths against a non-process cwd (e.g.
      ``TERMINAL_CWD``) MUST pass an absolute path: ``resolve()`` here anchors at
      the process cwd, so a relative ``"auth.json"`` would miss the denylist.
@@ -621,7 +654,7 @@ index ebcd64520..50406a231 100644
      """
      # NT/device-namespace check runs on the RAW string, before resolve():
      # on Windows, resolving \??\UNC\host\share (or \\?\UNC\, GLOBALROOT)
-@@ -557,13 +572,20 @@ def get_read_block_error(path: str) -> Optional[str]:
+@@ -557,13 +571,20 @@ def get_read_block_error(path: str) -> Optional[str]:
      nt_error = get_nt_namespace_error(path, verb="Read")
      if nt_error:
          return nt_error
@@ -1294,8 +1327,90 @@ index e0c2987ee..a50e480f1 100644
              # Capability epoch lets the restore path rebuild ONCE per
              # user-initiated capability change in an eternal session.
              parts.append(epoch_line(_agent_home(agent)))
+diff --git a/agent/tool_dispatch_helpers.py b/agent/tool_dispatch_helpers.py
+index 9d774b4e0..dd21f4465 100644
+--- a/agent/tool_dispatch_helpers.py
++++ b/agent/tool_dispatch_helpers.py
+@@ -181,7 +181,8 @@ def _peel_bridge_call(tool_name: str, function_args: dict) -> tuple[str, dict]:
+         return tool_name, function_args
+
+
+-def _batch_admission(tool_call, execution_cwd: Optional[Path]) -> tuple[str, list[Path], bool] | None:
++def _batch_admission(tool_call, execution_cwd: Optional[Path], *, ssh_paths: bool = False
++                     ) -> tuple[str, list[Path], bool] | None:
+     """Classify one call for the planner: ``None`` = sequential barrier, else
+     ``(effective_name, scoped_paths, is_writer)`` (empty paths = unscoped parallel-safe)."""
+     tool_name = tool_call.function.name
+@@ -204,6 +205,8 @@ def _batch_admission(tool_call, execution_cwd: Optional[Path]) -> tuple[str, lis
+     if name in _NEVER_PARALLEL_TOOLS or _requires_extended_tool_deadline(name):
+         return None
+     if name in _PATH_SCOPED_TOOLS:
++        if ssh_paths:
++            return None
+         scoped = _extract_parallel_scope_paths(name, args, execution_cwd=execution_cwd)
+         return (name, scoped, name in _PATH_SCOPED_WRITERS) if scoped else None
+     if name in _PARALLEL_SAFE_TOOLS or name in _PARALLEL_SAFE_BRIDGE_LOOKUPS or _is_mcp_tool_parallel_safe(name):
+@@ -211,7 +214,8 @@ def _batch_admission(tool_call, execution_cwd: Optional[Path]) -> tuple[str, lis
+     return None
+
+
+-def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = None) -> list[tuple]:
++def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = None,
++                              task_id: str | None = None) -> list[tuple]:
+     """Split a tool-call batch into ordered ``("parallel"|"sequential", calls)`` segments.
+
+     Call order is preserved exactly (a later call never crosses an earlier barrier), so
+@@ -222,6 +226,14 @@ def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = Non
+     the call starts a NEW run after the conflicting one lands. Runs shorter than two calls
+     demote to sequential (it owns the richer inline dispatch); adjacent sequential merge.
+     """
++    from tools.file_tools_paths import uses_ssh_for_task
++    from tools.terminal_scope import TerminalPolicyUnavailable
++
++    # Only the executor can tell whether two SSH spellings name the same file.
++    try:
++        ssh_paths = task_id is not None and uses_ssh_for_task(task_id)
++    except TerminalPolicyUnavailable:
++        ssh_paths = True
+     segments: list[tuple] = []
+     current: list = []
+     reserved_paths: list[tuple[Path, bool]] = []  # (canonical_path, is_writer) for the current run
+@@ -241,7 +253,7 @@ def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = Non
+         current, reserved_paths = [], []
+
+     for tool_call in tool_calls:
+-        admission = _batch_admission(tool_call, execution_cwd)
++        admission = _batch_admission(tool_call, execution_cwd, ssh_paths=ssh_paths)
+         if admission is None:
+             _close_parallel()
+             _extend_sequential([tool_call])
+@@ -364,10 +376,12 @@ def _extract_landed_file_mutation_paths(
+     tool_name: str,
+     args: dict[str, Any],
+     result: Any,
++    *,
++    report_only: bool = False,
+ ) -> list[str]:
+     """Concrete file paths a successful mutation reports (``files_modified`` /
+     ``resolved_path`` in the JSON result), falling back to the declared targets."""
+-    targets = _extract_file_mutation_targets(tool_name, args)
++    targets = [] if report_only else _extract_file_mutation_targets(tool_name, args)
+     if tool_name not in _FILE_MUTATING_TOOLS or not isinstance(result, str):
+         return targets
+     try:
+@@ -376,6 +390,10 @@ def _extract_landed_file_mutation_paths(
+         return targets
+     if not isinstance(data, dict):
+         return targets
++    if isinstance(files_landed := data.get("files_landed"), list):
++        return [path for path in files_landed if isinstance(path, str) and path]
++    if report_only:
++        return []
+     files = data.get("files_modified")
+     landed = [str(p) for p in files if p] if isinstance(files, list) else []
+     resolved = data.get("resolved_path")
 diff --git a/agent/tool_executor.py b/agent/tool_executor.py
-index 55cbaae26..a4b44a74d 100644
+index 55cbaae26..21b65ddfd 100644
 --- a/agent/tool_executor.py
 +++ b/agent/tool_executor.py
 @@ -98,11 +98,12 @@ def _ensure_file_checkpoint(agent, function_name: str, function_args: dict, effe
@@ -1362,6 +1477,33 @@ index 55cbaae26..a4b44a74d 100644
                      from agent.runtime_cwd import scope_terminal_cwd
                      cwd = function_args.get("workdir") or scope_terminal_cwd() or os.getcwd()
                      agent._checkpoint_mgr.ensure_checkpoint(cwd, f"before terminal: {command[:60]}")
+@@ -1110,6 +1115,7 @@ def _commit_tool_result(
+     if not (blocked or is_error):
+         function_result = observe_onboarding_result(agent, function_name, function_args, function_result)
+     if observed:
++        mutation_result = function_result
+         if not blocked:
+             function_result = agent._append_guardrail_observation(
+                 function_name, function_args, function_result, failed=is_error, tool_call_id=tool_call_id,
+@@ -1121,7 +1127,7 @@ def _commit_tool_result(
+         if not blocked:
+             try:
+                 agent._record_file_mutation_result(
+-                    function_name, function_args, function_result, is_error, task_id=effective_task_id,
++                    function_name, function_args, mutation_result, is_error, task_id=effective_task_id,
+                 )
+             except Exception as _ver_err:
+                 logging.debug("file-mutation verifier record failed: %s", _ver_err)
+@@ -1961,7 +1967,8 @@ def execute_tool_calls_segmented(agent, assistant_message, messages: list, effec
+     if segments is None:
+         _active_env = get_active_env(effective_task_id)
+         _exec_cwd = Path(_active_env.cwd) if _active_env is not None and _active_env.cwd else None
+-        segments = _plan_tool_batch_segments(assistant_message.tool_calls, execution_cwd=_exec_cwd)
++        segments = _plan_tool_batch_segments(assistant_message.tool_calls, execution_cwd=_exec_cwd,
++                                            task_id=effective_task_id)
+
+     for kind, calls in segments:
+         if getattr(agent, "_incremental_persistence_failed", False):
 diff --git a/agent/turn_context.py b/agent/turn_context.py
 index a9627f246..1643ed299 100644
 --- a/agent/turn_context.py
@@ -1379,23 +1521,26 @@ index a9627f246..1643ed299 100644
          # ``tools.mcp_tool`` (~0.4s); not in sys.modules => nothing to do.
          if not getattr(agent, "_skip_mcp_refresh", False) and "tools.mcp_tool" in sys.modules:
 diff --git a/agent/turn_explainers.py b/agent/turn_explainers.py
-index 3c291196a..8e19902e8 100644
+index 3c291196a..6ab6c7f99 100644
 --- a/agent/turn_explainers.py
 +++ b/agent/turn_explainers.py
-@@ -132,6 +132,12 @@ class TurnExplainersMixin:
+@@ -132,20 +132,28 @@ class TurnExplainersMixin:
          if not targets:
              return
          landed = file_mutation_result_landed(tool_name, result)
+-        if landed:
+-            landed_paths = _extract_landed_file_mutation_paths(tool_name, args, result)
 +        from tools.file_tools_paths import uses_ssh_for_task
 +        from tools.terminal_scope import TerminalPolicyUnavailable
 +        try:
 +            ssh = uses_ssh_for_task(task_id or "default")
 +        except TerminalPolicyUnavailable:
 +            return
-         if landed:
-             landed_paths = _extract_landed_file_mutation_paths(tool_name, args, result)
++        if landed or ssh:
++            landed_paths = _extract_landed_file_mutation_paths(tool_name, args, result, report_only=not landed)
              changed = getattr(self, "_turn_file_mutation_paths", None)
-@@ -140,12 +146,14 @@ class TurnExplainersMixin:
+             if changed is not None:
+                 changed.update(landed_paths)
              # Feed the checkpoint agent-write ledger so /rollback's safe mode can tell
              # Hermes-authored content from later user hand-edits.
              mgr = getattr(self, "_checkpoint_mgr", None)
@@ -7820,7 +7965,7 @@ index 230fc073d..34f2a9abc 100644
 
 
 diff --git a/run_agent.py b/run_agent.py
-index c17cf33c1..63317f34f 100644
+index c17cf33c1..7d76ae589 100644
 --- a/run_agent.py
 +++ b/run_agent.py
 @@ -315,8 +315,10 @@ class AIAgent(
@@ -7848,6 +7993,15 @@ index c17cf33c1..63317f34f 100644
                  profile_for_session = None
              # Carry the gateway routing identity: when the gateway SessionStore degraded to JSONL (corrupt
              # state.db) this lazy create is the ONLY durable write, and an identity-less row is unrecoverable.
+@@ -1374,7 +1372,7 @@ class AIAgent(
+                     from agent.tool_dispatch_helpers import _plan_tool_batch_segments
+                     active_env = get_active_env(effective_task_id)
+                     exec_cwd = Path(active_env.cwd) if active_env is not None and active_env.cwd else None
+-                    segments = _plan_tool_batch_segments(tool_calls, execution_cwd=exec_cwd)
++                    segments = _plan_tool_batch_segments(tool_calls, execution_cwd=exec_cwd, task_id=effective_task_id)
+                     if len(segments) == 1:
+                         run = self._execute_tool_calls_concurrent if segments[0][0] == "parallel" else self._execute_tool_calls_sequential
+                         run(*args)
 @@ -1475,8 +1473,14 @@ _LIST_TOOLS_USAGE = """
  def _print_tool_listing() -> None:
      """``--list_tools``: print toolsets (basic / composite / scenario / legacy), every tool, and usage examples."""
@@ -11712,7 +11866,7 @@ index d18e65acc..0187fcee9 100644
          return env._build_ssh_command()
      return _plugin_exec_prefix(env, user=user, interactive=interactive)
 diff --git a/tools/file_operations.py b/tools/file_operations.py
-index f8168e070..f20142e47 100644
+index f8168e070..dbd9984de 100644
 --- a/tools/file_operations.py
 +++ b/tools/file_operations.py
 @@ -16,25 +16,37 @@ import difflib
@@ -11724,7 +11878,7 @@ index f8168e070..f20142e47 100644
  import time
  from abc import ABC, abstractmethod
 -from typing import Optional, Dict
-+from typing import Dict, NamedTuple, Optional
++from typing import Callable, Dict, NamedTuple, Optional
  from pathlib import Path
 
  from tools.binary_extensions import has_binary_extension
@@ -11757,7 +11911,27 @@ index f8168e070..f20142e47 100644
  # Controller home; SearchMixin reads it (tests monkeypatch it here).
  _HOME = str(Path.home())
 
-@@ -752,23 +764,111 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+@@ -286,7 +298,8 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+     def _head(self, path: str, nbytes: int) -> ExecuteResult:
+         return self._exec(f"head -c {nbytes} {self._escape_shell_arg(path)} 2>/dev/null")
+
+-    def _fenced_read(self, body: str, *more: str) -> tuple[Optional[list[str]], Optional[int], ExecuteResult]:
++    def _fenced_read(self, body: str, *more: str, stdin_data: str | None = None
++                     ) -> tuple[Optional[list[str]], Optional[int], ExecuteResult]:
+         """Run BODY, then each of MORE, each in its own sentinel-delimited segment; return (those
+         segments, BODY's exit status, reply).
+
+@@ -305,7 +318,8 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+         rest = "".join(f"{mark}; {cmd}; " for cmd in more)
+         # xtrace off first: a traced ``+ echo <sentinel>`` line is an extra separator, and the
+         # traces of the transport commands would land inside the payload segments.
+-        result = self._exec(f"{{ set +x; }} 2>/dev/null; {mark}; {body}; __hb=$?; {rest}{mark}; echo $__hb")
++        kwargs = {"stdin_data": stdin_data} if stdin_data is not None else {}
++        result = self._exec(f"{{ set +x; }} 2>/dev/null; {mark}; {body}; __hb=$?; {rest}{mark}; echo $__hb", **kwargs)
+         segments = _split_segments(result.stdout or "", sentinel)
+         if len(segments) != len(more) + 3:
+             return None, None, result
+@@ -752,23 +766,112 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
          (``b'\\xfe\\xff'``) embedded in a ``-c`` program. ``exec`` decodes
          and runs it unchanged.
          """
@@ -11772,9 +11946,10 @@ index f8168e070..f20142e47 100644
 -            f"{py} -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
 +        return f"{py} -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
 +
-+    def _framed_ssh_file_output(self, snippet: str) -> str:
++    def _framed_ssh_file_output(self, snippet: str, *, stdin_data: str | None = None) -> str:
 +        command = self._python_snippet_command(snippet, "python3 -I")
-+        segments, status, reply = self._fenced_read(command)
++        kwargs = {"stdin_data": stdin_data} if stdin_data is not None else {}
++        segments, status, reply = self._fenced_read(command, **kwargs)
 +        if reply.exit_code != 0 or status != 0 or not segments:
 +            raise ValueError("The SSH file operation could not verify the inspected path.")
 +        return segments[0]
@@ -11876,7 +12051,7 @@ index f8168e070..f20142e47 100644
              f"offset = {int(offset)}\n"
              f"limit = {int(limit)}\n"
              f"MAX = {self._UTF16_MAX_BYTES}\n"
-@@ -777,7 +877,7 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+@@ -777,7 +880,7 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
              "    size = os.path.getsize(p)\n"
              "    if size > MAX:\n"
              "        print('HERMES_UTF16:NO'); sys.exit(0)\n"
@@ -11885,7 +12060,7 @@ index f8168e070..f20142e47 100644
              "        data = f.read()\n"
              "    sample = data[:SAMPLE]\n"
              "    enc = None\n"
-@@ -809,13 +909,20 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+@@ -809,13 +912,20 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
              "    print('HERMES_UTF16:NO'); sys.exit(0)\n"
          )
 
@@ -11912,7 +12087,7 @@ index f8168e070..f20142e47 100644
              return None
          payload = stdout[marker + len("HERMES_UTF16:OK"):].strip()
          try:
-@@ -1198,60 +1305,78 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+@@ -1198,60 +1308,78 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
              file_size=file_size, truncated=truncated, hint=hint,
              truncated_lines=True if truncated_lines else None)
 
@@ -12030,7 +12205,104 @@ index f8168e070..f20142e47 100644
          scored.sort(key=lambda x: -x[0])
          return ReadResult(error=f"File not found: {path}", not_found=True,
                            similar_files=[fp for _, fp in scored[:5]])
-@@ -1691,6 +1816,48 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+@@ -1595,7 +1723,8 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+     # --- PATCH (replace mode) -----------------------------------------------
+
+     def _no_match_result(self, path: str, content: str, old_string: str,
+-                         new_string: str, match_count: int, error: Optional[str]) -> PatchResult:
++                         new_string: str, match_count: int, error: Optional[str],
++                         *, hint_text: Callable[[str], str] | None = None) -> PatchResult:
+         """PatchResult for a failed fuzzy match. Already-applied detection first: the
+         most common production failure is a re-send of an edit that already landed,
+         and a success-shaped no-op stops the model burning turns on re-reads.
+@@ -1608,6 +1737,8 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+                     f"File already contains the target text — the edit "
+                     f"appears to be already applied to {path}. No write "
+                     "performed; do not re-send this patch."))
++        if hint_text is not None and hint_text(content) != content:
++            return PatchResult(error="The SSH edit could not find a unique match in text that contains redactions.")
+         err_msg = error or f"Could not find match for old_string in {path}"
+         try:
+             err_msg += format_no_match_hint(err_msg, match_count, old_string, content)
+@@ -1636,49 +1767,51 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
+                 "The patch did not persist. Re-read the file and try again."))
+         return None
+
+-    def patch_replace(self, path: str, old_string: str, new_string: str,
+-                      replace_all: bool = False) -> PatchResult:
+-        """Replace text in a file using fuzzy matching (``old_string`` must be
+-        unique unless ``replace_all``). Returns a PatchResult with diff + lint."""
+-        path = self._expand_path(path)
+-        denied = get_write_denied_error(path)
+-        if denied:
+-            return PatchResult(error=denied)
+-        data, failed = self._read_exact_bytes(path)
+-        if data is None:
+-            return PatchResult(error=failed.cwd_error or f"Failed to read file: {path}")
+-        # Every line the replacement does not touch is written back, so read the exact bytes;
+-        # surrogateescape lets write_file restore any byte UTF-8 cannot decode (#79178).
+-        # Match and diff on BOM-stripped content (a phantom U+FEFF defeats an exact
+-        # first-line match); the raw read becomes write_file's pre_content.
+-        raw_content = data.decode("utf-8", "surrogateescape")
++    def _prepare_patch_replace(self, path: str, raw_content: str, old_string: str, new_string: str,
++                               replace_all: bool, *, hint_text: Callable[[str], str] | None = None
++                               ) -> tuple[str | None, PatchResult]:
+         content, _ = _strip_bom(raw_content)
+-
+         from tools.fuzzy_match import boundary_note, fuzzy_find_and_replace
+         correction_notes = []
+         new_content, match_count, strategy, error = fuzzy_find_and_replace(
+             content, old_string, new_string, replace_all, correction_notes=correction_notes)
+         if error or match_count == 0:
+-            return self._no_match_result(path, content, old_string, new_string, match_count, error)
++            return None, self._no_match_result(
++                path, content, old_string, new_string, match_count, error, hint_text=hint_text)
+         # Models send bare-LF old/new strings; normalize the substituted region to
+         # the file's ending so CRLF files stay consistent.
+         file_ending = _detect_line_ending(content)
+         if file_ending:
+             new_content = _normalize_line_endings(new_content, file_ending)
++        return new_content, PatchResult(
++            success=True, files_modified=[path],
++            note="\n".join(n for n in (*correction_notes, boundary_note([strategy])) if n) or None)
++
++    def patch_replace(self, path: str, old_string: str, new_string: str,
++                      replace_all: bool = False) -> PatchResult:
++        """Replace text in a file using fuzzy matching."""
++        path = self._expand_path(path)
++        denied = get_write_denied_error(path)
++        if denied:
++            return PatchResult(error=denied)
++        data, failed = self._read_exact_bytes(path)
++        if data is None:
++            return PatchResult(error=failed.cwd_error or f"Failed to read file: {path}")
++        raw_content = data.decode("utf-8", "surrogateescape")
++        new_content, result = self._prepare_patch_replace(path, raw_content, old_string, new_string, replace_all)
++        if new_content is None:
++            return result
+         write_result = self.write_file(path, new_content, pre_content=raw_content)
+         if write_result.error:
+             return PatchResult(error=f"Failed to write changes: {write_result.error}")
+         verify_error = self._verify_patch_persisted(path, new_content)
+         if verify_error is not None:
+             return verify_error
+-        # write_file already ran the lint delta on these bytes (pre = the raw read).
+-        return PatchResult(
+-            success=True, diff=self._unified_diff(content, new_content, path), files_modified=[path],
+-            lint=write_result.lint,
+-            note="\n".join(n for n in (*correction_notes, boundary_note([strategy])) if n) or None,
+-            # From the internal write_file call, whose baseline was the pre-patch content.
+-            lsp_diagnostics=write_result.lsp_diagnostics,
+-            _writes=[(path, hashlib.sha256(data).hexdigest(), write_result._content_sha256)])
++        result.lint = write_result.lint
++        result.diff = self._unified_diff(_strip_bom(raw_content)[0], new_content, path)
++        result.lsp_diagnostics = write_result.lsp_diagnostics
++        result._writes = [(path, hashlib.sha256(data).hexdigest(), write_result._content_sha256)]
++        return result
+
+     def patch_v4a(self, patch_content: str) -> PatchResult:
+         """Apply a V4A format patch (``*** Begin Patch`` / ``*** Update File:`` /
+@@ -1691,6 +1824,48 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
 
      # --- SEARCH -------------------------------------------------------------
 
@@ -12079,6 +12351,28 @@ index f8168e070..f20142e47 100644
      def search(self, pattern: str, path: str = ".", target: str = "content",
                 file_glob: Optional[str] = None, limit: int = 50, offset: int = 0,
                 output_mode: str = "content", context: int = 0,
+diff --git a/tools/file_operations_common.py b/tools/file_operations_common.py
+index 29d38315a..0bd877140 100644
+--- a/tools/file_operations_common.py
++++ b/tools/file_operations_common.py
+@@ -35,6 +35,7 @@ class ReadResult:
+     _content_sha256: Optional[str] = None
+     # read_file_raw refused the file for exceeding its size cap: it exists, but no content came back.
+     _too_large: bool = False
++    _entry_only: bool = False
+
+     def to_dict(self) -> dict:
+         return {k: v for k, v in self.__dict__.items() if not k.startswith("_") and v is not None and v != []}
+@@ -49,6 +50,9 @@ class WriteResult:
+     # backend couldn't verify (no sha256sum). A mismatch is a hard error, never a flag.
+     verified: Optional[bool] = None
+     _content_sha256: Optional[str] = None
++    _snapshot: Optional[tuple] = None
++    _entry_landed: bool = False
++    _entry_metadata: Optional[tuple] = None
+     lint: Optional[dict[str, Any]] = None
+     # LSP semantic diagnostics, kept separate from ``lint`` (syntax) so the model
+     # reads the two as independent signals. None when LSP is off/inapplicable.
 diff --git a/tools/file_operations_search.py b/tools/file_operations_search.py
 index 9d39ec4ab..95d6e0364 100644
 --- a/tools/file_operations_search.py
@@ -12111,10 +12405,10 @@ index 9d39ec4ab..95d6e0364 100644
          existing, missing = [], []
 diff --git a/tools/file_operations_ssh_path.py b/tools/file_operations_ssh_path.py
 new file mode 100644
-index 000000000..1c50584b0
+index 000000000..485588250
 --- /dev/null
 +++ b/tools/file_operations_ssh_path.py
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,177 @@
 +"""File path and descriptor checks run on the SSH executor."""
 +
 +SSH_PATH_STATE = """\
@@ -12231,10 +12525,7 @@ index 000000000..1c50584b0
 +    text = str(path)
 +    return text.casefold() if sys.platform in ('darwin', 'win32') else text
 +
-+def read_policy(input_path, resolved, protected):
-+    if not protected:
-+        return False, False
-+    files, directories = protected
++def hermes_homes(targets):
 +    user_home = Path.home()
 +    suffix = os.environ.get('HERMES_DATA_DIR_SUFFIX', '')
 +    homes = {user_home / '.hermes', user_home / ('.hermes' + suffix)}
@@ -12244,7 +12535,6 @@ index 000000000..1c50584b0
 +        homes.add(home)
 +        if home.parent.name == 'profiles':
 +            homes.add(home.parent.parent)
-+    targets = {Path(input_path), Path(resolved)}
 +    for base in tuple(homes):
 +        profiles = base / 'profiles'
 +        try:
@@ -12257,9 +12547,16 @@ index 000000000..1c50584b0
 +            for target in targets:
 +                if policy_key(target).startswith(prefix):
 +                    homes.add(Path(*target.parts[:len(parent.parts) + 1]))
++    return homes
++
++def read_policy(input_path, resolved, protected):
++    if not protected:
++        return False, False
++    files, directories = protected
++    targets = {Path(input_path), Path(resolved)}
 +    target_keys = {policy_key(target) for target in targets}
 +    secret = False
-+    for home in homes:
++    for home in hermes_homes(targets):
 +        if not home.is_dir():
 +            continue
 +        dirs = {home, policy_path(home)}
@@ -12641,8 +12938,434 @@ index 000000000..072b0d83b
 +    except SearchError as exc:
 +        return {'error': str(exc)}
 +"""
+diff --git a/tools/file_operations_ssh_write.py b/tools/file_operations_ssh_write.py
+new file mode 100644
+index 000000000..fb7a735b8
+--- /dev/null
++++ b/tools/file_operations_ssh_write.py
+@@ -0,0 +1,420 @@
++"""Executor protocol for guarded SSH writes and directory entry edits."""
++
++import base64
++import hashlib
++import json
++from typing import NamedTuple
++
++from tools.file_operations import SSHPathState
++from tools.file_operations_common import WriteResult
++from tools.file_operations_ssh_path import SSH_PATH_STATE
++
++
++class SSHWritePath(NamedTuple):
++    requested: str
++    destination: SSHPathState
++    approvals: tuple[str, ...]
++    entry: str
++    entry_metadata: tuple | None
++    intermediate_links: tuple[str, ...]
++
++
++SSH_WRITE = r"""
++import binascii
++import ctypes
++import errno
++import pwd
++import uuid
++
++class WriteError(Exception):
++    pass
++
++def under(path, root):
++    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
++
++def write_homes(requested):
++    homes = {Path.home(), Path(pwd.getpwuid(os.getuid()).pw_dir)}
++    if requested.startswith('~') and not requested.startswith(('~/', '~\\')):
++        account = requested.split('/', 1)[0]
++        expanded = os.path.expanduser(account)
++        if not expanded.startswith('~'):
++            homes.add(Path(expanded))
++    return homes
++
++def write_policy(requested, supplied, resolved, policy, *, entry=False, check_roots=True):
++    read_protected, home_files, home_dirs, shell_rc, protected, sensitive, exact, roots = policy
++    targets = {policy_key(Path(supplied)), policy_key(resolved)}
++    if roots and check_roots:
++        allowed = [os.path.realpath(os.path.expanduser(root)) for root in roots]
++        changed_paths = (resolved, supplied) if entry else (resolved,)
++        if any(not any(under(path, root) for root in allowed) for path in changed_paths):
++            return 'The path is outside the allowed SSH write roots (HERMES_WRITE_SAFE_ROOT).', None
++    exact_paths = {policy_key(candidate) for path in exact for candidate in (Path(path), policy_path(Path(path)))}
++    dirs = {policy_key(candidate) for path in sensitive for candidate in (Path(path), policy_path(Path(path)))}
++    if targets & exact_paths or any(under(path, directory) for path in targets for directory in dirs):
++        return 'The path is a protected system file on the SSH executor.', None
++    denied, config = read_policy(supplied, resolved, read_protected)
++    if denied or config:
++        return 'The path is a protected Hermes file on the SSH executor.', None
++    approvals = set()
++    app_homes = hermes_homes({Path(supplied), Path(resolved)})
++    homes = write_homes(requested)
++    homes.update(app_home / 'home' for app_home in app_homes if (app_home / 'home').is_dir())
++    for home in homes:
++        ssh_config = home / '.ssh' / 'config'
++        config_entries = {policy_key(ssh_config), policy_key(policy_path(ssh_config.parent) / 'config')}
++        configs = config_entries | {policy_key(policy_path(ssh_config))}
++        shell_paths = {policy_key(candidate) for name in shell_rc
++                       for candidate in (home / name, policy_path(home / name))}
++        if targets & configs:
++            approvals.add('ssh_config_write')
++        if targets & shell_paths:
++            approvals.add('shell_rc_write')
++        files = {policy_key(candidate) for name in home_files
++                 for candidate in (home / name, policy_path(home / name))}
++        if targets & files:
++            return 'The path is a credential file on the SSH executor.', None
++        for name in home_dirs:
++            folder = home / name
++            paths = targets - config_entries if name == '.ssh' else targets
++            if any(under(path, policy_key(root)) for path in paths for root in (folder, policy_path(folder))):
++                return 'The path is a credential file on the SSH executor.', None
++    app_homes.update(home / '.hermes' for home in write_homes(requested))
++    for app_home in app_homes:
++        for name in protected:
++            sub = app_home / name
++            if any(under(path, policy_key(folder)) for path in targets for folder in (sub, policy_path(sub))):
++                return 'The path is a protected Hermes file on the SSH executor.', None
++    return None, sorted(approvals)
++
++def intermediate_links(entry):
++    current = entry
++    seen = set()
++    while current not in seen:
++        try:
++            link = os.readlink(current)
++        except OSError as exc:
++            if exc.errno not in (errno.ENOENT, errno.EINVAL):
++                raise
++            return sorted(seen - {entry})
++        seen.add(current)
++        parent, leaf = os.path.split(os.path.join(os.path.dirname(current), link))
++        current = os.path.join(resolve(parent)[0], leaf)
++    raise WriteError('The SSH file path has a symbolic link loop.')
++
++def inspect_write(requested, policy, entry=False):
++    supplied = os.path.expanduser(requested)
++    if not os.path.isabs(supplied):
++        raise WriteError('The SSH write needs an absolute executor path.')
++    resolved, kind, info = observe(supplied)
++    denied, approvals = write_policy(requested, supplied, resolved, policy)
++    parent, leaf = os.path.split(supplied)
++    if not leaf or leaf in ('.', '..'):
++        raise WriteError('The SSH path must identify a file entry.')
++    location = os.path.join(resolve(parent)[0], leaf)
++    entry_metadata = metadata(os.lstat(location)) if kind != 'absent' else None
++    if entry or location != supplied:
++        entry_denied, entry_approvals = write_policy(
++            requested, location, resolved, policy, entry=entry, check_roots=entry)
++        denied = denied or entry_denied
++        approvals = sorted(set(approvals or ()) | set(entry_approvals or ()))
++    return {'requested': supplied, 'path': resolved, 'kind': kind, 'metadata': info,
++            'entry': location, 'error': denied, 'approvals': approvals,
++            'entry_metadata': entry_metadata,
++            'intermediate_links': intermediate_links(location) if location != resolved and not denied else []}
++
++@contextmanager
++def opened_parent(path, *, create=False):
++    # Walk from the root with directory descriptors so later symlink changes
++    # cannot redirect staged writes.
++    parent, name = os.path.split(path)
++    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
++    fd = os.open('/', flags)
++    try:
++        for part in Path(parent).parts[1:]:
++            try:
++                child = os.open(part, flags, dir_fd=fd)
++            except FileNotFoundError:
++                if not create:
++                    raise
++                try:
++                    os.mkdir(part, dir_fd=fd)
++                except FileExistsError:
++                    pass
++                child = os.open(part, flags, dir_fd=fd)
++            os.close(fd)
++            fd = child
++        yield parent, fd, name
++    finally:
++        os.close(fd)
++
++def receive_bytes(source, dest, length, digest):
++    hasher = hashlib.sha256()
++    remaining = length
++    try:
++        for block in iter(lambda: source.read(65536), b''):
++            data = base64.b64decode(block, validate=True)
++            remaining -= len(data)
++            if remaining < 0:
++                raise WriteError('The SSH client sent more bytes than expected.')
++            hasher.update(data)
++            dest.write(data)
++    except binascii.Error:
++        raise WriteError('The SSH client sent malformed file data.') from None
++    if remaining or hasher.hexdigest() != digest:
++        raise WriteError('The SSH client did not send the expected file data.')
++    dest.flush()
++
++def target_permissions(parent_fd, name, expected, stage_fd):
++    previous_fd = os.open(name, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
++    with os.fdopen(previous_fd, 'rb') as previous:
++        before = os.fstat(previous_fd)
++        if not stat.S_ISREG(before.st_mode) or metadata(before) != expected[:5]:
++            raise WriteError('The SSH file changed before the write.')
++        current_digest = hashlib.sha256()
++        for block in iter(lambda: previous.read(65536), b''):
++            current_digest.update(block)
++        if current_digest.hexdigest() != expected[5] or metadata(os.fstat(previous_fd)) != expected[:5]:
++            raise WriteError('The SSH file changed before the write.')
++        os.fchmod(stage_fd, stat.S_IMODE(before.st_mode) & 0o777)
++
++def checked_parent(parent, fd):
++    current = os.stat(parent, follow_symlinks=False)
++    pinned = os.fstat(fd)
++    if (current.st_dev, current.st_ino) != (pinned.st_dev, pinned.st_ino):
++        raise WriteError('The SSH destination directory changed before the write.')
++
++def publish(requested, path, entry, entry_version, expected, source, length, digest, policy, approvals):
++    landed = False
++    try:
++        if not os.path.isabs(path) or path == '/' or os.path.normpath(path) != path:
++            raise WriteError('The SSH write needs a verified absolute file path.')
++        with opened_parent(path, create=True) as (parent, parent_fd, name):
++            scratch = '.hermes-write-' + uuid.uuid4().hex
++            os.mkdir(scratch, 0o700, dir_fd=parent_fd)
++            try:
++                scratch_fd = os.open(scratch, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
++                try:
++                    stage_fd = os.open('file', os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o666, dir_fd=scratch_fd)
++                    with os.fdopen(stage_fd, 'w+b') as stage:
++                        receive_bytes(source, stage, length, digest)
++                        if expected is not None:
++                            target_permissions(parent_fd, name, expected, stage_fd)
++                        checked_parent(parent, parent_fd)
++                        current = inspect_write(requested, policy)
++                        if (current['path'] != path or current['entry'] != entry
++                                or current['entry_metadata'] != entry_version
++                                or current['kind'] != ('absent' if expected is None else 'regular')):
++                            raise WriteError('The SSH path changed before the write.')
++                        if current['error'] or tuple(current['approvals']) != approvals:
++                            raise WriteError(current['error'] or 'The SSH permissions changed before the write.')
++                        if expected is None:
++                            os.link('file', name, src_dir_fd=scratch_fd, dst_dir_fd=parent_fd)
++                            landed = True
++                            os.unlink('file', dir_fd=scratch_fd)
++                        else:
++                            if metadata(os.stat(name, dir_fd=parent_fd, follow_symlinks=False)) != expected[:5]:
++                                raise WriteError('The SSH file changed before the write.')
++                            os.replace('file', name, src_dir_fd=scratch_fd, dst_dir_fd=parent_fd)
++                            landed = True
++                        return {'landed': True, 'written': length, 'metadata': metadata(os.fstat(stage_fd))}
++                finally:
++                    try:
++                        os.unlink('file', dir_fd=scratch_fd)
++                    except FileNotFoundError:
++                        pass
++                    os.close(scratch_fd)
++            finally:
++                os.rmdir(scratch, dir_fd=parent_fd)
++    except OSError as exc:
++        if landed:
++            return {'landed': True, 'error': 'The SSH write landed before an I/O error. Inspect the file.'}
++        if isinstance(exc, FileExistsError):
++            return {'error': 'The SSH destination appeared before the write.'}
++        if isinstance(exc, PermissionError):
++            return {'error': 'The SSH user cannot write the file or its parent directory.'}
++        return {'error': 'The SSH filesystem rejected the write: ' + os.strerror(exc.errno) + '.'}
++    except WriteError as exc:
++        return {'error': str(exc)}
++
++def verify_entry(requested, expected, policy, fd, name):
++    inspected = inspect_write(requested, policy, entry=True)
++    if inspected['error']:
++        raise WriteError(inspected['error'])
++    if not all(inspected[key] == expected[key] for key in ('path', 'entry', 'kind', 'metadata', 'entry_metadata', 'approvals')):
++        raise WriteError('The inspected SSH entry changed before the edit.')
++    if inspected['kind'] != 'absent':
++        observed = os.stat(name, dir_fd=fd, follow_symlinks=False)
++        if metadata(observed) != expected['entry_metadata']:
++            raise WriteError('The inspected SSH entry changed before the edit.')
++        return observed.st_mode
++    return None
++
++def rename_without_replacement(src_fd, src, dst_fd, dst):
++    libc = ctypes.CDLL(None, use_errno=True)
++    if sys.platform == 'linux' and hasattr(libc, 'renameat2'):
++        rename, flag = libc.renameat2, 1
++    elif sys.platform == 'darwin' and hasattr(libc, 'renameatx_np'):
++        rename, flag = libc.renameatx_np, 4
++    else:
++        raise WriteError('This SSH executor cannot move a file without replacing its destination.')
++    if rename(src_fd, os.fsencode(src), dst_fd, os.fsencode(dst), flag) != 0:
++        error = ctypes.get_errno()
++        if error == errno.EXDEV:
++            raise WriteError('The SSH executor cannot atomically move a file across filesystems.')
++        raise OSError(error, os.strerror(error))
++
++def keeps_link_target(link, source, destination):
++    return os.path.isabs(link) or os.path.dirname(source) == os.path.dirname(destination)
++
++def mutate_entry(requested, expected, policy, destination=None):
++    try:
++        with opened_parent(expected['entry']) as (parent, fd, name):
++            mode = verify_entry(requested, expected, policy, fd, name)
++            if mode is None:
++                raise WriteError('The SSH source entry does not exist.')
++            checked_parent(parent, fd)
++            if destination is None:
++                os.unlink(name, dir_fd=fd)
++                return {'landed': True}
++            target, expected_destination = destination
++            with opened_parent(expected_destination['entry'], create=True) as (parent_to, fd_to, name_to):
++                if verify_entry(target, expected_destination, policy, fd_to, name_to) is not None:
++                    raise WriteError('The SSH destination already exists.')
++                if stat.S_ISLNK(mode):
++                    link = os.readlink(name, dir_fd=fd)
++                    if not keeps_link_target(link, expected['entry'], expected_destination['entry']):
++                        raise WriteError('The SSH move could change a relative symlink target.')
++                checked_parent(parent_to, fd_to)
++                checked_parent(parent, fd)
++                verify_entry(requested, expected, policy, fd, name)
++                rename_without_replacement(fd, name, fd_to, name_to)
++                moved = {'landed': True}
++                try:
++                    current = metadata(os.stat(name_to, dir_fd=fd_to, follow_symlinks=False))
++                    if current[:4] == expected['entry_metadata'][:4]:
++                        moved['metadata'] = current
++                        return moved
++                except OSError:
++                    pass
++                moved['error'] = 'The SSH move landed, then its destination changed. Inspect both paths.'
++                return moved
++    except FileExistsError:
++        return {'error': 'The SSH destination appeared before the move.'}
++    except WriteError as exc:
++        return {'error': str(exc)}
++    except OSError as exc:
++        return {'error': 'The SSH filesystem rejected the edit: ' + os.strerror(exc.errno) + '.'}
++"""
++
++
++def inspect_ssh_write(ops, path: str, policy: tuple, *, entry: bool = False) -> SSHWritePath:
++    try:
++        data = json.loads(ops._framed_ssh_file_output(
++            SSH_PATH_STATE + SSH_WRITE
++            + f"\nprint(json.dumps(inspect_write({path!r}, {policy!r}, entry={entry!r})))\n"))
++        destination = data["path"]
++        requested = data["requested"]
++        location = data["entry"]
++        info, kind = data["metadata"], data["kind"]
++        if isinstance(data.get("error"), str):
++            raise PermissionError(data["error"])
++        if not all(isinstance(name, str) and name.startswith("/") for name in (requested, destination, location)):
++            raise ValueError
++        if kind == "absent" and info is None:
++            state = SSHPathState(destination, kind, None)
++        elif (kind == "regular" and isinstance(info, list) and len(info) == 5
++              and all(type(value) is int for value in info)):
++            state = SSHPathState(destination, kind, tuple(info))
++        else:
++            raise PermissionError("The SSH write target is not a regular file.")
++        approvals = tuple(data["approvals"])
++        if any(key not in {"ssh_config_write", "shell_rc_write"} for key in approvals):
++            raise ValueError
++        links = tuple(data["intermediate_links"])
++        if not all(isinstance(link, str) and link.startswith("/") for link in links):
++            raise ValueError
++        entry_metadata = data["entry_metadata"]
++        if entry_metadata is not None and (not isinstance(entry_metadata, list) or len(entry_metadata) != 5
++                                           or any(type(value) is not int for value in entry_metadata)):
++            raise ValueError
++        return SSHWritePath(requested, state, approvals, location,
++                            tuple(entry_metadata) if entry_metadata is not None else None, links)
++    except (KeyError, TypeError, ValueError):
++        raise ValueError(f"Could not inspect the SSH write target {path!r}.") from None
++
++def mutate_ssh_entry(ops, requested: str, inspected: SSHWritePath, policy: tuple,
++                     destination: tuple[str, SSHWritePath] | None = None) -> WriteResult:
++    def expected(path: SSHWritePath) -> dict:
++        state = path.destination
++        return {"path": state.path, "entry": path.entry, "kind": state.kind,
++                "metadata": state.metadata, "entry_metadata": path.entry_metadata, "approvals": list(path.approvals)}
++
++    target = None if destination is None else (destination[0], expected(destination[1]))
++    args = f"{requested!r}, {expected(inspected)!r}, {policy!r}, {target!r}"
++    try:
++        data = json.loads(ops._framed_ssh_file_output(
++            SSH_PATH_STATE + SSH_WRITE + f"\nprint(json.dumps(mutate_entry({args})))\n"))
++        if data.get("landed") is True:
++            info = data.get("metadata")
++            version = tuple(info) if isinstance(info, list) and len(info) == 5 else None
++            if destination is not None and version is None and not isinstance(data.get("error"), str):
++                raise ValueError
++            return WriteResult(error=data.get("error"), _entry_landed=True, _entry_metadata=version)
++        if isinstance(data.get("error"), str):
++            return WriteResult(error=data["error"])
++    except (AttributeError, TypeError, ValueError):
++        pass
++    return WriteResult(error="Could not verify the SSH entry edit. Inspect the path before retrying.")
++
++
++def check_ssh_link_move(ops, source: SSHWritePath, destination: SSHWritePath) -> None:
++    if source.entry == source.destination.path:
++        return
++    args = f"os.readlink({source.entry!r}), {source.entry!r}, {destination.entry!r}"
++    response = ops._framed_ssh_file_output(
++        SSH_PATH_STATE + SSH_WRITE + f"\nprint(json.dumps(keeps_link_target({args})))\n")
++    if json.loads(response) is not True:
++        raise ValueError("The SSH move could change a relative symlink target.")
++
++def read_ssh_write_source(ops, state: SSHPathState, maximum: int) -> bytes:
++    if state.kind == "absent":
++        return b""
++    size = min(state.metadata[2], maximum)
++    try:
++        encoded = ops._ssh_file_value(f"read_bytes({state.path!r}, {state.metadata!r}, {size - 1})")
++        source = base64.b64decode(encoded, validate=True)
++        if len(source) != size:
++            raise ValueError
++        return source
++    except (TypeError, ValueError):
++        raise ValueError("Could not read the inspected SSH file before writing.") from None
++
++def publish_ssh_file(ops, input_path: str, inspected: SSHWritePath, expected: tuple | None,
++                     content: bytes, policy: tuple) -> WriteResult:
++    """Publish verified bytes against the previously inspected SSH file."""
++    state = inspected.destination
++    if state.kind == "absent" and expected is None:
++        remote_version = None
++    elif state.kind == "regular" and expected is not None and expected[:5] == state.metadata:
++        remote_version = (*expected[:5], expected[5].hex())
++    else:
++        return WriteResult(error="The SSH file changed before the write. Read it again.")
++    digest = hashlib.sha256(content).digest()
++    args = (f"{input_path!r}, {state.path!r}, {inspected.entry!r}, {inspected.entry_metadata!r}, "
++            f"{remote_version!r}, sys.stdin.buffer, {len(content)}, {digest.hex()!r}, "
++            f"{policy!r}, {inspected.approvals!r}")
++    try:
++        response = json.loads(ops._framed_ssh_file_output(
++            SSH_PATH_STATE + SSH_WRITE + f"\nprint(json.dumps(publish({args})))\n",
++            stdin_data=base64.b64encode(content).decode("ascii")))
++        if isinstance(response.get("error"), str):
++            return WriteResult(error=response["error"], _entry_landed=response.get("landed") is True)
++        info = response["metadata"]
++        if (response["written"] != len(content) or len(info) != 5
++                or any(type(value) is not int for value in info) or info[2] != len(content)):
++            raise ValueError
++        return WriteResult(bytes_written=len(content), dirs_created=True, verified=True,
++                           _content_sha256=digest.hex(), _snapshot=(*info, digest), _entry_landed=True)
++    except (KeyError, TypeError, ValueError):
++        return WriteResult(error="Could not verify the SSH write. Inspect the file before retrying.")
 diff --git a/tools/file_tools.py b/tools/file_tools.py
-index 7982b09f0..84a47fee9 100644
+index 7982b09f0..b1dc31da1 100644
 --- a/tools/file_tools.py
 +++ b/tools/file_tools.py
 @@ -8,6 +8,7 @@ staleness state).
@@ -12653,7 +13376,7 @@ index 7982b09f0..84a47fee9 100644
  import json
  import logging
  import os
-@@ -23,23 +24,25 @@ from agent.tool_result_classification import GUARDRAIL_REFUSAL_KEY
+@@ -23,25 +24,29 @@ from agent.tool_result_classification import GUARDRAIL_REFUSAL_KEY
  from tools.binary_extensions import has_binary_extension
  from tools.skill_provenance import is_background_review
  from tools.file_operations import (
@@ -12683,8 +13406,12 @@ index 7982b09f0..84a47fee9 100644
 +    _patch_failure_lock, _programmatic_read,
      _patch_failure_tracker, _read_tracker, _read_tracker_lock, _record_not_found,
      _record_patch_failure, _reset_patch_failures, _task_data, _update_read_timestamp)
++from tools.file_tools_ssh_writes import patch_ssh_replace, write_ssh_file
++from tools.file_tools_ssh_patch import patch_ssh_v4a
 
-@@ -419,7 +422,9 @@ def _special_file_kind(path) -> str | None:
+ logger = logging.getLogger(__name__)
+
+@@ -419,7 +424,9 @@ def _special_file_kind(path) -> str | None:
                  "a special (non-regular) file")
 
 
@@ -12695,7 +13422,7 @@ index 7982b09f0..84a47fee9 100644
      """Render an extractable document (.docx/.xlsx/.pdf/...) as paginated text.
 
      Returns the JSON result, a tool_error for an actionable extraction failure
-@@ -441,7 +446,6 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -441,7 +448,6 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
      wrapped, wrap_width = False, 0
      if not (archived or is_extractable_document(str(_resolved))):
          return None
@@ -12703,7 +13430,7 @@ index 7982b09f0..84a47fee9 100644
      if archived and (sync_manager := getattr(getattr(file_ops, "env", None), "_sync_manager", None)) is not None:
          # A file-synced sandbox gets new cache files on its next (rate-limited) sync; an archive written since
          # must be there before this read, or the model is told it expired.
-@@ -449,11 +453,21 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -449,11 +455,21 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
              sync_manager.sync(force=True)
          except Exception:  # health: allow BLE001 -- a failed push leaves the read to report what the sandbox has
              logger.debug("Archive sync before read failed for %s", path, exc_info=True)
@@ -12726,7 +13453,7 @@ index 7982b09f0..84a47fee9 100644
          if binary.error or binary.base64_content is None:
              raise ExtractionError(binary.error or "Document bytes unavailable")
          document_bytes = base64.b64decode(binary.base64_content, validate=True)
-@@ -505,11 +519,11 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -505,11 +521,11 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
          rendered = result_dict["content"]
          result_dict["content"] = redact_sensitive_text(
              rendered, file_read=True,
@@ -12740,7 +13467,7 @@ index 7982b09f0..84a47fee9 100644
              and not truncated_lines and not result_dict.get("truncated_lines")):
          # The whole document was shown, so a text-authorable format (.ipynb)
          # may later be overwritten by write_file; the binary-container guard
-@@ -556,7 +570,8 @@ def _dedup_stub_or_block(task_data: dict, dedup_key: tuple, path: str) -> str:
+@@ -556,7 +572,8 @@ def _dedup_stub_or_block(task_data: dict, dedup_key: tuple, path: str) -> str:
  def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_str: str,
                              offset: int, limit: int, dedup_key: tuple, *, partial: bool,
                              redacted: bool = False, end_line: int | None = None,
@@ -12750,7 +13477,7 @@ index 7982b09f0..84a47fee9 100644
      """Bookkeeping after a real (non-stub) read; returns the consecutive-read count.
 
      Per-task tracker under the lock (stub counter, history, consecutive count,
-@@ -569,14 +584,22 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
+@@ -569,14 +586,22 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
      background-review read-mark (a FULL read of a skill file counts like
      skill_view so a follow-up skill_manage(patch) is accepted).
      """
@@ -12777,7 +13504,7 @@ index 7982b09f0..84a47fee9 100644
                  _mtime_now = os.path.getmtime(resolved_str)
                  task_data.setdefault("read_timestamps", {})[resolved_str] = _mtime_now
          except OSError:
-@@ -586,23 +609,25 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
+@@ -586,23 +611,25 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
              dedup[dedup_key] = version_before
              # A narrower view does not undo knowledge of these same bytes. Do
              # not revive a baseline after a partial read of a different version.
@@ -12808,7 +13535,7 @@ index 7982b09f0..84a47fee9 100644
      try:
          file_state.record_read(task_id, resolved_str, partial=not complete)
      except Exception:
-@@ -635,6 +660,28 @@ def _read_device_base(path: str, task_id: str) -> tuple[Path | PurePosixPath | N
+@@ -635,6 +662,28 @@ def _read_device_base(path: str, task_id: str) -> tuple[Path | PurePosixPath | N
          return None, True
 
 
@@ -12837,7 +13564,7 @@ index 7982b09f0..84a47fee9 100644
  def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, task_id: str = "default") -> str:
      """Read a file with pagination and line numbers.
 
-@@ -654,17 +701,28 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -654,17 +703,28 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          if nt_err:
              return tool_error(nt_err)
          path = _hosted_tilde(path, task_id)  # a hosted read sends the path as given: ``~`` is the sandbox's home
@@ -12874,7 +13601,7 @@ index 7982b09f0..84a47fee9 100644
              kind = _special_file_kind(_resolved)
              if kind is not None:
                  return json.dumps({
-@@ -679,11 +737,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -679,11 +739,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          # credential stores). Runs BEFORE document extraction so a
          # protected SQLite store (state.db) cannot be read through the extractor. Pass the RESOLVED path: the denylist's own
          # resolve() uses the process cwd and would miss a relative "auth.json".
@@ -12891,7 +13618,7 @@ index 7982b09f0..84a47fee9 100644
          if extracted is not None:
              return extracted
 
-@@ -695,23 +756,42 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -695,23 +758,42 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
                  "Use vision_analyze for images, or terminal to inspect binary files.")
 
          resolved_str = str(_resolved)
@@ -12939,7 +13666,7 @@ index 7982b09f0..84a47fee9 100644
          result_dict = result.to_dict()
 
          # Failed reads cannot establish whole-file knowledge.
-@@ -719,9 +799,11 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -719,9 +801,11 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          if isinstance(_err, str) and _err.startswith("File not found:"):
              from tools.tool_result_storage import expired_archive_fields
              result_dict.update(expired_archive_fields(path))
@@ -12952,7 +13679,7 @@ index 7982b09f0..84a47fee9 100644
 
          # Char budget on the FORMATTED content (what enters context), BEFORE
          # redaction (skip the regex pass on huge content); truncate gracefully
-@@ -735,8 +817,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -735,8 +819,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          redacted = False
          if result.content:
              unredacted = result.content
@@ -12963,7 +13690,7 @@ index 7982b09f0..84a47fee9 100644
              redacted = result.content != unredacted
              result_dict["content"] = result.content
 
-@@ -762,12 +844,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -762,12 +846,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
              end_line = offset + limit - 1
              if isinstance(total_lines, int) and total_lines > 0:
                  end_line = min(end_line, total_lines)
@@ -12980,7 +13707,50 @@ index 7982b09f0..84a47fee9 100644
          if count >= 4:
              return tool_error(
                  f"BLOCKED: You have read this exact file region {count} times in a row. "
-@@ -1090,7 +1175,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+@@ -898,6 +985,15 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
+     (unadvertised in the schema; the mirror rejection error teaches it — the
+     cross-PROFILE guard it was named for no longer exists).
+     """
++    if uses_ssh_for_task(task_id):
++        if error := get_nt_namespace_error(path, verb="Write"):
++            return tool_error(error)
++        try:
++            requested = _anchor_ssh_path(_hosted_tilde(path, task_id), task_id)
++            return write_ssh_file(_get_ssh_file_ops(task_id), requested, content, task_id)
++        except (OSError, ValueError) as exc:
++            return tool_error(str(exc))
++
+     # write_file checks the binary-document guard before the mirror guard.
+     err = (_check_sensitive_path(path, task_id)
+            or _check_binary_document_write(path, task_id)
+@@ -994,6 +1090,26 @@ def patch_tool(mode: str = "replace", path: str | None = None, old_string: str |
+     ``cross_profile``: same semantics as ``write_file``'s flag (mirror-guard
+     bypass only; unadvertised).
+     """
++    if mode == "replace" and uses_ssh_for_task(task_id):
++        if not path or old_string is None or new_string is None:
++            return tool_error("path, old_string, and new_string are required.")
++        if error := get_nt_namespace_error(path, verb="Write"):
++            return tool_error(error)
++        try:
++            requested = _anchor_ssh_path(_hosted_tilde(path, task_id), task_id)
++            return patch_ssh_replace(_get_ssh_file_ops(task_id), requested, old_string,
++                                     new_string, replace_all, task_id)
++        except (OSError, ValueError) as exc:
++            return tool_error(str(exc))
++
++    if mode == "patch" and uses_ssh_for_task(task_id):
++        if not patch:
++            return tool_error("patch content required")
++        try:
++            return patch_ssh_v4a(_get_ssh_file_ops(task_id), patch, task_id)
++        except (OSError, ValueError) as exc:
++            return tool_error(str(exc))
++
+     _paths_to_check = [path] if path else []
+     _content_write_paths = list(_paths_to_check)
+     _entry_paths: list[str] = []
+@@ -1090,7 +1206,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
 
          # Pagination args (and order) are part of the key so paging through truncated
          # results doesn't trip the repeated-search guard.
@@ -12990,7 +13760,7 @@ index 7982b09f0..84a47fee9 100644
          with _read_tracker_lock:
              task_data = _read_tracker.setdefault(task_id, {
                  "last_key": None, "consecutive": 0, "read_history": set()})
-@@ -1111,6 +1197,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+@@ -1111,6 +1228,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
          if nt_err:
              return tool_error(nt_err)
          path = _hosted_tilde(path, task_id)
@@ -13057,7 +13827,7 @@ index 8c5c96f63..be91a25e7 100644
          home = _ssh_remote_home(task_id)
          text = home + text[1:] if home else text
 diff --git a/tools/file_tools_read_tracking.py b/tools/file_tools_read_tracking.py
-index 64366ae04..eca8c8eab 100644
+index 64366ae04..a7952b886 100644
 --- a/tools/file_tools_read_tracking.py
 +++ b/tools/file_tools_read_tracking.py
 @@ -26,6 +26,7 @@ import os
@@ -13068,7 +13838,7 @@ index 64366ae04..eca8c8eab 100644
 
  from tools.file_state import _evict_oldest
  from tools.file_tools_paths import _authoritative_workspace_root, _resolve_path_for_task
-@@ -33,6 +34,17 @@ from tools.file_tools_paths import _authoritative_workspace_root, _resolve_path_
+@@ -33,6 +34,30 @@ from tools.file_tools_paths import _authoritative_workspace_root, _resolve_path_
  logger = logging.getLogger("tools.file_tools")
 
 
@@ -13083,10 +13853,23 @@ index 64366ae04..eca8c8eab 100644
 +        return cls(environment.host, environment.port, environment.user, path)
 +
 +
++def ssh_write_baseline(task_id: str, key: SSHFileKey) -> tuple | None:
++    with _read_tracker_lock:
++        return (_read_tracker.get(task_id) or {}).get("full_write_baselines", {}).get(key)
++
++
++def record_ssh_write(task_id: str, key: SSHFileKey, version: tuple) -> None:
++    with _read_tracker_lock:
++        task_data = _task_data(task_id)
++        task_data["full_write_baselines"][key] = version
++        task_data["read_coverage"].pop(key, None)
++        _cap_read_tracker_data(task_data)
++
++
  class _PerAgentTracker(dict):
      """``{task_id: ...}`` whose keys carry the bound hosted agent's sandbox key, so two hosted
      agents that reuse a task id never share loop counters, read history or patch failures. With
-@@ -207,7 +219,8 @@ def _dedup_lookup(task_id: str, dedup_key: tuple) -> tuple[dict, object, bool]:
+@@ -207,7 +232,8 @@ def _dedup_lookup(task_id: str, dedup_key: tuple) -> tuple[dict, object, bool]:
                  dedup_key in task_data["dedup_generation_reads"] and not _programmatic_read.get())
 
 
@@ -13096,7 +13879,7 @@ index 64366ae04..eca8c8eab 100644
      """Record that a read's content was served; returns ``(consecutive count, dedup map)``. Lock
      must be held. A programmatic read leaves the model-facing state alone: count 1 and a
      throwaway map, so a later read by the model is never told it already has these bytes."""
-@@ -215,7 +228,10 @@ def _note_read_served(task_data: dict, dedup_key: tuple, path: str, offset: int,
+@@ -215,7 +241,10 @@ def _note_read_served(task_data: dict, dedup_key: tuple, path: str, offset: int,
          return 1, {}  # the map is discarded: nothing is remembered as shown to the model
      task_data["dedup_hits"].pop(dedup_key, None)
      task_data["dedup_generation_reads"].add(dedup_key)
@@ -13108,7 +13891,7 @@ index 64366ae04..eca8c8eab 100644
 
 
  def _bump_consecutive(task_data: dict, key: tuple) -> int:
-@@ -254,7 +270,8 @@ def reset_file_dedup(task_id: str | None = None):
+@@ -254,7 +283,8 @@ def reset_file_dedup(task_id: str | None = None):
          candidates = [(task_data, dict(task_data.get("full_write_baselines", {})))
                        for task_data in targets]
      for task_data, baselines in candidates:
@@ -13118,7 +13901,7 @@ index 64366ae04..eca8c8eab 100644
          if changed:
              with _read_tracker_lock:
                  for p in changed:
-@@ -502,7 +519,10 @@ def _mark_verification_stale(task_id: str, resolved_paths: list[str],
+@@ -502,7 +532,10 @@ def _mark_verification_stale(task_id: str, resolved_paths: list[str],
      try:
          from agent.coding_context import project_facts_for
          from agent.verification_evidence import mark_workspace_edited
@@ -13129,6 +13912,556 @@ index 64366ae04..eca8c8eab 100644
          parents = [str(Path(p).parent) for p in paths]
          cwd = (next((c for c in parents if project_facts_for(c)), None)
                 or _authoritative_workspace_root(task_id) or parents[0])
+diff --git a/tools/file_tools_ssh_patch.py b/tools/file_tools_ssh_patch.py
+new file mode 100644
+index 000000000..990acf511
+--- /dev/null
++++ b/tools/file_tools_ssh_patch.py
+@@ -0,0 +1,254 @@
++"""Apply parsed V4A operations with SSH path and file-version checks."""
++
++import hashlib
++import json
++from contextlib import ExitStack
++from dataclasses import replace
++from typing import NamedTuple
++
++from tools import file_state
++from tools.file_operations import _RAW_READ_MAX_BYTES
++from tools.file_operations_common import ReadResult, WriteResult, _strip_bom
++from tools.file_operations_ssh_write import (
++    SSHWritePath,
++    check_ssh_link_move,
++    inspect_ssh_write,
++    mutate_ssh_entry,
++    read_ssh_write_source,
++)
++from tools.file_tools_paths import _anchor_ssh_path, _hosted_tilde
++from tools.file_tools_read_tracking import SSHFileKey, record_ssh_write, ssh_write_baseline
++from tools.file_tools_ssh_writes import (
++    _publish_whole_file,
++    ssh_content_denial,
++    ssh_edit_report,
++    ssh_edit_text,
++    ssh_write_policy,
++)
++from tools.file_tools_write_guards import _check_ssh_instruction_write, _request_write_approvals
++from tools.patch_parser import OperationType, apply_v4a_operations, parse_v4a_patch
++from tools.path_security import has_traversal_component
++from tools.registry import tool_error
++from agent.file_safety import get_nt_namespace_error, get_read_block_error
++
++
++class AppliedEntry(NamedTuple):
++    path: str
++    entry_metadata: tuple | None
++    referent_metadata: tuple | None
++    approvals: tuple[str, ...]
++
++
++class SSHV4AFileOperations:
++    """Bind the patch parser's reads and writes to approved executor paths."""
++
++    def __init__(self, ops, task_id, policy, approved):
++        self.ops = ops
++        self.env = ops.env
++        self.task_id = task_id
++        self.policy = policy
++        self.approved = approved
++        self.last_read = None
++        self.hidden_source = False
++        self.entries = {path: state for (path, entry), state in approved.items() if entry}
++        self.edited: dict[str, AppliedEntry | None] = {}
++        self.paths = list(dict.fromkeys(path for inspected in approved.values()
++                                       for path in (inspected.requested, inspected.destination.path, inspected.entry)))
++
++    def _observe(self, path: str, *, entry: bool = False) -> SSHWritePath:
++        approved = self.approved.get((path, entry)) or self.approved.get((path, not entry))
++        if approved is None:
++            raise ValueError("The SSH path was not included in patch validation.")
++        previous_edit = self.edited.get(approved.entry)
++        if previous_edit is None and approved.entry in self.edited:
++            raise ValueError("The SSH patch could not confirm the last edit at this path.")
++        observed = inspect_ssh_write(self.ops, path, self.policy, entry=entry)
++        destination, approvals = approved.destination.path, set(approved.approvals)
++        entry_version = approved.entry_metadata
++        referent_version = approved.destination.metadata
++        if previous_edit is not None:
++            destination = previous_edit.path
++            approvals.update(previous_edit.approvals)
++            entry_version = previous_edit.entry_metadata
++            referent_version = previous_edit.referent_metadata
++        if observed.entry_metadata != entry_version:
++            raise ValueError("The inspected SSH entry changed before the edit.")
++        if (observed.destination.path != destination
++                or observed.requested != approved.requested or not set(observed.approvals) <= approvals
++                or observed.entry != approved.entry):
++            raise ValueError("The SSH patch path changed after validation.")
++        if destination != observed.entry:
++            if destination in self.edited:
++                referent = self.edited[destination]
++                if referent is None:
++                    raise ValueError("The SSH patch could not confirm the last edit to the referent.")
++                referent_version = referent.entry_metadata
++            if observed.destination.metadata != referent_version:
++                raise ValueError("The SSH patch referent changed after validation or an edit.")
++        return observed
++
++    def _checked_entry(self, path: str) -> SSHWritePath:
++        observed = self._observe(path, entry=True)
++        self.entries[path] = observed
++        return observed
++
++    def patch_path_key(self, path: str, *, entry: bool = False) -> str:
++        approved = self.approved.get((path, entry)) or self.approved.get((path, not entry))
++        return approved.entry if entry else approved.destination.path
++
++    def patch_visible_text(self, path: str, text: str) -> str:
++        return "" if self.hidden_source else ssh_edit_text(text, self.paths)
++
++    def read_file_raw(self, path: str) -> ReadResult:
++        self.last_read = None
++        try:
++            observed = self._observe(path)
++            state = observed.destination
++            if (path, True) in self.approved:
++                self._checked_entry(path)
++            if state.kind == "absent":
++                self.last_read = path, observed, b"", None
++                return ReadResult(error=f"File not found: {state.path}", not_found=True)
++            size = state.metadata[2]
++            if size > _RAW_READ_MAX_BYTES:
++                return ReadResult(file_size=size, _too_large=True, error="The SSH file exceeds the patch read limit.")
++            source = read_ssh_write_source(self.ops, state, _RAW_READ_MAX_BYTES)
++            if self.ops._is_likely_binary_bytes(source[:1000]):
++                return ReadResult(is_binary=True, error="The SSH file is binary.")
++            version = (*state.metadata, hashlib.sha256(source).digest())
++            self.last_read = path, observed, source, version
++            content = _strip_bom(source.decode("utf-8", "surrogateescape"))[0]
++            self.hidden_source |= ssh_edit_text(content, self.paths) != content
++            return ReadResult(content=content,
++                              file_size=size, _content_sha256=version[-1].hex(),
++                              _entry_only=(path in self.entries and self.entries[path].entry != state.path))
++        except (OSError, ValueError) as exc:
++            return ReadResult(error=str(exc))
++
++    def write_file(self, path: str, content: str, pre_content: str | None = None) -> WriteResult:
++        if self.last_read is None or self.last_read[0] != path:
++            return WriteResult(error="The SSH patch has no verified read for this write.")
++        _, observed, source, version = self.last_read
++        if error := ssh_content_denial(observed, self.task_id):
++            return WriteResult(error=error)
++        self.hidden_source |= ssh_edit_text(content, self.paths) != content
++        result = _publish_whole_file(self.ops, path, observed, content, version, self.policy, source,
++                                     hide_diagnostics=self.hidden_source)
++        key = SSHFileKey.for_backend(self.env, observed.destination.path)
++        if result._snapshot is not None and (version is None or ssh_write_baseline(self.task_id, key) == version):
++            record_ssh_write(self.task_id, key, result._snapshot)
++        if result._snapshot is not None:
++            edited = observed.destination.path
++            self.edited[edited] = AppliedEntry(edited, result._snapshot[:5], None, observed.approvals)
++        elif result._entry_landed:
++            self.edited[observed.destination.path] = None
++        return result
++
++    def delete_file(self, path: str) -> WriteResult:
++        expected = self.entries[path]
++        result = mutate_ssh_entry(self.ops, path, expected, self.policy)
++        if result._entry_landed:
++            self.edited[expected.entry] = AppliedEntry(expected.entry, None, None, expected.approvals)
++        return result
++
++    def move_file(self, source: str, destination: str) -> WriteResult:
++        source_entry = self._checked_entry(source)
++        target = self.entries[destination]
++        result = mutate_ssh_entry(self.ops, source, source_entry, self.policy, destination=(destination, target))
++        if result._entry_landed:
++            self.edited[source_entry.entry] = AppliedEntry(source_entry.entry, None, None, source_entry.approvals)
++            self.edited[target.entry] = None
++            if result._entry_metadata is not None:
++                referent = source_entry.destination.path
++                if source_entry.entry == referent:
++                    referent, referent_version = target.entry, None
++                else:
++                    referent_version = source_entry.destination.metadata
++                self.edited[target.entry] = AppliedEntry(
++                    referent, result._entry_metadata, referent_version, source_entry.approvals)
++        return result
++
++
++def _anchor_patch_path(path: str, task_id: str) -> str:
++    if has_traversal_component(path):
++        raise ValueError(f"SSH patch header contains '..' traversal: {path!r}.")
++    if error := get_nt_namespace_error(path, verb="Write"):
++        raise ValueError(error)
++    return _anchor_ssh_path(_hosted_tilde(path, task_id), task_id)
++
++
++def _inspect_patch_paths(ops, operations, policy):
++    approved = {}
++    content_paths = set()
++    links = {}
++    edited_entries = set()
++    for operation in operations:
++        path = operation.file_path
++        entry = operation.operation in (OperationType.DELETE, OperationType.MOVE)
++        if not entry:
++            content_paths.add(path)
++        if (path, entry) not in approved:
++            approved[path, entry] = inspect_ssh_write(ops, path, policy, entry=entry)
++        source = approved[path, entry]
++        if edited_entries.intersection(source.intermediate_links):
++            raise ValueError("The patch changes an intermediate symlink before using it again. Split these edits.")
++        if operation.new_path is not None and (operation.new_path, True) not in approved:
++            approved[operation.new_path, True] = inspect_ssh_write(ops, operation.new_path, policy, entry=True)
++        if operation.operation == OperationType.MOVE and operation.new_path is not None:
++            destination = approved[operation.new_path, True]
++            original_link = links.get(source.entry, source if source.entry != source.destination.path else None)
++            if original_link is not None:
++                if edited_entries.intersection(original_link.intermediate_links):
++                    raise ValueError("The patch changes an intermediate symlink before using it again. Split these edits.")
++                check_ssh_link_move(ops, original_link, destination)
++            links[destination.entry] = original_link
++            links[source.entry] = None
++            edited_entries.update((source.entry, destination.entry))
++        elif operation.operation in (OperationType.ADD, OperationType.DELETE):
++            links[source.entry] = None
++            edited_entries.add(source.entry)
++    return approved, content_paths
++
++
++def _approve_patch_paths(approved, content_paths, task_id):
++    instructions = []
++    approvals = {}
++    for (path, entry), inspected in approved.items():
++        candidates = (inspected.requested, inspected.destination.path, inspected.entry)
++        for candidate in candidates:
++            if error := get_read_block_error(candidate, ssh_path=True):
++                return error
++        if not entry and path in content_paths and (error := ssh_content_denial(inspected, task_id)):
++            return error
++        instructions.extend(candidates)
++        for key in inspected.approvals:
++            approvals.setdefault(key, []).append(inspected.requested)
++    return (_check_ssh_instruction_write(list(dict.fromkeys(instructions)), task_id)
++            or _request_write_approvals(approvals))
++
++
++def patch_ssh_v4a(ops, patch: str, task_id: str) -> str:
++    operations, error = parse_v4a_patch(patch)
++    if error:
++        return tool_error(f"Failed to parse patch: {error}")
++    operations = [replace(operation, file_path=_anchor_patch_path(operation.file_path, task_id),
++                          new_path=_anchor_patch_path(operation.new_path, task_id) if operation.new_path else None)
++                  for operation in operations]
++    policy = ssh_write_policy()
++    approved, content_paths = _inspect_patch_paths(ops, operations, policy)
++    if error := _approve_patch_paths(approved, content_paths, task_id):
++        return tool_error(error)
++    keys = {SSHFileKey.for_backend(ops.env, path)
++            for target in approved.values() for path in (target.destination.path, target.entry)}
++    with ExitStack() as locks:
++        for key in sorted(keys):
++            locks.enter_context(file_state.lock_path(repr(key)))
++        adapter = SSHV4AFileOperations(ops, task_id, policy, approved)
++        response = apply_v4a_operations(operations, adapter, stop_on_apply_error=True).to_dict()
++        if adapter.hidden_source and adapter.edited:
++            response.pop("diff", None)
++            response.pop("lint", None)
++            note = "The SSH patch diff and lint diagnostics are hidden because the edit includes redacted text."
++            response["note"] = "\n".join(filter(None, (response.get("note"), note)))
++        response["files_landed"] = list(adapter.edited)
++        return ssh_edit_report(response, adapter.paths)
+diff --git a/tools/file_tools_ssh_writes.py b/tools/file_tools_ssh_writes.py
+new file mode 100644
+index 000000000..519dbba82
+--- /dev/null
++++ b/tools/file_tools_ssh_writes.py
+@@ -0,0 +1,202 @@
++"""Write tool policy and version checks for SSH files."""
++
++import hashlib
++import json
++import logging
++import os
++import posixpath
++
++from agent.file_safety import (
++    HOME_CREDENTIAL_DIRS,
++    HOME_CREDENTIAL_FILES,
++    SHELL_RC_FILES,
++    SSH_KEY_FILES,
++    WRITE_PROTECTED_SYSTEM_FILES,
++    get_read_block_error,
++    ssh_read_protected_entries,
++)
++from agent.redact import _is_secret_file_arg, redact_sensitive_text
++from hermes_cli.home_data_layout import HERMES_PROTECTED_SUBPATHS
++from tools import file_state
++from tools.file_operations import (
++    _RAW_READ_MAX_BYTES,
++    _refuse_introduced_json_constant,
++)
++from tools.file_operations_common import LintResult, _detect_line_ending, _normalize_line_endings, _strip_bom
++from tools.file_operations_lint import LINTERS, LINTERS_INPROC
++from tools.file_operations_ssh_write import inspect_ssh_write, publish_ssh_file, read_ssh_write_source
++from tools.file_tools_read_tracking import SSHFileKey, record_ssh_write, ssh_write_baseline
++from tools.file_tools_write_guards import (
++    _SENSITIVE_EXACT_PATHS,
++    _SENSITIVE_PATH_PREFIXES,
++    _check_binary_document_write,
++    _check_ssh_instruction_write,
++    _is_internal_file_tool_content,
++    _request_write_approvals,
++    _stale_write_refusal,
++)
++from tools.registry import tool_error
++
++logger = logging.getLogger(__name__)
++
++
++def ssh_write_policy() -> tuple:
++    roots = tuple(filter(None, os.getenv("HERMES_WRITE_SAFE_ROOT", "").split(os.pathsep)))
++    return (ssh_read_protected_entries(), (*HOME_CREDENTIAL_FILES, *SSH_KEY_FILES),
++            HOME_CREDENTIAL_DIRS, SHELL_RC_FILES, HERMES_PROTECTED_SUBPATHS, _SENSITIVE_PATH_PREFIXES,
++            tuple(sorted(_SENSITIVE_EXACT_PATHS | set(WRITE_PROTECTED_SYSTEM_FILES))), roots)
++
++
++def ssh_content_denial(inspected, task_id: str) -> str | None:
++    state = inspected.destination
++    known = "exists" if state.kind == "regular" else "absent"
++    for path in (inspected.requested, state.path, inspected.entry):
++        error = (get_read_block_error(path, ssh_path=True)
++                 or _check_binary_document_write(path, task_id, inspected=known))
++        if error:
++            return error
++    return None
++
++
++def approve_ssh_write(inspected, task_id: str) -> str | None:
++    paths = list(dict.fromkeys((inspected.requested, inspected.destination.path, inspected.entry)))
++    return (ssh_content_denial(inspected, task_id)
++            or _check_ssh_instruction_write(paths, task_id)
++            or _request_write_approvals({key: [inspected.requested] for key in inspected.approvals}))
++
++
++def ssh_edit_text(text: str, paths: list[str]) -> str:
++    secret = any(_is_secret_file_arg(path, ssh_path=True) for path in paths)
++    return redact_sensitive_text(text, file_read=True, secret_file=secret)
++
++
++def ssh_edit_report(response: dict, paths: list[str]) -> str:
++    def redact_value(value):
++        if isinstance(value, str):
++            return ssh_edit_text(value, paths)
++        if isinstance(value, list):
++            return [redact_value(item) for item in value]
++        if isinstance(value, dict):
++            return {key: redact_value(item) for key, item in value.items()}
++        return value
++
++    for key in ("error", "note", "warning", "lint", "lsp_diagnostics"):
++        if key in response:
++            response[key] = redact_value(response[key])
++    return json.dumps(response)
++
++
++def _publish_whole_file(ops, requested, inspected, content, expected, policy, source=None,
++                        *, hide_diagnostics=False):
++    state = inspected.destination
++    path = state.path
++    paths = [inspected.requested, path, inspected.entry]
++    ext = posixpath.splitext(path)[1].lower()
++    want_pre = ext in LINTERS_INPROC
++    maximum = _RAW_READ_MAX_BYTES if want_pre else 4096
++    if source is None:
++        source = read_ssh_write_source(ops, state, maximum)
++    original = source.decode("utf-8", "surrogateescape")
++    pre_content, bom = _strip_bom(original)
++    hide_diagnostics = (hide_diagnostics or ssh_edit_text(pre_content, paths) != pre_content
++                        or ssh_edit_text(content, paths) != content)
++    if state.metadata and state.metadata[2] != len(source):
++        pre_content = None
++        hide_diagnostics |= want_pre
++    refused = ops._reject_unencodable(path, content) or ops._fail_closed_syntax_error(path, ext, content)
++    if not refused and ext == ".json":
++        refused = _refuse_introduced_json_constant(path, content, pre_content)
++    if refused:
++        if hide_diagnostics:
++            refused.error = "The SSH write failed text or syntax validation."
++        return refused
++    if _detect_line_ending(original) == "\r\n":
++        content = _normalize_line_endings(content, "\r\n")
++    if bom and not content.startswith("\ufeff"):
++        content = "\ufeff" + content
++    result = publish_ssh_file(ops, requested, inspected, expected, content.encode("utf-8", "surrogateescape"), policy)
++    if result.error:
++        return result
++    if hide_diagnostics:
++        lint = LintResult(skipped=True, message="SSH lint diagnostics are hidden for this edit.")
++    elif ext not in LINTERS_INPROC:
++        message = ("SSH lint requires a check that can use the edited bytes."
++                   if ext in LINTERS else f"No linter for {ext} files")
++        lint = LintResult(skipped=True, message=message)
++    else:
++        try:
++            before = original if ext == ".py" and pre_content is not None else pre_content
++            after = content if ext == ".py" else _strip_bom(content)[0]
++            lint = ops._check_lint_delta(path, pre_content=before, post_content=after)
++        except Exception as exc:
++            # The executor has already confirmed publication. Keep the receipt even if lint fails.
++            logger.warning("Post-write SSH lint failed (%s)", type(exc).__name__)
++            lint = LintResult(skipped=True, message="The SSH file was saved, but lint could not run.")
++    result.lint = lint.to_dict()
++    return result
++
++
++def write_ssh_file(ops, requested: str, content: str, task_id: str) -> str:
++    """Write an absent file or replace the version read by this task."""
++    if _is_internal_file_tool_content(content):
++        return tool_error("Strip read_file display prefixes before writing file content.")
++    policy = ssh_write_policy()
++    inspected = inspect_ssh_write(ops, requested, policy)
++    state = inspected.destination
++    error = approve_ssh_write(inspected, task_id)
++    if error:
++        return tool_error(error)
++    key = SSHFileKey.for_backend(ops.env, state.path)
++    with file_state.lock_path(repr(key)):
++        expected = None
++        if state.kind == "regular":
++            expected = ssh_write_baseline(task_id, key)
++            if expected is None or expected[:5] != state.metadata:
++                reason = "Read every page of the current SSH file before replacing it, or use a targeted patch."
++                return json.dumps(_stale_write_refusal(requested, reason, state.path))
++        result = _publish_whole_file(ops, requested, inspected, content, expected, policy)
++        response = result.to_dict()
++        response["resolved_path"] = state.path
++        if result._entry_landed:
++            response["files_landed"] = [state.path]
++        if not result.error:
++            if result._snapshot is not None:
++                record_ssh_write(task_id, key, result._snapshot)
++            response["files_modified"] = [state.path]
++        return ssh_edit_report(response, [inspected.requested, state.path, inspected.entry])
++
++
++def patch_ssh_replace(ops, requested: str, old: str, new: str, replace_all: bool, task_id: str) -> str:
++    policy = ssh_write_policy()
++    inspected = inspect_ssh_write(ops, requested, policy)
++    if error := approve_ssh_write(inspected, task_id):
++        return tool_error(error)
++    state = inspected.destination
++    if state.kind != "regular":
++        return tool_error(f"The SSH file {state.path!r} does not exist.")
++    key = SSHFileKey.for_backend(ops.env, state.path)
++    paths = [inspected.requested, state.path, inspected.entry]
++    with file_state.lock_path(repr(key)):
++        source = read_ssh_write_source(ops, state, state.metadata[2])
++        version = (*state.metadata, hashlib.sha256(source).digest())
++        original = source.decode("utf-8", "surrogateescape")
++        replacement, result = ops._prepare_patch_replace(
++            state.path, original, old, new, replace_all, hint_text=lambda text: ssh_edit_text(text, paths))
++        if replacement is None:
++            return ssh_edit_report({**result.to_dict(), "files_landed": []}, paths)
++        written = _publish_whole_file(ops, requested, inspected, replacement, version, policy, source)
++        if written.error:
++            if written._entry_landed:
++                return ssh_edit_report({"error": written.error, "files_landed": [state.path]}, paths)
++            return ssh_edit_report({"error": f"Failed to write changes: {written.error}"}, paths)
++        if written._snapshot is not None and ssh_write_baseline(task_id, key) == version:
++            record_ssh_write(task_id, key, written._snapshot)
++        before = _strip_bom(original)[0]
++        if ssh_edit_text(before, paths) == before and ssh_edit_text(replacement, paths) == replacement:
++            result.diff = ops._unified_diff(before, replacement, state.path)
++        else:
++            result.note = "The SSH patch diff is hidden because the edit includes redacted text."
++        result.lint = written.lint
++        response = result.to_dict()
++        response["resolved_path"] = state.path
++        return ssh_edit_report(response, paths)
+diff --git a/tools/file_tools_write_guards.py b/tools/file_tools_write_guards.py
+index 2436f608c..9e2ea2e01 100644
+--- a/tools/file_tools_write_guards.py
++++ b/tools/file_tools_write_guards.py
+@@ -12,6 +12,7 @@ whole-file overwrite of content this task never saw or that changed since.
+
+ import fnmatch
+ import os
++import posixpath
+ import unicodedata
+ from pathlib import Path
+
+@@ -199,6 +200,27 @@ def _protected_instruction_config() -> tuple[bool, list[str]]:
+     return enabled, [str(p) for p in extra if p]
+
+
++def _protected_instruction_basename(base: str, extra_patterns: list[str]) -> bool:
++    keys = (base.lower(), _name_key(base))
++    return keys[1] in _PROTECTED_INSTRUCTION_BASENAMES or any(
++        fnmatch.fnmatch(key, norm(pattern)) for pattern in extra_patterns
++        for key, norm in zip(keys, (str.lower, _name_key)))
++
++
++def _check_ssh_instruction_write(paths: list[str], task_id: str) -> str | None:
++    enabled, extra_patterns = _protected_instruction_config()
++    if not enabled:
++        return None
++    reasons = []
++    for path in dict.fromkeys(posixpath.normpath(path) for path in paths):
++        base = posixpath.basename(path)
++        if _protected_instruction_basename(base, extra_patterns):
++            reasons.append(base)
++        elif posixpath.basename(posixpath.dirname(path)).casefold() == ".hermes":
++            reasons.append(path)
++    return _request_protected_instruction_approval(list(dict.fromkeys(reasons)), task_id) if reasons else None
++
++
+ def _protected_instruction_reason(filepath: str, task_id: str = "default",
+                                   *, enabled: bool | None = None,
+                                   extra_patterns: list[str] | None = None) -> str | None:
+@@ -236,10 +258,7 @@ def _protected_instruction_reason(filepath: str, task_id: str = "default",
+         base = os.path.basename(candidate)
+         # Folded keys only ADD matches: the lowercase pair stays, since a glob's ``?`` or ``[ß]`` matches the
+         # one-char ``ß`` but not its folded ``ss``.
+-        keys = (base.lower(), _name_key(base))
+-        if keys[1] in _PROTECTED_INSTRUCTION_BASENAMES or any(
+-                fnmatch.fnmatch(key, norm(pattern)) for pattern in extra_patterns
+-                for key, norm in zip(keys, (str.lower, _name_key))):
++        if _protected_instruction_basename(base, extra_patterns):
+             return base
+
+     # The ``.hermes`` component rule below targets PROJECT-LOCAL config, and the home
+@@ -388,7 +407,10 @@ def _check_approval_required_write(paths: list[str], task_id: str = "default") -
+             return denied  # ~/.bashrc -> ~/.ssh/authorized_keys: refuse before prompting
+         if key := write_approval_key(resolved):
+             by_key.setdefault(key, []).append(p)
++    return _request_write_approvals(by_key)
++
+
++def _request_write_approvals(by_key: dict[str, list[str]]) -> str | None:
+     for pattern_key, targets in by_key.items():
+         noun, why_gated = _APPROVAL_WRITE_CLASSES[pattern_key]
+         display_targets = ", ".join(dict.fromkeys(targets))
+@@ -497,7 +519,8 @@ def _target_regular_file_state(filepath: str, task_id: str = "default") -> str:
+     return "unavailable"
+
+
+-def _check_binary_document_write(filepath: str, task_id: str = "default") -> str | None:
++def _check_binary_document_write(filepath: str, task_id: str = "default", *,
++                                 inspected: str | None = None) -> str | None:
+     """Reject text-tool writes that would corrupt a binary document (read_file showed
+     EXTRACTED text, so the model may write it back). Opaque document formats and
+     SQLite sidecars (-wal/-shm/-journal) are always rejected; .pdf and every other
+@@ -536,7 +559,7 @@ def _check_binary_document_write(filepath: str, task_id: str = "default") -> str
+     # syntax is text-authorable and text fixtures named ``*.db`` exist.
+     pdf = is_pdf_path(filepath)
+     if pdf or has_binary_extension(filepath):
+-        state = _target_regular_file_state(filepath, task_id)
++        state = inspected or _target_regular_file_state(filepath, task_id)
+         if state == "exists":
+             if pdf:
+                 return (
 diff --git a/tools/hosted_tool_policy.py b/tools/hosted_tool_policy.py
 index 4e4d1e287..94d6148bd 100644
 --- a/tools/hosted_tool_policy.py
@@ -13562,6 +14895,229 @@ index 56957d007..a4e988a6e 100644
              return False
          tools_list.append({"type": "function", "function": schema})
          name_set.add(name)
+diff --git a/tools/patch_parser.py b/tools/patch_parser.py
+index 06a9b7bb1..8e7055925 100644
+--- a/tools/patch_parser.py
++++ b/tools/patch_parser.py
+@@ -134,12 +134,15 @@ def _split_hunk(hunk: Hunk) -> tuple[list[str], list[str]]:
+             [l.content for l in hunk.lines if l.prefix != '-'])
+
+
+-def _no_match_hint(error: Optional[str], search_pattern: str, content: str) -> str:
+-    """Best-effort 'Did you mean...' suffix; never lets a hint failure mask the real error."""
++def _no_match_detail(error: Optional[str], search_pattern: str, content: str, file_ops: Any, path: str) -> str:
++    """Report fuzzy-match errors and suggestions only when the source can be shown."""
++    if _visible_patch_text(file_ops, path, content) != content:
++        return "The matching details are hidden because the edit includes redacted text."
++    hint = ""
+     with contextlib.suppress(Exception):
+         from tools.fuzzy_match import format_no_match_hint
+-        return format_no_match_hint(error, 0, search_pattern, content)
+-    return ""
++        hint = format_no_match_hint(error, 0, search_pattern, content)
++    return (error or "") + hint
+
+
+ def _hint_ambiguity(content: str, hint: str, tail: str = "") -> tuple[int, str]:
+@@ -148,7 +151,7 @@ def _hint_ambiguity(content: str, hint: str, tail: str = "") -> tuple[int, str]:
+     return n, f"context hint '{hint}' is ambiguous ({n} occurrences){tail}" if n > 1 else ""
+
+
+-def _overlay_key(path: str, file_ops: Any) -> str:
++def _overlay_key(path: str, file_ops: Any, *, entry: bool = False) -> str:
+     """One validation-overlay key per backend file, however the patch spells it.
+
+     Lexical only (the parser cannot resolve paths on a remote backend): ``x``, ``./x``,
+@@ -161,6 +164,9 @@ def _overlay_key(path: str, file_ops: Any) -> str:
+     host path under a docker workspace mount -> the container path) runs first. A trailing
+     ``/`` or ``/.`` needs a directory, so it keeps a marker and never shares the file's key.
+     """
++    key_for_path = getattr(file_ops, "patch_path_key", None)
++    if callable(key_for_path) and isinstance(key := key_for_path(path, entry=entry), str):
++        return key
+     env = getattr(file_ops, "env", None)
+     cwd = getattr(env, "cwd", None) or getattr(file_ops, "cwd", None)
+     cwd = cwd if isinstance(cwd, str) else ""
+@@ -195,15 +201,25 @@ def _validate_operations(operations: list[PatchOperation], file_ops: Any) -> lis
+     # keyed by _overlay_key so path aliases share one entry.
+     pending_content: dict = {}
+     removed_paths: set = set()
++    virtual_paths: dict[str, str] = {}
++
++    def _entry(path: str) -> str:
++        return _overlay_key(path, file_ops, entry=True)
++
++    def _content_key(path: str) -> str:
++        physical = _entry(path)
++        return virtual_paths.get(physical, _overlay_key(path, file_ops))
+
+     def _read_checked(path: str) -> tuple[Optional[str], Optional[str], bool]:
+         """(content, error, too_large): too_large means the file exists on disk but is past
+         read_file_raw's cap; the patch's own overlay always answers first."""
+-        key = _overlay_key(path, file_ops)
++        key = _content_key(path)
++        if _entry(path) in removed_paths:
++            return None, "file not found", False
++        if key in removed_paths:
++            return None, "the patch removes this entry's referent", False
+         if key in pending_content:
+             return pending_content[key], None, False
+-        if key in removed_paths:
+-            return None, "file not found", False
+         r = file_ops.read_file_raw(path)
+         if r.error:
+             return None, r.error, bool(getattr(r, "_too_large", False))
+@@ -217,11 +233,11 @@ def _validate_operations(operations: list[PatchOperation], file_ops: Any) -> lis
+         the path absent (``not_found``) frees it: a read that FAILED (no byte transport, a
+         directory, an unreadable file) says nothing about what is there, and taking it as free
+         writes over the file the check exists to protect."""
+-        key = _overlay_key(path, file_ops)
+-        if key in pending_content:
+-            return "exists"
+-        if key in removed_paths:
++        physical = _entry(path)
++        if physical in removed_paths:
+             return None
++        if physical in virtual_paths or _content_key(path) in pending_content:
++            return "exists"
+         r = file_ops.read_file_raw(path)
+         if not r.error:
+             return "exists"
+@@ -249,6 +265,9 @@ def _validate_operations(operations: list[PatchOperation], file_ops: Any) -> lis
+                                       f"'{hunk.context_hint}' not found")
+                     elif ambiguous:
+                         errors.append(f"{op.file_path}: addition-only hunk {ambiguous}")
++                    if occurrences != 1:
++                        continue
++                simulated, _ = _insert_addition_only(simulated, hunk, '\n'.join(replace_lines))
+                 continue
+             search_pattern, replacement = '\n'.join(search_lines), '\n'.join(replace_lines)
+             new_simulated, count, _strategy, match_error = fuzzy_find_and_replace(
+@@ -258,16 +277,16 @@ def _validate_operations(operations: list[PatchOperation], file_ops: Any) -> lis
+             elif not is_already_applied(simulated or "", search_pattern, replacement):
+                 # Already-applied hunks are no-ops (apply performs the same skip).
+                 label = f"'{hunk.context_hint}'" if hunk.context_hint else "(no hint)"
+-                errors.append(
+-                    f"{op.file_path}: hunk {hunk_index} {label} not found"
+-                    + (f" — {match_error}" if match_error else "")
+-                    + _no_match_hint(match_error, search_pattern, simulated))
+-        pending_content[_overlay_key(op.file_path, file_ops)] = simulated
++                detail = _no_match_detail(match_error, search_pattern, simulated, file_ops, op.file_path)
++                errors.append(f"{op.file_path}: hunk {hunk_index} {label} not found"
++                              + (f" — {detail}" if detail else ""))
++        pending_content[_content_key(op.file_path)] = simulated
+
+     def _remove(path: str) -> None:
+-        key = _overlay_key(path, file_ops)
++        key = _entry(path)
+         removed_paths.add(key)
+         pending_content.pop(key, None)
++        virtual_paths.pop(key, None)
+
+     for op in operations:
+         if op.operation == OperationType.UPDATE:
+@@ -294,7 +313,12 @@ def _validate_operations(operations: list[PatchOperation], file_ops: Any) -> lis
+             elif dst_taken:
+                 errors.append(f"{op.new_path}: {dst_taken}")
+             elif not src_err:  # only a cleanly-validated move updates the overlay
+-                pending_content[_overlay_key(op.new_path, file_ops)] = src_content if src_content is not None else ""
++                destination = _entry(op.new_path)
++                referent = _content_key(op.file_path)
++                new_key = destination if referent == _entry(op.file_path) else referent
++                virtual_paths[destination] = new_key
++                removed_paths.discard(destination)
++                pending_content[new_key] = src_content if src_content is not None else ""
+                 _remove(op.file_path)
+         elif op.operation == OperationType.ADD:
+             # An Add must create a NEW file. If the target already exists, write_file
+@@ -310,8 +334,10 @@ def _validate_operations(operations: list[PatchOperation], file_ops: Any) -> lis
+             elif add_taken:
+                 errors.append(f"{op.file_path}: {add_taken}")
+             else:
+-                removed_paths.discard(_overlay_key(op.file_path, file_ops))
+-                pending_content[_overlay_key(op.file_path, file_ops)] = '\n'.join(
++                destination = _entry(op.file_path)
++                removed_paths.discard(destination)
++                virtual_paths[destination] = destination
++                pending_content[destination] = '\n'.join(
+                     line.content for hunk in op.hunks for line in hunk.lines if line.prefix == '+')
+     if not errors and real_change_count == 0:
+         errors.append("Patch contains no changes (only context lines were provided)")
+@@ -343,14 +369,23 @@ def _written(result: Any, diff: str, path: str, read_sha256: Optional[str]) -> A
+     return ApplyResult(True, diff, getattr(result, "lsp_diagnostics", None), getattr(result, "lint", None), write)
+
+
+-def _unified_diff(path: str, old: str, new: Optional[str]) -> str:
++def _visible_patch_text(file_ops: Any, path: str, text: str) -> str:
++    visible_text = getattr(file_ops, "patch_visible_text", None)
++    if callable(visible_text) and isinstance(visible := visible_text(path, text), str):
++        return visible
++    return text
++
++
++def _unified_diff(path: str, old: str, new: Optional[str], file_ops: Any = None) -> str:
+     """Unified diff ``a/path`` -> ``b/path`` (``new=None`` = deletion, ``/dev/null``)."""
+     return ''.join(difflib.unified_diff(
+-        old.splitlines(keepends=True), [] if new is None else new.splitlines(keepends=True),
++        _visible_patch_text(file_ops, path, old).splitlines(keepends=True),
++        [] if new is None else _visible_patch_text(file_ops, path, new).splitlines(keepends=True),
+         fromfile=f"a/{path}", tofile="/dev/null" if new is None else f"b/{path}"))
+
+
+-def apply_v4a_operations(operations: list[PatchOperation], file_ops: Any) -> PatchResult:
++def apply_v4a_operations(operations: list[PatchOperation], file_ops: Any, *,
++                         stop_on_apply_error: bool = False) -> PatchResult:
+     """Two-phase: validate everything, then apply (atomic on validation failure). A phase-2
+     failure (validate/apply race) carries a ``git diff`` note since state may be inconsistent.
+     ``file_ops`` needs read_file_raw/write_file/delete_file/move_file."""
+@@ -378,6 +413,8 @@ def apply_v4a_operations(operations: list[PatchOperation], file_ops: Any) -> Pat
+         if not ok:
+             prefix = f"Failed to {verb}" if ok is False else "Error processing"
+             errors.append(f"{prefix} {op.file_path}: {payload}")
++            if stop_on_apply_error:
++                break
+             continue
+         is_move = op.operation is OperationType.MOVE
+         files[bucket].append(f"{op.file_path} -> {op.new_path}" if is_move else op.file_path)
+@@ -425,7 +462,8 @@ def _apply_add(op: PatchOperation, file_ops: Any) -> ApplyResult:
+         return _fail(f"{op.file_path}: could not confirm the path is free — {read_back.error}")
+     content_lines = [line.content for hunk in op.hunks for line in hunk.lines if line.prefix == '+']
+     result = file_ops.write_file(op.file_path, '\n'.join(content_lines))
+-    diff = f"--- /dev/null\n+++ b/{op.file_path}\n" + '\n'.join(f"+{line}" for line in content_lines)
++    visible = _visible_patch_text(file_ops, op.file_path, '\n'.join(content_lines)).split('\n') if content_lines else []
++    diff = f"--- /dev/null\n+++ b/{op.file_path}\n" + '\n'.join(f"+{line}" for line in visible)
+     return _written(result, diff, op.file_path, "")
+
+
+@@ -434,9 +472,10 @@ def _apply_delete(op: PatchOperation, file_ops: Any) -> ApplyResult:
+     read_result = file_ops.read_file_raw(op.file_path)  # re-read guards validate/apply races
+     too_large = getattr(read_result, "_too_large", False)  # exists, just past the read cap: no diff
+     if read_result.error and not too_large:
+-        return _fail(f"Cannot delete {op.file_path}: file not found")
++        return _fail(f"Cannot delete {op.file_path}: {read_result.error}")
+     result = file_ops.delete_file(op.file_path)
+-    diff = (None if too_large else _unified_diff(op.file_path, read_result.content, None)) \
++    entry_only = getattr(read_result, "_entry_only", False) is True
++    diff = (None if too_large or entry_only else _unified_diff(op.file_path, read_result.content, None, file_ops)) \
+         or f"# Deleted: {op.file_path}"
+     return _fail(result.error) if result.error else ApplyResult(True, diff)
+
+@@ -511,12 +550,12 @@ def _apply_update(op: PatchOperation, file_ops: Any) -> ApplyResult:
+             # Mirror validation's already-applied skip, else the two phases disagree and fail here.
+             if is_already_applied(new_content, search_pattern, replacement):
+                 continue
+-            hint = _no_match_hint(error, search_pattern, new_content)
+-            return _fail(f"Could not apply hunk: {error}" + hint)
++            detail = _no_match_detail(error, search_pattern, new_content, file_ops, op.file_path)
++            return _fail(f"Could not apply hunk: {detail}")
+     # Pass pre_content to skip a redundant re-read inside write_file when supported.
+     extra = {"pre_content": current_content} if _write_file_accepts_pre_content(file_ops) else {}
+     write_result = file_ops.write_file(op.file_path, new_content, **extra)
+-    result = _written(write_result, _unified_diff(op.file_path, current_content, new_content),
++    result = _written(write_result, _unified_diff(op.file_path, current_content, new_content, file_ops),
+                       op.file_path, getattr(read_result, "_content_sha256", None))
+     if not result.ok:
+         return result
 diff --git a/tools/registry.py b/tools/registry.py
 index 525cad5a0..ce187b418 100644
 --- a/tools/registry.py
