@@ -21,10 +21,11 @@ Hermes Agent release.
    and its stock Compose comparison link together. Inspect upstream's new
    `docker-compose.yml` and update the hardening comparison if upstream defaults
    changed.
-4. **Verify the build recipe:** Check upstream's frontend build recipe and
-   hash-verified `pnpm` pin in a separate build stage before rebasing patches.
-   Confirm every patched Python file and the rebuilt WebApp bundle reach the
-   final runtime image.
+4. **Verify the build recipe:** Check upstream's WebApp and Ink TUI build
+   recipes and hash-verified `pnpm` pin in a separate build stage before
+   rebasing patches. Confirm every patched Python file, the rebuilt WebApp
+   bundle (`apps/desktop/dist-webapp`), and the rebuilt Ink TUI bundles
+   (`ui-tui/dist` and `hermes_cli/tui_dist`) reach the final runtime image.
 5. **Trace trust boundaries:** Audit upstream changes against the stack's
    boundaries: SSH execution placement and firewall denials, Teep routing, early
    deployment-policy capture, tool registration and stale-tool dispatch, HTTP
@@ -40,8 +41,9 @@ Hermes Agent release.
 `stack-patches/<release>/*` refs on the `fork` remote
 ([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
 preserve each release's topic commits and combined replay so maintainers can
-reproduce `0001-upstream-candidates.patch` even after `upstream-pr/*` submission
-branches advance. The local working clone is `upstream_work/hermes-agent/`; see
+reproduce `0001-upstream-candidates.patch` even after active submission
+branches (`fix/*` and `feat/*`) advance. The local working clone is
+`upstream_work/hermes-agent/`; see
 [packaged release provenance](plans/hermes-upstream-prep.md#5-packaged-release-provenance).
 
 When a new Hermes release still needs candidate patches:
@@ -51,7 +53,8 @@ When a new Hermes release still needs candidate patches:
    submission branches (`fix/*` and `feat/*` in `upstream_work/hermes-agent/`)
    to identify which fixes belong on the new base.
 2. Replay only the topic commits the new release still lacks, including the
-   shared managed-configuration prerequisite (PR1) once and resolving overlaps.
+   shared managed-configuration prerequisite (`W1-1`, `fix/managed-config`)
+   once and resolving overlaps.
    For any feature upstream has adopted, verify it with upstream's tests and our
    packaged checks, then drop that candidate patch and duplicate tests while
    keeping wrapper tests for configuration, isolation, ingress, and storage. If
@@ -59,8 +62,9 @@ When a new Hermes release still needs candidate patches:
    `0001-upstream-candidates.patch` and its build input.
 3. Export the diff from the new release base to the combined replay head as
    `0001-upstream-candidates.patch`. Exclude upstream Python and TUI tests,
-   website files, contributor metadata, and Electron-only files. Keep renderer
-   tests used by `make hermes-ui-test`. Record the base commit and replay head in
+   website files, contributor metadata, Electron-only files, `scripts/`, and
+   `cli-config.yaml.example`. Keep renderer tests used by
+   `make hermes-ui-test`. Record the base commit and replay head in
    the upgrade plan, then rebase the downstream deployment and privacy patches
    (`0002`+) and verify the full series against the packaged source.
 4. Record the carried topics, overlap resolutions, and test results in the
@@ -71,11 +75,11 @@ When a new Hermes release still needs candidate patches:
 
 ### Frontend, routes, and dispatch
 
-- Build the frontend with upstream's frozen lockfile and hash-verified `pnpm`
-  pin in a separate build stage. The runtime image may omit `pnpm` (its
-  missing-binary warning is advisory), while dependency or build errors must
-  fail the build. Qualify Python plugin environment setup separately from
-  frontend tooling.
+- Build the WebApp and Ink TUI bundles with upstream's frozen lockfile and
+  hash-verified `pnpm` pin in a separate build stage. The runtime image may
+  omit `pnpm` (its missing-binary warning is advisory), while dependency or
+  build errors must fail the build. Qualify Python plugin environment setup
+  separately from frontend tooling.
 - Audit saved-gateway HTTP and WebSocket relays, inline `browser_vault`
   dispatch, peer routes, and backup-transfer routes in addition to patched
   files. Verify authentication, exact host and origin checks, response headers,

@@ -151,16 +151,18 @@ the base image's install stamp, source hash, and renderer receipt before
 applying the ordered patch series under `components/hermes/patches/`.
 
 That build stage installs a hash-verified `pnpm` pin for the frozen-lockfile
-frontend build, clears stale renderer chunks, and copies patched Python files
-plus the rebuilt WebApp (`HERMES_WEBAPP_DIST`) into the final runtime image.
-The runtime image omits `pnpm`; its advisory warning about missing `pnpm` does
-not affect Python plugin setup.
+WebApp and Ink TUI builds, clears stale frontend outputs, and copies patched
+Python files, the rebuilt WebApp (`HERMES_WEBAPP_DIST`), and the rebuilt Ink
+TUI bundles (`ui-tui/dist` and `hermes_cli/tui_dist`) into the final runtime
+image. The runtime image omits `pnpm`; its advisory warning about missing
+`pnpm` does not affect Python plugin setup.
 
 `0001-upstream-candidates.patch` is exported from the release replay recorded
 in [packaged release provenance](plans/hermes-upstream-prep.md#5-packaged-release-provenance),
-excluding upstream Python tests, website files, contributor metadata, and
-Electron-only files. The Docker build uses only the tracked patches and pinned
-official image, never local reference checkouts. See
+excluding upstream Python and TUI tests, website files, contributor metadata,
+Electron-only files, `scripts/`, and `cli-config.yaml.example`. The Docker
+build uses only the tracked patches and pinned official image, never local
+reference checkouts. See
 [Hermes update workflow](update-workflow.md) and
 [rebuilding the candidate patch](update-workflow.md#rebuild-the-candidate-patch-for-a-new-release)
 for upgrade steps.
@@ -177,7 +179,7 @@ for upgrade steps.
 | `0009-browser-response-policy` | Response CSP, trusted bootstrap headers, exact-origin WebSockets, and inert private previews. | Verify with browser response, WebSocket, and active-file checks. |
 | `0010-browser-content` | Shared content rendering, image consent UI, and image Save and Copy through the Tor proxy. | Verify with renderer unit tests and cross-browser tests across all four content modes. |
 | `0011-mcp-probe-redirects` | Leaves HTTP redirects to the MCP SDK and treats redirected `initialize` responses in Hermes's separate diagnostic probe as inconclusive. | Verify `HEAD`, `GET`, and `initialize` redirects in `tests/local_integration_smoke.py`; remove once upstream's diagnostic respects the SDK's redirect boundary. |
-| `0012-mcp-server-instructions` | Surfaces connected MCP servers' `InitializeResult.instructions` in Hermes's volatile system-prompt tier with tool/scope gating, Tool Search awareness, threat scanning, delimiter neutralization, and strict size caps (eager servers only; `lazy: true` servers omit instructions until connected and rebuilt). | Verify extraction, scope isolation, Tool Search, sanitization, delimiter neutralization, and caps in `tests/hermes_build.py`; remove once upstream Hermes natively surfaces MCP server instructions. |
+| `0012-mcp-server-instructions` | Surfaces connected MCP servers' `InitializeResult.instructions` in Hermes's volatile system-prompt tier with tool and scope gating, Tool Search awareness, threat scanning, delimiter neutralization, and strict size caps (eager servers only; `lazy: true` servers omit instructions until connected and rebuilt). | Verify extraction, scope isolation, Tool Search, sanitization, delimiter neutralization, and caps in `tests/hermes_build.py`; remove once upstream Hermes natively surfaces MCP server instructions. |
 
 ### Managed container config and executor packaging
 
