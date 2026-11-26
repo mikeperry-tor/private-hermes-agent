@@ -8,11 +8,16 @@ identity `Mike Perry <mikeperry-git@untrusted.systems>`.
 
 - **Plan path:** `docs/plans/hermes-upstream-prep.md`
 - **Wrapper branch and starting commit:** `main` at `e8d7da4`
-- **Current status:** Ready to start Phase 0 (this revised plan passed
-  independent review before execution). All 13 prior local candidate branches
-  are verified on `88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5` (2026-11-22), and
-  the packaged v0.23.3 release replay is qualified at
-  `1d3dec980055f3bbffaa15e5eabf7a998520d962`.
+- **Current status:** Ready to submit on `origin/main` at
+  `04be1bc06ba9fb3a7326679b0036bb65daaeda85` (Phase 5 complete and
+  independently reviewed: all 11 wave branches `W1-1` through `W3-3` rebased,
+  verified individually and in a combined merge, submission drafts and wrapper
+  docs refreshed, and `backup/v0.23.4/*` refs saved; awaiting operator
+  authorization to push to `fork` and open upstream PRs). All 13 prior
+  candidate branches remain preserved under `backup/88a1c1f4b/*` (matching
+  `fork`), the `v0.23.4` stack replay remains at
+  `1cdcf6a54338c0f02b2a09f280a688ff20ad5ad7`, and the prior v0.23.3 release
+  replay remains at `1d3dec980055f3bbffaa15e5eabf7a998520d962`.
 - **Two-step rebase strategy (`88a1c1f4b` -> `v0.23.4` -> `origin/main`):**
   Upstream `v0.23.4` (`8fc0374447313e276f6b9a2764bfc750190c966a`, 2026-11-24) is
   a direct descendant of `88a1c1f4b` (387 commits ahead) and a direct ancestor
@@ -76,28 +81,28 @@ Update this table in place as each phase and branch completes.
 
 | Phase or item | Target branch | Target base | Commit or ref | Validation (`scripts/check` and Docker tests) | Draft renamed | Review | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Phase 0: Pre-flight and fetch `v0.23.4` | `v0.23.4` (`8fc037444`) | `v0.23.4` (`8fc037444`) | `88a1c1f4b` (387 commits behind `v0.23.4`) | n/a | n/a | n/a | Pending |
-| `W1-1` Managed config | `fix/managed-config` | `8fc037444` (`v0.23.4`) | `d4aa66920` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-2` SSH workspace fixes | `fix/ssh-workspace` | `8fc037444` (`v0.23.4`) | `73a53241d` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-3` Desktop and browser fixes | `fix/executor-desktop-browser` | `8fc037444` (`v0.23.4`) | `1f2eefc51` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-4` Literal SSH and OSC 7 `cwd` | `fix/terminal-ssh-cwd` | `8fc037444` (`v0.23.4`) | `868773aa8` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-5` Speech output placement | `fix/tts-output-placement` | `8fc037444` (`v0.23.4`) | `ecae8682a` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W2-1` Explicit SSH client config | `feat/ssh-client-config` | `W1-1` | `db7587772` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W2-2` URL reference opt-out | `feat/url-reference-fetching` | `W1-1` | `c3a6b8a0b` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W2-3` Managed tool denials | `feat/managed-tool-denials` | `W1-1` | `14e980021` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W3-1` Executor desktop and browser | `feat/executor-desktop-placement` | `W2-1` and `W1-3` | `24a750de0` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W3-2` Operator shells and terminals | `feat/webapp-executor-terminals` | `W1-1` and `W1-4` | `7ae5fd82c` (on `88a1c1f4b`) | Failing (1 ruff, 11 health); pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W3-3` Managed SSH isolation (workspaces, skills, and cron) | `feat/ssh-executor-isolation` (consolidating `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `W1-1`, `W1-2`, and `W2-1` | `39cdc0ce2`, `0c67369ef`, and `c73e521b8` | Pending split and rebase | Pending | Combined in Phase 4 | Pending |
-| Phase 4: Combined `v0.23.4` replay, `stack-patches/v0.23.4/combined`, and review | `stack-patches/v0.23.4/combined` | `8fc037444` (`v0.23.4`) | Pending | Pending | n/a | Pending | Pending |
-| Pause: Private Hermes `v0.23.4` stack upgrade | Separate upgrade plan (`docs/update-workflow.md`) | `8fc037444` (`v0.23.4`) | Pending Phase 4 | Cross-engine Docker and Podman | n/a | Separate plan | Pending |
-| Phase 5: Hop qualified `W1-1` through `W3-3` onto latest `origin/main` | `W1-1` through `W3-3` plus combined check | `MAIN_SHA` (`origin/main`) | Pending `v0.23.4` upgrade | Pending | Refresh SHAs | Pending | Pending |
+| Phase 0: Pre-flight and fetch `v0.23.4` | `v0.23.4` (`8fc037444`) | `v0.23.4` (`8fc037444`) | `8fc037444` (`88a1c1f4b -> 8fc037444 -> 93dd2a4ef`) | 13 `backup/88a1c1f4b/*` refs saved (all match `fork`); 13 stale worktrees pruned; `combined-replay` WIP discarded; TS pin `6.0.3` unchanged; 0 topics superseded in `88a1c1f4b..8fc037444` (overlaps from `fe9a4b58e` plus presence changes in `W3-2` and `W3-3`) | n/a | n/a | Done |
+| `W1-1` Managed config | `fix/managed-config` | `04be1bc06` (`origin/main`) | `c1c4df897` (2 commits) | `scripts/check` 22/22 ok (0 blocking, 1 advisory); 60/61 Python files, 678 passed, 9 skipped (`main/W1-1.log`; 1 container-only mode check matches `main/baseline-edit-seed.log`) | `W1-1-managed-config.md` | Clean | Done |
+| `W1-2` SSH workspace fixes | `fix/ssh-workspace` | `04be1bc06` (`origin/main`) | `e39789aa2` (8 commits) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 24 Python files, 904 passed, 21 skipped (`main/W1-2.log`); `ui-tui` `tsc` and 27 passed (`main/W1-ui.log`) | `W1-2-ssh-workspace-fixes.md` | Clean | Done |
+| `W1-3` Desktop and browser fixes | `fix/executor-desktop-browser` | `04be1bc06` (`origin/main`) | `72a6cb3e4` (3 commits) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 16 Python files, 203 passed (`main/W1-3.log`); Desktop `tsc` and 6 passed (`main/W1-ui.log`) | `W1-3-executor-desktop-browser-fixes.md` | Clean | Done |
+| `W1-4` Literal SSH and OSC 7 `cwd` | `fix/terminal-ssh-cwd` | `04be1bc06` (`origin/main`) | `940c486f8` (1 commit) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 3 Python files, 6 passed (`main/W1-4.log`); Desktop `tsc`, 25 UI and 117 Electron passed, 4 skipped (`main/W1-ui.log`) | `W1-4-terminal-ssh-cwd.md` | Clean | Done |
+| `W1-5` Speech output placement | `fix/tts-output-placement` | `04be1bc06` (`origin/main`) | `73b8b3970` (1 commit) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 5 Python files, 16 passed (`main/W1-5.log`) | `W1-5-tts-output-placement.md` | Clean | Done |
+| `W2-1` Explicit SSH client config | `feat/ssh-client-config` | `W1-1` (`c1c4df897`) | `e3b027761` (1 commit) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 5 Python files, 45 passed, 12 skipped plus 6/6 Doctor `ssh_port` (`main/W2-1.log`) | `W2-1-ssh-client-config.md` | Clean | Done |
+| `W2-2` URL reference opt-out | `feat/url-reference-fetching` | `W1-1` (`c1c4df897`) | `3a20a6601` (1 commit) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 4 Python files, 72 passed (`main/W2-2.log`) | `W2-2-url-reference-fetching.md` | Clean | Done |
+| `W2-3` Managed tool denials | `feat/managed-tool-denials` | `W1-1` (`c1c4df897`) | `132bc5e24` (6 commits) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 17/18 Python files, 1,099 passed, 8 skipped (`main/W2-3.log`; 3 `test_doctor.py` failures match `main/baseline-doctor.log`) | `W2-3-managed-tool-denials.md` | Clean | Done |
+| `W3-1` Executor desktop and browser | `feat/executor-desktop-placement` | `W2-1` and `W1-3` (`40c2b273c`) | `1bd3ef03b` (4 commits) | `scripts/check` 22/22 ok (0 blocking, 1 advisory); 20 Python files, 332 passed (`main/W3-1.log`) | `W3-1-executor-desktop-placement.md` | Clean | Done |
+| `W3-2` Operator shells and terminals | `feat/webapp-executor-terminals` | `W1-1` and `W1-4` (`642e38e68`) | `1cb8e174b` (6 commits) | `scripts/check` 22/22 ok (0 blocking, 0 advisory); 14 Python files, 180 passed (`main/W3-2-python.log`); Desktop `tsc` and 332 passed (`main/W3-2-ui.log`); `ui-tui` `tsc` and 7 passed (`main/W3-2-tui.log`) | `W3-2-webapp-executor-terminals.md` | Clean | Done |
+| `W3-3` Managed SSH isolation (workspaces, skills, and cron) | `feat/ssh-executor-isolation` (consolidating `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `W1-1`, `W1-2`, and `W2-1` (`71f52086b`) | `f7576b22d` (10 commits) | `scripts/check` 22/22 ok (185 files, 0 blocking, 0 advisory); 35 Python files, 391 passed, 14 skipped (`main/W3-3-python.log`); `tests/cron/` 201/202 files, 1,825 passed, 10 skipped (`main/W3-3-cron.log`); Desktop `tsc` and 46 passed, `ui-tui` `tsc` and 9 passed (`main/W3-3-ui.log`) | `W3-3-ssh-executor-isolation.md` | Clean | Done |
+| Phase 4: Combined `v0.23.4` replay, `stack-patches/v0.23.4/combined`, and review | `stack-patches/v0.23.4/combined` | `8fc037444` (`v0.23.4`) | `1cdcf6a54` (all 11 wave branches merged) | `scripts/check` 22/22 ok (448 files, 0 blocking, 2 advisory); 64 Python files, 1,545 passed, 22 skipped (`Phase4-combined-python.log`); Desktop `tsc`, 314 UI and 117 Electron passed (`Phase4-combined-desktop.log`); `ui-tui` `tsc` and 43 passed (`Phase4-combined-tui.log`) | n/a | Clean (2 passes; both blocking findings resolved and re-reviewed) | Done |
+| Pause: Private Hermes `v0.23.4` stack upgrade | `0001-upstream-candidates.patch` and wrapper pin | `8fc037444` (`v0.23.4`) | `1cdcf6a54` (`0001` SHA-256 `a00e7af5e120`) | Passed across macOS Docker Desktop 29.9.3, Debian 13 native Docker 29.10.0, and rootless Podman 5.4.2: `make check`, `make hermes-ui-test` (296 Vitest), `tests/hermes_build.py` (Docker Desktop and Podman), `make test`, `make webapp-test`, `make computer-use-test`, `make browser-use-test`, `make onion-test`, `make storage-test`, `make images-test`, `make plugins-test`, `bind_mount`, `desktop_startup`, `desktop_tools`, `capability_bootstrap`, `project_mount_smoke`, `project_mount_lifecycle` (`v0.23.3 -> v0.23.4`), and `make podman-paths-test` (39/39) | n/a | Clean (re-reviewed after `hermes_build.py`, `docs/architecture.md`, and `onion_smoke.py` fixes) | Done |
+| Phase 5: Hop qualified `W1-1` through `W3-3` onto latest `origin/main` | `W1-1` through `W3-3` plus combined check | `04be1bc06` (`origin/main`) | All 11 branches rebased (`backup/v0.23.4/*` saved) | Combined merge `aff696582` passed `scripts/check` 22/22 ok (448 files, 0 blocking, 2 advisory), 35 cross-topic Python files (534 passed, 19 skipped; `main/Phase5-combined-python.log`), Desktop `tsc`, 384 UI + 117 Electron + 43 `ui-tui` passed (`main/Phase5-combined-ui.log`); `make check` 242/242 ok | Refreshed (`W1-1`..`W3-3`) | Clean | Done |
 
 #### Open findings and next action
 
-- Next action: start Phase 0 (create `backup/88a1c1f4b/*` refs, fetch tag
-  `v0.23.4` (`8fc0374447313e276f6b9a2764bfc750190c966a`) and `origin/main` into
-  `upstream_work/hermes-agent/`, prune stale worktrees, and discard leftover WIP
-  in `upstream_work/worktrees/combined-replay`).
+- Next action: operator publishes the 11 rebased wave branches to `fork` and
+  opens upstream PRs starting with Wave 1 (`W1-1` first for contributor email
+  mapping, then `W1-2` through `W1-5`), following
+  [Section 2](#2-upstream-submission-and-merge-order-checklist).
 
 ## 1. Branches to submit
 
@@ -111,20 +116,20 @@ existing Hermes features immediately without requiring Wave 3. Wave 3 contains
 the three complete executor-isolation boundaries, each introducing its own
 configuration keys alongside all consumers that enforce them.
 
-| ID | Target draft (`upstream_work/submissions/`) | Legacy draft to replace | Local branch | Current head (`88a1c1f4b` base) | Review base | Current scope (`base..HEAD`) | Restructuring needed |
+| ID | Target draft (`upstream_work/submissions/`) | Legacy draft (replaced) | Local branch | Current head (`origin/main` `04be1bc06` base) | Review base | Current scope (`base..HEAD`) | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `W1-1` | `W1-1-managed-config.md` | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | `origin/main` | 2 commits, 18 files (+674 / -159) | Rebase only; keep 2 commits. Carries `contributors/emails/mikeperry-git@untrusted.systems`. |
-| `W1-2` | `W1-2-ssh-workspace-fixes.md` | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `73a53241def871e21e758dfc8abc448c6b848b7f` | `origin/main` | 8 commits, 53 files (+3,250 / -314) | Rebase only; keep 8 linear commits (or fold `73a53241d` into `eb93959ce` and `23be2f3b5`) and refresh draft. |
-| `W1-3` | `W1-3-executor-desktop-browser-fixes.md` | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | `origin/main` | 3 commits, 29 files (+1,421 / -242) | Rebase only; keep 3 commits. |
-| `W1-4` | `W1-4-terminal-ssh-cwd.md` | `PR4a-terminal-ssh-cwd.md` | `fix/terminal-ssh-cwd` | `868773aa8ba037511134868cf9a9c3bbf90a1337` | `origin/main` | 1 commit, 11 files (+57 / -15) | Rebase only. |
-| `W1-5` | `W1-5-tts-output-placement.md` | `tts-output-placement.md` | `fix/tts-output-placement` | `ecae8682a4c5915ae58d760e1d46f40ade4aa1b7` | `origin/main` | 1 commit, 6 files (+110 / -19) | Rebase and format draft with upstream PR template. |
-| `W2-1` | `W2-1-ssh-client-config.md` | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | `W1-1` | 1 commit, 17 files (+206 / -19) | Rebase onto updated `W1-1`. Immediately enables `terminal.ssh_config` on existing SSH backend, workspace browser, streams, and Doctor. |
-| `W2-2` | `W2-2-url-reference-fetching.md` | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `c3a6b8a0bc49a16b907f98917cfbc50c5cd84e4e` | `W1-1` | 1 commit, 6 files (+333 / -6) | Rebase onto updated `W1-1`. Immediately enables `context_references.fetch_urls: false`. |
-| `W2-3` | `W2-3-managed-tool-denials.md` | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | `W1-1` | 6 commits, 60 files (+2,173 / -458) | Rebase onto updated `W1-1`; keep 6 clean commits. Immediately enables `tools.disabled`. |
-| `W3-1` | `W3-1-executor-desktop-placement.md` | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | `W2-1` and `W1-3` | 4 commits (`16816db7d..24a750de0`), 53 files (+3,100 / -278) | Rebase all 4 commits onto updated `W2-1` and `W1-3`; preserve the 4 clean sequential commits. |
-| `W3-2` | `W3-2-webapp-executor-terminals.md` | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `7ae5fd82c5369718a0073d8795e3ca14ec7fd930` | `W1-1` and `W1-4` | 11 commits, 97 files (+4,150 / -548) | Rebase onto `W1-1` and `W1-4`, fix all 12 `scripts/check` findings, reorder into 6 clean commits, and rewrite draft for full operator-shell scope. |
-| `W3-3` | `W3-3-ssh-executor-isolation.md` | `ssh-project-workspaces.md`, `ssh-skill-shell.md`, `ssh-cron-execution.md` | `feat/ssh-executor-isolation` (consolidates `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `39cdc0ce2`, `0c67369ef`, and `c73e521b8` | `W1-1`, `W1-2`, and `W2-1` | 196 unique files (+7,408 / -965) | Rebase and linearize (drop 2 merge commits), fold 2 review cleanups, and split internally into 10 sequential commits with skills (#9) and cron (#10) cleanly splittable at the tip. |
-| Deferred | `deferred-webapp-content-privacy.md` | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred | Design only (0 commits) | Rename draft only; keep downstream patches `0008`-`0010` until upstream design is settled. |
+| `W1-1` | `W1-1-managed-config.md` | `PR1-managed-config.md` (replaced) | `fix/managed-config` | `c1c4df897d2ecb84a25a873e541bc755d5748a86` | `origin/main` (`04be1bc06`) | 2 commits, 19 files (+679 / -161) | Ready on `origin/main`; carries `contributors/emails/mikeperry-git@untrusted.systems`. |
+| `W1-2` | `W1-2-ssh-workspace-fixes.md` | `PR2a-ssh-workspace-fixes.md` (replaced) | `fix/ssh-workspace` | `e39789aa297dffb29d022b46f52671221c326909` | `origin/main` (`04be1bc06`) | 8 commits, 53 files (+3,282 / -334) | Ready on `origin/main`; 8 linear commits with `read_file_tool` refactored under complexity cap. |
+| `W1-3` | `W1-3-executor-desktop-browser-fixes.md` | `PR3a-executor-desktop-browser-fixes.md` (replaced) | `fix/executor-desktop-browser` | `72a6cb3e47c18bf614cf3eb12e94f58d7530d5f5` | `origin/main` (`04be1bc06`) | 3 commits, 31 files (+1,430 / -247) | Ready on `origin/main`; 3 linear commits. |
+| `W1-4` | `W1-4-terminal-ssh-cwd.md` | `PR4a-terminal-ssh-cwd.md` (replaced) | `fix/terminal-ssh-cwd` | `940c486f813216594532c23ec9244df89b3ee3f3` | `origin/main` (`04be1bc06`) | 1 commit, 11 files (+57 / -15) | Ready on `origin/main`. |
+| `W1-5` | `W1-5-tts-output-placement.md` | `tts-output-placement.md` (replaced) | `fix/tts-output-placement` | `73b8b3970f66bf60f0b2a78f526e5b397f73c644` | `origin/main` (`04be1bc06`) | 1 commit, 6 files (+110 / -19) | Ready on `origin/main`; draft formatted with upstream PR template. |
+| `W2-1` | `W2-1-ssh-client-config.md` | `PR2b-ssh-client-config.md` (replaced) | `feat/ssh-client-config` | `e3b027761294fa29ade434062bcb28bbb4b0af11` | `W1-1` (`c1c4df897`) | 1 commit, 17 files (+206 / -19) | Ready on `origin/main`; enables `terminal.ssh_config` on existing SSH backend, workspace browser, streams, and Doctor. |
+| `W2-2` | `W2-2-url-reference-fetching.md` | `PR5-url-reference-fetching.md` (replaced) | `feat/url-reference-fetching` | `3a20a66014271cf77b5a823700c10abb64bd4ac6` | `W1-1` (`c1c4df897`) | 1 commit, 6 files (+333 / -6) | Ready on `origin/main`; enables `context_references.fetch_urls: false`. |
+| `W2-3` | `W2-3-managed-tool-denials.md` | `PR6-deployment-restrictions.md` (replaced) | `feat/managed-tool-denials` | `132bc5e24f6155b016f7e5f0b32f2d405bc6e462` | `W1-1` (`c1c4df897`) | 6 commits, 60 files (+2,184 / -463) | Ready on `origin/main`; 6 linear commits enabling `tools.disabled`. |
+| `W3-1` | `W3-1-executor-desktop-placement.md` | `PR3b-executor-desktop-browser.md` (replaced) | `feat/executor-desktop-placement` | `1bd3ef03bdee337c987cc52d418880c9983a9472` | `W2-1` and `W1-3` (`40c2b273c`) | 4 commits (`40c2b273c..1bd3ef03b`), 53 files (+3,101 / -283) | Ready on `origin/main`; 4 sequential commits. |
+| `W3-2` | `W3-2-webapp-executor-terminals.md` | `PR4b-executor-terminals.md` (replaced) | `feat/webapp-executor-terminals` | `1cb8e174b6c06a00bd899e40997bb6cadb3b146c` | `W1-1` and `W1-4` (`642e38e68`) | 6 commits (`642e38e68..1cb8e174b`), 97 files (+4,341 / -660) | Ready on `origin/main`; 6 sequential commits with 0 blocking `scripts/check` findings. |
+| `W3-3` | `W3-3-ssh-executor-isolation.md` | `ssh-project-workspaces.md`, `ssh-skill-shell.md`, `ssh-cron-execution.md` (replaced) | `feat/ssh-executor-isolation` (consolidates `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `f7576b22d4b3947356e312e40f34754abef48712` | `W1-1`, `W1-2`, and `W2-1` (`71f52086b`) | 10 commits (`71f52086b..f7576b22d`), 196 files (+7,448 / -965) | Ready on `origin/main`; linearized into 10 sequential commits with both Phase 3 cleanups, `runs_elsewhere` HTTP 409 guard, `resolve_usable_git()` port in `cron/scheduler_worktree_maintenance.py`, and splittable skills (#9) and cron (#10) tails. |
+| Deferred | `deferred-webapp-content-privacy.md` | `PR7-webapp-content-privacy.md` (replaced) | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred | Design only (0 commits) | Draft renamed; downstream patches `0008`-`0010` remain until upstream design settles. |
 
 The `W1-1` through `W3-3` branches on `88a1c1f4b` have prior verified logs under
 `upstream_work/executor-access-evidence/` and `upstream_work/pr-rebased-evidence/`.
@@ -774,6 +779,17 @@ Resume here after the `v0.23.4` stack upgrade passes cross-engine qualification:
    command for the operator to run when ready to publish to `fork`.
 
 ## 5. Packaged release provenance
+
+### v0.23.4 build provenance
+
+`stack-patches/v0.23.4/combined` (`1cdcf6a54338c0f02b2a09f280a688ff20ad5ad7`)
+in `upstream_work/hermes-agent/` merges all 11 verified `v0.23.4` wave branches
+(`W1-1` through `W3-3`, listed in [Section 1](#1-branches-to-submit)) onto
+official Hermes v0.23.4 (`8fc0374447313e276f6b9a2764bfc750190c966a`). Exporting
+`8fc037444..1cdcf6a54` (excluding `tests/`, `website/`, `contributors/`,
+`apps/desktop/electron/`, `ui-tui/src/__tests__/`, `scripts/`, and
+`cli-config.yaml.example`) produces `components/hermes/patches/0001-upstream-candidates.patch`
+(SHA-256 `a00e7af5e12012b242d61ac43dd8f2b53499d9f1971f861f42285f672461f1f4`).
 
 ### v0.23.3 build provenance
 

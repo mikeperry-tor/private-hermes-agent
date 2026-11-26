@@ -285,57 +285,42 @@ Debian 13 ARM64 rootless Podman 5.4.2 (Compose 5.7.1) includes:
 
 ## Packaged Hermes qualification
 
-The derived Hermes image builds from official Hermes v0.23.3
-(`caafe5389ae585ef77387a962aee05b1bcf17029`, multiarch index
-`sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355`). The
+The derived Hermes image builds from official Hermes v0.23.4
+(`8fc0374447313e276f6b9a2764bfc750190c966a`, multiarch index
+`sha256:ef0650d523ee1b5ab32c779acabc446d9936869a9932591553688a62bcf0c42f`). The
 build verifies the ARM64 source stamp and renderer receipt against official
-source hash `03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`
+source hash `b70656c6a129f5b4172aa6b388e1e8991a5301eeff8b4d0a3bf8d09aeff04801`
 before applying the [downstream patches](updates-and-plugins.md#downstream-responsibility-inventory).
 The packaged candidate patch (`0001-upstream-candidates.patch`, SHA-256
-`8e9ca5672881552e11f8c546c23ddfcfed7ae5ce7bc956faba77f82c03973e53`) is exported
-from release replay `1d3dec980055f3bbffaa15e5eabf7a998520d962`. On wrapper
-`5605078`, macOS Docker Desktop 29.9.3 passed `make check` (242 tests) and
-`make hermes-ui-test` (TypeScript and 285 Vitest renderer tests across 16
-files); Debian 13 ARM64 native Docker 29.10.0 and rootless Podman 5.4.2 passed
-`make test`, `make webapp-test` (all four content modes across Chromium,
-Firefox, and WebKit, Code and Agent terminals, model terminal reads,
-Agent-to-chat sharing, and legacy session adoption and media), and
-`tests/project_mount_lifecycle.py --prior-ref a6a6f642` (lean); and an isolated
-Docker probe verified `/init`, named-profile cron script diagnostics and
-execution, and executor cron artifact delivery. See
-[v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance)
+`a00e7af5e12012b242d61ac43dd8f2b53499d9f1971f861f42285f672461f1f4`) is exported
+from `stack-patches/v0.23.4/combined` (`1cdcf6a54338c0f02b2a09f280a688ff20ad5ad7`).
+Downstream patches `0002` through `0011` apply unchanged. See
+[packaged release provenance](plans/hermes-upstream-prep.md#5-packaged-release-provenance)
 for the local topic and replay record.
 
-The table records the broader v0.23.3 matrix built from replay `553cd75ac`, with
-WebApp source hash `de3582b39cdfa7b69fb5dbf4958d3ee718ae0ed29198c7108af27df6e7e5834f`
-(covering desktop executor, CUA, browser harness, plugin persistence, image
-proxy, and v0.23.2-to-v0.23.3 migration paths unchanged in `1d3dec980`).
+The table records the v0.23.4 cross-engine qualification matrix across macOS
+Docker Desktop 29.9.3 ARM64, Debian 13 ARM64 native Docker 29.10.0, and Debian
+13 ARM64 rootless Podman 5.4.2.
 
-| Check or contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
-| --- | --- | --- |
-| 197 wrapper unit checks, 4 Compose models, and compilation | Passed | Passed |
-| Image build, source verification, and renderer receipt | Passed | Passed |
-| Renderer TypeScript check and 218 targeted renderer tests | Passed | Passed |
-| Managed URL-context and tool-denial matrix (including dotenv reload) | Passed | Passed |
-| Populated official v0.23.2 profile loaded twice by v0.23.3 (schema 53 -> 54) | Passed | Passed |
-| Full lean WebApp (Code and Agent terminals, auth, cross-browser content, MCP) | Passed | Passed |
-| Desktop Code and Agent terminals over local and simulated HTTPS | Passed | Passed |
-| Networkless desktop startup and Chromium lock-file cleanup | Passed | Passed |
-| Executor browser, named tabs, ownership, cancellation, harness recovery | Passed | Passed |
-| CUA display, takeover leases, sandbox, dependency loss, variant switching | Passed | Passed |
-| Dependency-bearing user plugin install, update, and persistence | Passed | Passed |
-| Authenticated image proxy, destination checks, and DNS controls | Passed | Passed |
-| Repeated setup, offline CLI edits, SSH key repair, named-volume persistence | Passed | Passed |
-| Live SSH execution, Teep and MCP grants, forbidden paths, Tor outage and recovery | Passed | Passed |
-| Cold launch, maintenance scope, and namespace cleanup | Passed | Passed |
-| Dedicated cross-browser image Save and Copy, and desktop viewer and download | Passed | Prior v0.23.2 evidence |
+| Check or contract | Docker Desktop ARM64 | Native Linux Docker ARM64 | Rootless Podman ARM64 |
+| --- | --- | --- | --- |
+| `make check` (242 unit tests, 4 Compose models, compilation) | Passed | Passed | Passed |
+| Lean and desktop image builds, source verification, and delivered renderer receipt (`tests/hermes_build.py`) | Passed | Passed (builds; receipt via shared image) | Passed |
+| `make hermes-ui-test` (TypeScript and 296 Vitest renderer tests across 16 files) | Passed | Covered by shared build | Covered by shared build |
+| `make test` (SSH execution, remote Python, Teep and MCP, forbidden paths, Tor outage) | Passed | Passed | Passed |
+| `make webapp-test` (4 content modes across Chromium, Firefox, WebKit, Code and Agent terminals, stale-document restart, logout, and off, DNS canary, 12-endpoint MCP) | Passed | Passed | Passed |
+| `make computer-use-test` (SSH desktop CUA, takeover leases, Chromium sandbox, idle stop, variant switching) | Passed | Passed | Passed |
+| `make browser-use-test` (executor browser harness, Chromium namespace and seccomp layers, named tabs, recovery) | Passed | Passed | Passed |
+| `make onion-test` (offline onion identity, corruption refusal, Chromium onion login, localhost and HTTPS, restart) | Passed | Passed | Passed |
+| `make storage-test`, `make images-test`, `make plugins-test` | Passed | Passed | Passed |
+| `tests/bind_mount_smoke.py`, `desktop_startup_smoke.py`, `desktop_tools_smoke.py`, `capability_bootstrap.py`, `project_mount_smoke.py` | Passed | Passed | Passed |
+| `tests/project_mount_lifecycle.py --variant lean --prior-ref 4ce3e35` (populated v0.23.3 to v0.23.4 upgrade, classic, TUI, and WebApp browser) | Passed | Passed | Passed |
+| `make podman-paths-test` (39 allowed and forbidden path checks on live stack) | n/a | n/a | Passed (39/39) |
 
-The v0.23.2 -> v0.23.3 migration check verifies preserved model and terminal
-settings, preferences, transcript, and `.env`, auth, and plugin files in a
-temporary named volume. Clipboard checks use a test sink, authenticated HTTPS
-checks use simulated TLS, and Tor routing is verified separately. Live public
-ingress, provider attestation, funded treasury actions, and AMD64 runtimes are
-outside this table.
+Simulated TLS covers authenticated HTTPS checks, Tor routing is verified
+separately from browser containment, and `make onion-test` runs offline with
+`DisableNetwork=1`. Live public ingress, provider attestation, funded treasury
+actions, and AMD64 runtimes are outside this table.
 
 ## Onion ingress qualification
 
@@ -510,32 +495,35 @@ probes immediately with no extra startup deadline.
 ## Local upstream candidate qualification
 
 The `fork` remote ([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
-hosts the `stack-patches/v0.23.3/*` release refs, the original `upstream-pr/*`
+hosts the `stack-patches/<release>/*` release refs, the original `upstream-pr/*`
 qualification refs, and the active `fix/*` and `feat/*` submission branches. See
 [local preparation package dispositions](updates-and-plugins.md#local-preparation-package-dispositions)
 and [hermes-upstream-prep.md](plans/hermes-upstream-prep.md).
 
 Candidate tests run inside temporary Docker Desktop Linux ARM64 containers
 with isolated homes, `--init`, no engine socket, and no private mounts (using
-`scripts/check` and containerized Python and Node toolchains). The release
-replay targets Hermes v0.23.3 (`caafe5389ae585ef77387a962aee05b1bcf17029`).
+`scripts/check` and containerized Python and Node toolchains). The active
+release replay targets Hermes v0.23.4 (`8fc0374447313e276f6b9a2764bfc750190c966a`),
+and the 11 upstream submission branches target `origin/main` at
+`04be1bc06ba9fb3a7326679b0036bb65daaeda85`.
 The [submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit) records
 the local submission branches and bases for all upstream candidate topics.
 
-| Candidate | Recorded passing checks | Scope |
+| Candidate | Recorded passing checks (`origin/main` `04be1bc06`) | Scope |
 | --- | --- | --- |
-| PR1: managed configuration | Config and profile unit tests, and Docker and Podman managed-policy image fixtures | Strict reads, dotenv bootstrap and reload precedence, routed interpolation, secret ownership |
-| PR2a: SSH workspace fixes | Sync tests, guarded SSH file tool tests, and packaged shell and HTTP checks | Browser-profile sync exclusion, missing-file `ENOENT` and 404, read baselines, search filtering, and executor version and path checks before edits |
-| PR2b: explicit SSH client config | SSH environment and config tests, and packaged shell checks | Pinned SSH client options across terminal, workspace, streams, and Doctor |
-| PR3: executor desktop and browser | 224 Python tests, 6 desktop renderer tests, browser and SSH suites, live SSH Chromium checks | Cold executor discovery, viewer identity, warm CUA driver, named-profile RFB, raw CDP refusal, vault lease, scratch, screenshots, sandboxing |
-| PR4: operator terminals and exact `cwd` | Operator-shell, wire-contract, ledger, and terminal renderer tests, plus live SSH checks | Placement pinning, rollback refusal, Agent profile anchoring, Bash and `cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |
-| PR5: selectable URL context | 74 reference, gateway-turn, and config tests | Managed no-fetch in normal and bypass sessions, validated snapshots, malformed config handling |
-| PR6: managed tool denial | 87 policy, MCP, and discovery tests plus prompt and worker persistence tests | CLI readiness, catalogs, prompt guidance, connectors, background review, direct and deferred schemas, dispatch enforcement |
-| PR7: WebApp content privacy | Design review only | Shared renderer ownership and authenticated consent storage and API remain open |
-| Speech output placement | All 22 `scripts/check` checks, 15 TTS and CI tests on `88a1c1f4b`, and Docker controlled audio probe | Profile cache placement, gateway audio attachments, and explicit internal playback destinations |
-| Managed project workspaces | All 22 `scripts/check` checks, 352 Python tests, `apps/desktop` `tsc` and 120 Vitest tests, `ui-tui` `tsc` and 9 Vitest tests | Applied SSH write roots, project selection, context files, `@` references, `/init`, `/diff`, WebApp files and Git, delegation, Kanban, gateway media, and remote Python `cwd` |
-| Managed skill shell and discovery | All 22 `scripts/check` checks and 177 skill, prompt, and SSH tests | Executor project skill discovery, mapped inline shell dispatch, upload-only skill sync, and project-skill credential and dependency boundaries |
-| Managed cron execution | All 22 `scripts/check` checks and 1,793 `tests/cron/` and CI tests (excluding 1 pre-existing Docker mode test) | Executor cron workdirs, scheduled scripts with Linux descendant cleanup, `hermes cron doctor`, worktree maintenance exclusions, and SSH media delivery |
+| `W1-1`: managed configuration (`fix/managed-config`) | 22/22 `scripts/check`, 678 tests across 60/61 config and managed-scope files (1 pre-existing Docker mode failure), plus Docker and Podman managed-policy fixtures | Strict reads, dotenv bootstrap and reload precedence, routed interpolation, secret ownership |
+| `W1-2`: SSH workspace fixes (`fix/ssh-workspace`) | 22/22 `scripts/check`, 904 Python tests across 24 files, `ui-tui` `tsc` and 27 Vitest tests | Browser-profile sync exclusion, missing-file `ENOENT` and 404, checkpoint host refusal, read baselines, search filtering, executor version and path checks before edits |
+| `W1-3`: desktop and browser fixes (`fix/executor-desktop-browser`) | 22/22 `scripts/check`, 203 Python tests across 16 files, Desktop `tsc` and 6 Vitest tests | Dependency probe vs. screen liveness, active desktop and permission-mode pinning, Chromium ownership and restart recovery |
+| `W1-4`: literal SSH and OSC 7 `cwd` (`fix/terminal-ssh-cwd`) | 22/22 `scripts/check`, 6 Python tests across 3 files, Desktop `tsc`, 25 UI and 117 Electron Vitest tests | Literal working-directory preservation across OSC 7, shell quoting, and SSH terminal launches |
+| `W1-5`: speech output placement (`fix/tts-output-placement`) | 22/22 `scripts/check`, 16 TTS and CI tests, and Docker controlled audio probe | Profile cache placement, gateway audio attachments, and explicit internal playback destinations |
+| `W2-1`: explicit SSH client config (`feat/ssh-client-config`) | 22/22 `scripts/check`, 45 tests across 5 files plus 6/6 Doctor `ssh_port` tests | Pinned `terminal.ssh_config` options across terminal, workspace, streams, and Doctor |
+| `W2-2`: selectable URL context (`feat/url-reference-fetching`) | 22/22 `scripts/check`, 72 reference, gateway-turn, and CI tests | Managed `context_references.fetch_urls: false` in normal and bypass sessions, validated snapshots, fail-closed malformed config handling |
+| `W2-3`: managed tool denials (`feat/managed-tool-denials`) | 22/22 `scripts/check`, 1,099 policy, prompt-refresh, fork, and MCP tests across 17/18 files (3 pre-existing Docker `test_doctor.py` failures) | CLI readiness, catalogs, prompt guidance, connectors, background review, direct and deferred schemas, dispatch enforcement |
+| `W3-1`: executor desktop and browser (`feat/executor-desktop-placement`) | 22/22 `scripts/check`, 332 Python tests across 20 files, plus v0.23.4 live SSH desktop and Chromium E2E across all 3 engines | `browser.require_sandbox`, executor browser harness, managed `bot_desktop.executor_only`, owner binding, raw CDP refusal, vault lease checks |
+| `W3-2`: operator shells and terminals (`feat/webapp-executor-terminals`) | 22/22 `scripts/check`, 180 Python tests across 14 files, Desktop `tsc` and 332 Vitest tests, `ui-tui` `tsc` and 7 Vitest tests | Placement pinning, viewer ownership, relayed `terminal.read` scoping, managed `!` shell and `shell.cwd` routing, TUI paste/queue/cancel, CLI reconnects |
+| `W3-3`: managed SSH isolation (`feat/ssh-executor-isolation`) | 22/22 `scripts/check`, 391 Python tests across 35 files, 1,825 `tests/cron/` tests across 201/202 files (1 pre-existing Docker mode test), Desktop `tsc` and 46 Vitest tests, `ui-tui` `tsc` and 9 Vitest tests | Applied SSH write roots, project selection, context files, `@` references, `/init`, `/diff`, WebApp files and Git, delegation, Kanban, gateway media, remote Python `cwd`, project skills and inline shells, and managed cron execution |
+| Combined 11-branch merge on `04be1bc06` | 22/22 `scripts/check` (448 files, 0 blocking), 534 cross-topic Python tests across 35 files, Desktop `tsc`, 384 UI and 117 Electron Vitest tests, `ui-tui` `tsc` and 43 Vitest tests | Full cross-wave compatibility check before upstream submission |
+| Deferred: WebApp content privacy (`upstream-pr/webapp-content-privacy`) | Design review only | Shared renderer ownership and authenticated consent storage and API remain open |
 
 ### Limits and test ownership
 
@@ -545,7 +533,7 @@ the local submission branches and bases for all upstream candidate topics.
   and forbidden actions, takeover denial, HTTP file delivery, sandboxing,
   startup cleanup, terminal deployment modes, auth, and pinned keys, gateway
   URL no-fetch, the `desktop_tools_smoke.py` matrix, and all private raster and
-  browser containment tests while PR7 is deferred.
+  browser containment tests while WebApp content privacy remains deferred.
 - On the pristine `main` submission base in Linux ARM64 Docker, the full
   upstream suite has pre-existing container-environment failures (file modes,
   service management, Doctor checks, and two gateway profile copy tests
@@ -553,9 +541,10 @@ the local submission branches and bases for all upstream candidate topics.
   the changed code directly, and `tests/fixtures/session-resume-active-turn.json`
   supplies the fixture omitted from the runtime image (clearing inherited
   frontend output first avoids overlay `EXDEV` rename errors).
-- PR4 Windows encoding tests do not qualify native Windows shell behavior.
-  Native macOS and Windows runtimes, live providers, public ingress, OS
-  clipboard integration, and financial operations are outside candidate
+- `W1-4` and `W3-2` Windows encoding tests do not qualify native Windows shell
+  behavior. Native macOS and Windows runtimes, live providers, public ingress,
+  OS clipboard integration, and financial operations are outside candidate
   evidence.
-- Detailed follow-up logs and commit translations are stored locally in ignored
-  `upstream_work/follow-up-review/`.
+- Detailed Phase 5 verification logs are stored locally in ignored
+  `upstream_work/wave-rebase-evidence/main/` (with prior `v0.23.4` logs in
+  `upstream_work/wave-rebase-evidence/`).

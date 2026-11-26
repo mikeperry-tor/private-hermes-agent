@@ -145,7 +145,7 @@ inference or paid calls.
 ## Derived Hermes build and patch maintenance
 
 The derived Hermes image (`private-hermes-agent:local`) builds from official
-Hermes v0.23.3 (source commit `caafe5389ae585ef77387a962aee05b1bcf17029`). In a
+Hermes v0.23.4 (source commit `8fc0374447313e276f6b9a2764bfc750190c966a`). In a
 separate frontend build stage, `components/hermes/verify-build.mjs` verifies
 the base image's install stamp, source hash, and renderer receipt before
 applying the ordered patch series under `components/hermes/patches/`.
@@ -157,7 +157,7 @@ The runtime image omits `pnpm`; its advisory warning about missing `pnpm` does
 not affect Python plugin setup.
 
 `0001-upstream-candidates.patch` is exported from the release replay recorded
-in [v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance),
+in [packaged release provenance](plans/hermes-upstream-prep.md#5-packaged-release-provenance),
 excluding upstream Python tests, website files, contributor metadata, and
 Electron-only files. The Docker build uses only the tracked patches and pinned
 official image, never local reference checkouts. See
@@ -223,8 +223,9 @@ engines after modifying patches or base pins.
 
 ### Local preparation package dispositions
 
-Upstream submission drafts for PR1-PR6 and the follow-up executor-access and
-speech topics live under `upstream_work/submissions/` and use the local `fix/*`
+Upstream submission drafts for the 3 waves (`W1-1` through `W3-3`) and the
+deferred WebApp content-privacy design live under `upstream_work/submissions/`
+(`W*.md` and `deferred-webapp-content-privacy.md`) and use the local `fix/*`
 and `feat/*` submission branches in `upstream_work/hermes-agent/`. The fork
 also carries release and qualification refs. Submissions target
 `NousResearch/hermes-agent` (`origin`) under author identity
@@ -233,21 +234,23 @@ merge order in the
 [submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit) and
 [merge-order checklist](plans/hermes-upstream-prep.md#2-upstream-submission-and-merge-order-checklist).
 
-| Package | Scope in Private Hermes |
-| --- | --- |
-| PR1 | Strict managed config reads, dotenv bootstrap and reload precedence, and profile-specific interpolation. |
-| PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT` and 404 classification, guarded SSH reads, searches, and edits, and pinned SSH client options (required by PR3). |
-| PR3 | Executor-only desktop and browser placement, SSH transport, and Chromium sandboxing. |
-| PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes, including Agent profile anchoring (builds on PR1). |
-| PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on PR1). |
-| PR6 | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on PR1). |
-| PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`-`0010`). |
-| Speech output placement | Keeps model TTS audio inside the active profile's audio cache (`fix/tts-output-placement`). |
-| Managed project workspaces | Routes applied SSH write roots, project selection, context files, `@` references, `/init`, `/diff`, WebApp files and read-only Git, delegation, Kanban boundaries, gateway media, and remote Python `cwd` over SSH (`feat/ssh-project-workspaces`). |
-| Managed skill shell and discovery | Discovers trusted project skills on the SSH executor, runs inline skill shells in mapped executor directories, keeps project skills out of profile credentials and local deps, and makes synced skill roots upload-only (`feat/ssh-skill-shell`). |
-| Managed cron execution | Validates cron workdirs and runs scheduled scripts on the SSH executor with Linux descendant cleanup, keeps `hermes cron doctor` on the executor, excludes executor workdirs from host worktree sweeps, and fetches cron media artifacts over SSH (`feat/ssh-cron-execution`). |
+| Wave ID | Branch | Scope in Private Hermes |
+| --- | --- | --- |
+| `W1-1` | `fix/managed-config` | Strict managed config reads, dotenv bootstrap and reload precedence, and profile-specific interpolation. |
+| `W1-2` | `fix/ssh-workspace` | Browser-profile SSH sync exclusion, missing-path `ENOENT` and 404 classification, checkpoint host refusal, and guarded SSH reads, searches, and edits. |
+| `W1-3` | `fix/executor-desktop-browser` | Dependency probe vs. screen liveness, active desktop and permission-mode pinning, and Chromium ownership and restart recovery. |
+| `W1-4` | `fix/terminal-ssh-cwd` | Literal working-directory preservation across OSC 7 and SSH terminal launches. |
+| `W1-5` | `fix/tts-output-placement` | Keeps model TTS audio inside the active profile's audio cache. |
+| `W2-1` | `feat/ssh-client-config` | Explicit `terminal.ssh_config` client options across SSH backend, workspace browser, streams, and Doctor (builds on `W1-1`; prerequisite for `W3-1` and `W3-3`). |
+| `W2-2` | `feat/url-reference-fetching` | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on `W1-1`). |
+| `W2-3` | `feat/managed-tool-denials` | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on `W1-1`). |
+| `W3-1` | `feat/executor-desktop-placement` | Executor-only desktop and browser placement, executor browser harness, SSH transport, and `browser.require_sandbox` (builds on `W2-1` and `W1-3`). |
+| `W3-2` | `feat/webapp-executor-terminals` | Executor and gateway terminal selection backing Code and Agent modes, relayed `terminal.read` scoping, and managed `!` operator shell routing across gateway, Ink TUI, and classic CLI (builds on `W1-1` and `W1-4`). |
+| `W3-3` | `feat/ssh-executor-isolation` | Managed SSH project workspaces, context files, `@` references, `/init`, `/diff`, WebApp files and read-only Git, delegation, Kanban boundaries, gateway media, remote Python `cwd`, project skills and inline shells, and managed cron execution (builds on `W1-1`, `W1-2`, and `W2-1`). |
+| Deferred | `upstream-pr/webapp-content-privacy` | Design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`-`0010`). |
 
-PR7 is not submission-ready: it still needs decisions on shared Ask and Always
+WebApp content privacy (`deferred-webapp-content-privacy.md`) is not
+submission-ready: it still needs decisions on shared Ask and Always
 renderer ownership and authenticated consent storage and API while preserving
 upstream's CDN consumer and IPv6 support (private audio and video streaming and
 interactive frames stay out of scope).
