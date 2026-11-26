@@ -22,9 +22,9 @@ duplicate it.)
 
 A complete plan states:
 
-- **Intent and scope:** User goals, current behavior, intended behavior, and
-  named deferrals. Keep observed facts separate from proposals and open
-  assumptions.
+- **Intent and scope:** User goals, plan status, current behavior, intended
+  behavior, and named deferrals. Keep observed facts separate from proposals and
+  open assumptions.
 - **Preserved boundaries:** Accepted trust boundaries and operator workflows to
   keep intact. For integrated components, cite the pinned image or source commit
   and verify its contract rather than assuming a reference checkout matches.
@@ -81,23 +81,24 @@ status block, using two standard parts:
      the checkout with the plan (for example, `git status`, `git log`, or branch
      ref listings for multi-repo work).
    - State the rule for skipping items already marked `Done` whose recorded
-     commits and evidence logs match the checkout.
+     commits and evidence match the checkout.
    - Reference or inline the self-contained build, test, and container commands
      so the incoming agent does not rediscover flags, images, or paths.
 2. **Checkpoint table (under `### Execution checkpoints`):**
-   - Maintain one canonical Markdown table covering every phase or major work
-     item in execution order. Include columns for `Phase or item`, `Target`,
-     `Commit or ref`, `Validation`, `Review`, and `Status` (plans that track
-     extra per-item artifacts, such as submission drafts or target bases, may
-     add concise columns while keeping these core fields).
+   - Maintain one canonical Markdown table covering every phase, gate, planned
+     pause, or major work item in execution order. Include columns for
+     `Phase or item`, `Target`, `Commit or ref`, `Validation`, `Review`, and
+     `Status` (plans that track extra per-item artifacts, such as submission
+     drafts or target bases, may add concise columns while keeping these core
+     fields).
    - Restrict `Status` to four values: `Pending`, `In progress`, `Blocked`, or
      `Done`. Never mark an item `Done` until its required checks and review
      gates have passed. When an item is `Blocked`, keep `Status` set to
      `Blocked` and record the one-line blocker under
      `#### Open findings and next action`.
    - Include a short `#### Open findings and next action` bullet list directly
-     below the table whenever active blockers, unresolved review findings, or a
-     mid-phase next step exist.
+     below the table whenever a mid-phase next step, active blockers, or
+     unresolved review findings exist.
 
 ### Updating progress in place
 
@@ -110,14 +111,18 @@ diaries or noisy commit churn:
   paragraphs, chronological prose logs, or per-command narratives to the plan.
 - **Prune resolved items:** Remove fixed blockers, resolved review findings,
   and superseded next actions from `#### Open findings and next action` once
-  verified, rather than crossing them out or keeping a running diary.
+  verified, rather than crossing them out or keeping a running diary. Keep
+  concise review dispositions in the matching checkpoint row.
 - **Keep raw evidence out of Git:** Store verbose test logs, probe transcripts,
-  and diagnostic outputs in ignored local directories, and record only a brief
-  outcome summary and log path in the checkpoint row.
-- **Batch checkpoint commits:** Include checkpoint updates in the phase or
-  milestone commit rather than making standalone progress-only commits after
-  small edits. Commit a standalone checkpoint update only when pausing
-  mid-phase so the next agent inherits committed progress.
+  diagnostic outputs, and private reports in ignored local directories, and
+  record only a brief outcome summary and evidence path in the checkpoint row.
+- **Batch checkpoint commits:** Avoid standalone progress-only commits after
+  small edits. Fold prior reviewed SHAs and review outcomes (or completed
+  external-repo SHAs) into the next same-repo phase or milestone commit, never
+  into fixup commits. Commit a standalone checkpoint update when pausing
+  mid-phase, or after a review, fixup round, gate, or completed external-repo
+  milestone if no immediate implementation commit follows in the plan's
+  repository, so the next agent inherits committed progress.
 
 ### Planned pauses and multi-stage transitions
 
@@ -127,16 +132,18 @@ deployment before a later phase), keep the handoff bounded in three steps:
 - **Before pausing:** Update the opening status block, completed checkpoint
   rows, and `#### Open findings and next action` in place. Keep verification
   recipes, test lists, conflict rules, and later-phase instructions intact so
-  the resuming agent does not lose needed commands.
-- **During intervening work:** Limit edits to the paused plan to updating the
-  opening status block, marking the pause row `Done`, recording follow-up fixes
-  and the resume next action under `#### Open findings and next action`, and
-  updating owned provenance references.
+  the resuming agent does not have to rediscover them.
+- **During intervening work:** Restrict edits in the paused plan to updating
+  the opening status block, marking any pause row `Done`, recording follow-up
+  fixes and the next action for resuming under
+  `#### Open findings and next action`, and updating owned provenance
+  references.
 - **On resume:** When a resumed phase re-runs per-item rows against a new
-  target base, mark that phase row `In progress` with the target ref. Update
-  each per-item row's `Target` or `Target base`, keep the prior ref in
-  `Commit or ref` until replaced, and reset `Validation`, `Review`, and
-  `Status` to `Pending` while leaving earlier phase-gate rows `Done`.
+  target base, update the opening status block and mark that phase row
+  `In progress` with the target ref. Update each per-item row's `Target` or
+  `Target base`, keep the prior ref in `Commit or ref` until replaced, and
+  reset `Validation`, `Review`, and `Status` to `Pending` while leaving earlier
+  phase, gate, and pause rows `Done`.
 
 ## Independent review
 
@@ -170,8 +177,9 @@ Keep plan-review boundaries clear:
 
 Commit coherent work during development and at phase boundaries, staging only
 named intended files. `AGENTS.md` grants standing authorization for local
-development commits. Mark incomplete checkpoints honestly and never report them
-as completed phases or evidence that acceptance criteria passed.
+development commits. Keep incomplete checkpoints marked `Pending`,
+`In progress`, or `Blocked`, and never report them as completed phases or
+evidence that acceptance criteria passed.
 
 Include consumer updates, focused checks, and maintained guide edits alongside
 code changes rather than deferring them. Keep helpers small and explicit; do
@@ -193,11 +201,11 @@ Validate behavior with focused tests and controlled fixtures:
 
 Update `### Execution checkpoints` and `#### Open findings and next action` in
 place with phase results, review dispositions, and remaining work (see
-[Updating progress in place](#updating-progress-in-place)), keeping raw logs
-and private reports out of Git. Update maintained guides in place with current
-contracts, qualification status, and limits; never append phase or gate codes,
-approval logs, or dated investigation narratives to them. A retained plan is
-never a substitute for operator or maintained documentation.
+[Updating progress in place](#updating-progress-in-place)). Update maintained
+guides in place with current contracts, qualification status, and limits; never
+append phase or gate codes, approval logs, or dated investigation narratives to
+them. A retained plan is never a substitute for operator or maintained
+documentation.
 
 ## Resolve findings and finish
 
@@ -253,6 +261,9 @@ or destroy private state without task authorization. Existing task
 authorization remains valid; do not repeatedly ask for approval on already
 authorized work.
 
-At handoff, keep the summary proportional to the task and report what changed,
-the committed revision or uncommitted state, plan status, validation and review
-results, and material limitations or next steps.
+At handoff, ensure the opening status block, `### Execution checkpoints`, and
+`#### Open findings and next action` match the checkout per
+[Updating progress in place](#updating-progress-in-place). Keep the summary
+proportional to the task and report what changed, the committed revision or
+uncommitted state, plan status, validation and review results, and material
+limitations or next steps.
