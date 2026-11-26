@@ -15777,10 +15777,10 @@ index 560eab341..b40c766cc 100644
 +    return await _git_op(_web_git.branch_switch, body.path, body.branch)
 diff --git a/hermes_cli/web_routers/session_files.py b/hermes_cli/web_routers/session_files.py
 new file mode 100644
-index 000000000..71518f6c6
+index 000000000..299fc617a
 --- /dev/null
 +++ b/hermes_cli/web_routers/session_files.py
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,66 @@
 +"""Resolve dashboard workspace file requests against the owning SSH chat."""
 +
 +import json
@@ -15799,7 +15799,7 @@ index 000000000..71518f6c6
 +    def read(store):
 +        owner = store.bindings.lineage_owner(session["id"])
 +        if not store.bindings.binding_marks(owner).policy:
-+            raise SshWorkspaceFsError("EWORKSPACE", "Select an SSH project for this session before opening workspace files.")
++            return None
 +        return json.loads(restore_policy(store.bindings.receipt(owner).policy).terminal_json)
 +
 +    try:
@@ -15817,9 +15817,12 @@ index 000000000..71518f6c6
 +    cwd = roots[0]
 +    if session is not None:
 +        saved = _stored_terminal(session, profile)
-+        if saved.get("TERMINAL_ENV") != "ssh":
-+            raise SshWorkspaceFsError("EWORKSPACE", "Select an SSH project for this session before opening workspace files.")
-+        candidate = saved.get("TERMINAL_CWD")
++        if saved is not None:
++            if saved.get("TERMINAL_ENV") != "ssh":
++                raise SshWorkspaceFsError("EWORKSPACE", "Select an SSH project for this session before opening workspace files.")
++            candidate = saved.get("TERMINAL_CWD")
++        else:
++            candidate = session.get("cwd")
 +        if candidate not in (None, "", ".", "auto", "cwd", "~"):
 +            cwd = candidate
 +    if not _under_roots(cwd, roots):
