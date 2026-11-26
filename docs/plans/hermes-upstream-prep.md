@@ -201,17 +201,17 @@ for `PR7`). The author identity is
 | Topic | Draft | Submission branch | Head | Review base |
 | --- | --- | --- | --- | --- |
 | PR1 Managed configuration | `PR1-managed-config.md` | `fix/managed-config` | `d4aa66920ce76794a580a877b6e4383ffc94b72d` | Upstream main |
-| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `ceb61c4d4c3880ac5482584f706db9d5cc37aa5d` | Upstream main |
+| PR2a SSH workspace fixes | `PR2a-ssh-workspace-fixes.md` | `fix/ssh-workspace` | `73a53241def871e21e758dfc8abc448c6b848b7f` | Upstream main |
 | PR2b Explicit OpenSSH configuration | `PR2b-ssh-client-config.md` | `feat/ssh-client-config` | `db7587772b60966eed365d0cce892be59c6d1273` | PR1 |
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
 | PR4a Literal SSH/OSC 7 working directories | `PR4a-terminal-ssh-cwd.md` | `fix/terminal-ssh-cwd` | `868773aa8ba037511134868cf9a9c3bbf90a1337` | Upstream main |
-| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `506b54bd4afc3693de0a60828d2d0232b9f81903` | PR1 + PR4a |
+| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `7229d440e3e7e706c3eec457e9ab5974bbb7113e` | PR1 + PR4a |
 | PR5 URL reference fetching | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `c3a6b8a0bc49a16b907f98917cfbc50c5cd84e4e` | PR1 |
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
 | Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `8ba4892861228e6b593e476c6a06aed7a034a9fb` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` |
-| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `7110ca808a05cce06d4add92dee88e3f1da9f97f` | PR1, PR2a, and PR2b, including the writer cleanup |
+| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `5ca732033a76368274e41e97cb2936342416cc52` | PR1, PR2a, and PR2b, including the writer cleanup |
 
 The original `upstream-pr/*` refs preserve the exact qualification heads.
 The current submission refs add commented configuration examples, including
@@ -366,6 +366,7 @@ For a later release, use the
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 | `tts-output-placement` | `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` | 1 | Model speech output in the profile audio cache |
 | `ssh-project-workspaces` | `761b2893c2e72e13a0908a2f431cd3c278b92e9d` | 21 | Managed grants and a shared publisher for model and editor writes |
+| `executor-project-integration` | `8b265aed9818d721bda756fa236d0b341fc1ab2d` | 63 | Integrated project selection, context, Git, skills, cron, and full-suite regression fixes |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Local combined replay: `stack-patches/v0.23.3/combined`

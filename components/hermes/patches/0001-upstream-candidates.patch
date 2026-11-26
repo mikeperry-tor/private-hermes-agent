@@ -7576,7 +7576,7 @@ index 898c5833e..34907c0ef 100644
      kept = {p for p, _ in media_files}
      for raw_path, _v in requested:
 diff --git a/cron/scheduler_script.py b/cron/scheduler_script.py
-index 82ca6447a..f84f6f0f8 100644
+index 82ca6447a..14988e29b 100644
 --- a/cron/scheduler_script.py
 +++ b/cron/scheduler_script.py
 @@ -443,9 +443,28 @@ def _script_argv(
@@ -7662,7 +7662,7 @@ index 82ca6447a..f84f6f0f8 100644
      try:
          thread.start()
 -    except Exception:
-+    except (ImportError, TypeError, ValueError):
++    except (OSError, RuntimeError):
          fail_log()
          return None
      return thread
@@ -8528,7 +8528,7 @@ index 577262650..cf1577235 100644
 
      return {'items': await asyncio.to_thread(listing)}
 diff --git a/gateway/session_context_refs.py b/gateway/session_context_refs.py
-index 401961332..1e8f0c823 100644
+index 401961332..349592ab6 100644
 --- a/gateway/session_context_refs.py
 +++ b/gateway/session_context_refs.py
 @@ -15,13 +15,15 @@ from gateway.config import Platform
@@ -8585,20 +8585,12 @@ index 401961332..1e8f0c823 100644
 
 
  async def turn_references(runner, event, source, session_key, text):
-@@ -83,7 +87,7 @@ async def turn_references(runner, event, source, session_key, text):
-     return f"{text}{tail}".strip() if tail else text
-
-
--async def managed_turn_text(authority, row, policy):
-+async def managed_turn_text(authority, row, policy, *, attachment_session_id=None):
-     """``(text, refusal)`` for a managed worker's admitted text, expanded against the session's
-     workspace. Built-in kinds only for a bypass session, which loads no plugins; the context length
-     is the frozen policy's, never the profile file a bypass session must not read. ``None`` text means
-@@ -103,8 +107,11 @@ async def managed_turn_text(authority, row, policy):
+@@ -103,8 +107,12 @@ async def managed_turn_text(authority, row, policy):
      except Exception as exc:
          logger.warning("@ context reference expansion failed: %s", exc, exc_info=True)
          return text, None
 +    import json
++    attachment_session_id = row.get('session_id') if isinstance(row, dict) else None
      return await expand_references(text, cwd=policy.cwd, context_length=context_length,
 -                                   plugins=not policy.ignore_user_config)
 +                                   plugins=not policy.ignore_user_config,
@@ -9033,7 +9025,7 @@ index b1e8f66e3..663c93da5 100644
          if agent is not None:
              from agent.voice_turn_route import session_runtime_view
 diff --git a/gateway/session_managed_worker.py b/gateway/session_managed_worker.py
-index a4eaaef5e..bd16c9781 100644
+index a4eaaef5e..9e010171e 100644
 --- a/gateway/session_managed_worker.py
 +++ b/gateway/session_managed_worker.py
 @@ -60,14 +60,14 @@ def policy_if_managed(policy):
@@ -9113,7 +9105,6 @@ index a4eaaef5e..bd16c9781 100644
 +    if _stopped_before_spawn(authority, ref, row):
 +        return None, None, ''
      try:
--        text, refusal = await managed_turn_text(authority, row, policy)
 +        workspace = await asyncio.to_thread(_managed_turn_workspace, policy) if policy is not None else None
 +        if _stopped_before_spawn(authority, ref, row):
 +            return None, None, ''
@@ -9122,7 +9113,7 @@ index a4eaaef5e..bd16c9781 100644
 +            result = workspace_unavailable_result(policy)
 +            authority.pending_results[row['admission_id']] = {'result': result, 'usage': {}}
 +            return None, None, result['final_response']
-+        text, refusal = await managed_turn_text(authority, row, policy, attachment_session_id=ref.session_id)
+         text, refusal = await managed_turn_text(authority, row, policy)
 +    except asyncio.CancelledError:
 +        if _stopped_before_spawn(authority, ref, row):
 +            return None, None, ''
@@ -9801,7 +9792,7 @@ index 4d75c5a58..3362b001b 100644
      stdout = redact_sensitive_text(result.stdout or '', force=True, redact_url_credentials=True)[-4000:]
      stderr = redact_sensitive_text(result.stderr or '', force=True, redact_url_credentials=True)[-2000:]
 diff --git a/gateway/session_terminal_cwd.py b/gateway/session_terminal_cwd.py
-index 61f7ef09a..b6d6394f5 100644
+index 61f7ef09a..eeb9d4e3b 100644
 --- a/gateway/session_terminal_cwd.py
 +++ b/gateway/session_terminal_cwd.py
 @@ -1,17 +1,4 @@
@@ -9835,12 +9826,16 @@ index 61f7ef09a..b6d6394f5 100644
      """The backend this turn's terminal runs on: a local session's frozen policy, else (a messaging
      turn, which has none) the profile's live terminal config the tool itself reads."""
      if policy is not None:
-@@ -35,7 +23,25 @@ def _local_backend(policy) -> bool:
+@@ -35,7 +23,29 @@ def _local_backend(policy) -> bool:
          from tools.terminal_tool_config import _tenv
          _ensure_terminal_env_bridged()
          backend = _tenv("TERMINAL_ENV", "local")
 -    return str(backend or "local").strip().lower() == "local"
 +    return str(backend or "local").strip().lower()
++
++
++def _local_backend(policy) -> bool:
++    return _backend(policy) == "local"
 +
 +
 +def _ssh_binding(policy):
@@ -9862,7 +9857,7 @@ index 61f7ef09a..b6d6394f5 100644
 
 
  def _routing_entry(runner, session_key):
-@@ -51,21 +57,56 @@ def _routing_entry(runner, session_key):
+@@ -51,21 +61,56 @@ def _routing_entry(runner, session_key):
  _record_owner: dict[str, object] = {}
 
 
@@ -9923,7 +9918,7 @@ index 61f7ef09a..b6d6394f5 100644
              record_session_cwd(session_key, saved)
      return token
 
-@@ -73,16 +114,22 @@ def restore_turn_cwd(runner, session_key: str | None, policy) -> object | None:
+@@ -73,16 +118,22 @@ def restore_turn_cwd(runner, session_key: str | None, policy) -> object | None:
  def persist_turn_cwd(runner, session_key: str | None, token: object | None) -> None:
      """Write the chat's recorded cwd onto its routing entry when it changed. Only onto the entry the
      turn started on: a ``/new`` during the turn published a fresh one, which starts in ``terminal.cwd``."""
@@ -9950,7 +9945,7 @@ index 61f7ef09a..b6d6394f5 100644
      except Exception as exc:  # health: allow BLE001 -- runs in the turn's finally: a failed save must not fail the finished turn
          logger.warning("Could not save the terminal cwd of %s: %s", session_key, exc)
 
-@@ -91,9 +138,11 @@ def forget_turn_cwd(runner, session_key: str) -> None:
+@@ -91,9 +142,11 @@ def forget_turn_cwd(runner, session_key: str) -> None:
      """Drop the chat's saved cwd along with its record (a workspace move): the next turn must start in
      the new binding's directory, not restore the old one."""
      entry = _routing_entry(runner, session_key)
@@ -15086,7 +15081,7 @@ index 054fa7734..7183ea242 100644
          await ws.close(code=_CLOSE_DESKTOP_GONE, reason="Bot Desktop is not running")
          return
 diff --git a/hermes_cli/web_routers/files.py b/hermes_cli/web_routers/files.py
-index 08df7512c..aa41e3db5 100644
+index 08df7512c..cd54a9e62 100644
 --- a/hermes_cli/web_routers/files.py
 +++ b/hermes_cli/web_routers/files.py
 @@ -12,6 +12,7 @@ import hashlib
@@ -15201,7 +15196,7 @@ index 08df7512c..aa41e3db5 100644
              return remote_media_response(request, backend, target, size, _fs_mime_type(Path(target)))
          if session_id is not None or path.lower().startswith("file:"):
              path = str(await _fs_download_path(path, profile, session_id, session=session))
-@@ -1145,14 +1191,44 @@ def _fs_list_entries(target: Path) -> list[dict[str, Any]]:
+@@ -1145,14 +1191,42 @@ def _fs_list_entries(target: Path) -> list[dict[str, Any]]:
      return entries
 
 
@@ -15217,11 +15212,9 @@ index 08df7512c..aa41e3db5 100644
 +        return None
 +    with _config_profile_scope(profile):
 +        access = profile_project_access()
-+        if access is None:
-+            return None
-+        roots, terminal = access
-+        if not roots:
++        if not access or not access[0]:
 +            raise SshWorkspaceFsError("ECONN", "The managed SSH workspace settings are unavailable.")
++        roots, terminal = access
 +        return managed_project_connection(terminal, str(get_hermes_home())), roots
 +
 +
@@ -15252,7 +15245,7 @@ index 08df7512c..aa41e3db5 100644
          # Entry paths are the SSH host's own: hide its credential stores as the local scan does.
          listing["entries"] = [e for e in listing["entries"] if not _is_sensitive_path(PurePosixPath(e["path"]))]
          return listing
-@@ -1168,19 +1244,39 @@ async def fs_list(path: str, request: Request, profile: Optional[str] = None):
+@@ -1168,19 +1242,39 @@ async def fs_list(path: str, request: Request, profile: Optional[str] = None):
          return {"entries": [], "error": getattr(exc, "strerror", None) or "read-error"}
 
 
@@ -15294,7 +15287,7 @@ index 08df7512c..aa41e3db5 100644
                  max_bytes=_FS_TEXT_SOURCE_MAX_BYTES,
                  read_limit=_FS_TEXT_PREVIEW_MAX_BYTES,
              )
-@@ -1245,25 +1341,29 @@ async def fs_write_text(payload: FsWriteText, profile: Optional[str] = None):
+@@ -1245,25 +1339,29 @@ async def fs_write_text(payload: FsWriteText, profile: Optional[str] = None):
          raise HTTPException(status_code=403, detail="Access to sensitive files is not allowed")
      session = await _fs_owned_session(payload.session_id, profile)
      # Save where read-text read: a staged paste or pick on this host, all else on the SSH machine.
@@ -15334,7 +15327,7 @@ index 08df7512c..aa41e3db5 100644
          except Exception as exc:
              _raise_fs_backend_error(exc)
          return {"ok": True, "path": target, "byteSize": byte_size}
-@@ -1365,11 +1465,11 @@ async def fs_read_data_url(
+@@ -1365,11 +1463,11 @@ async def fs_read_data_url(
  ):
      from hermes_cli.web_server import _FS_DATA_URL_MAX_BYTES
      session = await _fs_owned_session(session_id, profile)
@@ -15348,7 +15341,7 @@ index 08df7512c..aa41e3db5 100644
              )
          except Exception as exc:
              _raise_fs_backend_error(exc)
-@@ -1409,14 +1509,17 @@ def _if_none_match(request: Request) -> set[str]:
+@@ -1409,14 +1507,17 @@ def _if_none_match(request: Request) -> set[str]:
      return {tag.strip().removeprefix("W/") for tag in request.headers.get("if-none-match", "").split(",")}
 
 
@@ -15367,7 +15360,7 @@ index 08df7512c..aa41e3db5 100644
      # SSH inspect_file realpaths symlinks; guard the requested name too, so
      # ~/.ssh -> ~/keys cannot make a requested ~/.ssh/id_ed25519 readable.
      # Judge the spelling inspect_file resolved too: normalize strips whitespace and joins a relative path to the cwd.
-@@ -1426,46 +1529,51 @@ def _remote_download_target(backend, path: str) -> tuple[str, int]:
+@@ -1426,46 +1527,51 @@ def _remote_download_target(backend, path: str) -> tuple[str, int]:
      return target, size
 
 
@@ -15430,7 +15423,7 @@ index 08df7512c..aa41e3db5 100644
 
 
  def _remote_download_response(request: Optional[Request], backend, target: str, size: int) -> Response:
-@@ -1487,7 +1595,7 @@ async def _fs_download_authority(
+@@ -1487,7 +1593,7 @@ async def _fs_download_authority(
      profile's SSH workspace when it has one, else on this host under the same read rules."""
      from hermes_constants import named_profile_home
 
@@ -15439,7 +15432,7 @@ index 08df7512c..aa41e3db5 100644
      if remote is not None:
          return remote
      local = await _fs_download_path(path, profile, session_id, session=session)
-@@ -1507,12 +1615,12 @@ async def _fs_download_authority(
+@@ -1507,12 +1613,12 @@ async def _fs_download_authority(
 
 
  async def _ticketed_fs_download(
@@ -15455,7 +15448,7 @@ index 08df7512c..aa41e3db5 100644
 
      from hermes_cli.web_server_file_response import OpenedFileResponse
 
-@@ -1540,10 +1648,10 @@ async def fs_download(
+@@ -1540,10 +1646,10 @@ async def fs_download(
      session = await _fs_owned_session(session_id, profile)
      authority = getattr(getattr(request, "state", None), "file_ticket_authority", None)
      if authority is not None:
@@ -15469,7 +15462,7 @@ index 08df7512c..aa41e3db5 100644
          return _remote_download_response(request, backend, target, size)
      target = await _fs_download_path(path, profile, session_id, session=session)
      await asyncio.to_thread(_hosted_fs_read_guard, target, request)
-@@ -1557,8 +1665,45 @@ async def fs_download(
+@@ -1557,8 +1663,45 @@ async def fs_download(
      )
 
 
@@ -15515,7 +15508,7 @@ index 08df7512c..aa41e3db5 100644
      backend = await asyncio.to_thread(_fs_backend, profile)
      if backend is not None:
          try:
-@@ -1576,6 +1721,8 @@ async def fs_git_root(path: str, profile: Optional[str] = None):
+@@ -1576,6 +1719,8 @@ async def fs_git_root(path: str, profile: Optional[str] = None):
 
  @router.get("/api/fs/default-cwd")
  async def fs_default_cwd(profile: Optional[str] = None):
@@ -23407,7 +23400,7 @@ index 000000000..dfe7dd5ca
 +    except (KeyError, TypeError, ValueError):
 +        return WriteResult(error="Could not verify the SSH write. Inspect the file before retrying.")
 diff --git a/tools/file_tools.py b/tools/file_tools.py
-index 7982b09f0..34933a071 100644
+index 7982b09f0..b730b8e83 100644
 --- a/tools/file_tools.py
 +++ b/tools/file_tools.py
 @@ -8,6 +8,7 @@ staleness state).
@@ -23459,20 +23452,22 @@ index 7982b09f0..34933a071 100644
 
 -def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task_id: str) -> str | None:
 +def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task_id: str,
-+                             file_ops: ShellFileOperations, *, ssh_state: SSHPathState | None = None,
++                             file_ops: ShellFileOperations | None = None, *, ssh_state: SSHPathState | None = None,
 +                             ssh_secret_file: bool = False) -> str | None:
      """Render an extractable document (.docx/.xlsx/.pdf/...) as paginated text.
 
      Returns the JSON result, a tool_error for an actionable extraction failure
-@@ -441,7 +448,6 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -441,7 +448,8 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
      wrapped, wrap_width = False, 0
      if not (archived or is_extractable_document(str(_resolved))):
          return None
 -    file_ops = _get_file_ops(task_id)
++    if file_ops is None:
++        file_ops = _get_file_ops(task_id)
      if archived and (sync_manager := getattr(getattr(file_ops, "env", None), "_sync_manager", None)) is not None:
          # A file-synced sandbox gets new cache files on its next (rate-limited) sync; an archive written since
          # must be there before this read, or the model is told it expired.
-@@ -449,11 +455,21 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -449,11 +457,21 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
              sync_manager.sync(force=True)
          except Exception:  # health: allow BLE001 -- a failed push leaves the read to report what the sandbox has
              logger.debug("Archive sync before read failed for %s", path, exc_info=True)
@@ -23495,7 +23490,7 @@ index 7982b09f0..34933a071 100644
          if binary.error or binary.base64_content is None:
              raise ExtractionError(binary.error or "Document bytes unavailable")
          document_bytes = base64.b64decode(binary.base64_content, validate=True)
-@@ -505,11 +521,11 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
+@@ -505,11 +523,11 @@ def _read_extracted_document(path: str, _resolved, offset: int, limit: int, task
          rendered = result_dict["content"]
          result_dict["content"] = redact_sensitive_text(
              rendered, file_read=True,
@@ -23509,7 +23504,7 @@ index 7982b09f0..34933a071 100644
              and not truncated_lines and not result_dict.get("truncated_lines")):
          # The whole document was shown, so a text-authorable format (.ipynb)
          # may later be overwritten by write_file; the binary-container guard
-@@ -556,7 +572,8 @@ def _dedup_stub_or_block(task_data: dict, dedup_key: tuple, path: str) -> str:
+@@ -556,7 +574,8 @@ def _dedup_stub_or_block(task_data: dict, dedup_key: tuple, path: str) -> str:
  def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_str: str,
                              offset: int, limit: int, dedup_key: tuple, *, partial: bool,
                              redacted: bool = False, end_line: int | None = None,
@@ -23519,7 +23514,7 @@ index 7982b09f0..34933a071 100644
      """Bookkeeping after a real (non-stub) read; returns the consecutive-read count.
 
      Per-task tracker under the lock (stub counter, history, consecutive count,
-@@ -569,14 +586,22 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
+@@ -569,14 +588,22 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
      background-review read-mark (a FULL read of a skill file counts like
      skill_view so a follow-up skill_manage(patch) is accepted).
      """
@@ -23546,7 +23541,7 @@ index 7982b09f0..34933a071 100644
                  _mtime_now = os.path.getmtime(resolved_str)
                  task_data.setdefault("read_timestamps", {})[resolved_str] = _mtime_now
          except OSError:
-@@ -586,23 +611,25 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
+@@ -586,23 +613,25 @@ def _record_successful_read(task_data: dict, task_id: str, path: str, resolved_s
              dedup[dedup_key] = version_before
              # A narrower view does not undo knowledge of these same bytes. Do
              # not revive a baseline after a partial read of a different version.
@@ -23577,7 +23572,7 @@ index 7982b09f0..34933a071 100644
      try:
          file_state.record_read(task_id, resolved_str, partial=not complete)
      except Exception:
-@@ -635,6 +662,28 @@ def _read_device_base(path: str, task_id: str) -> tuple[Path | PurePosixPath | N
+@@ -635,6 +664,28 @@ def _read_device_base(path: str, task_id: str) -> tuple[Path | PurePosixPath | N
          return None, True
 
 
@@ -23606,7 +23601,7 @@ index 7982b09f0..34933a071 100644
  def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, task_id: str = "default") -> str:
      """Read a file with pagination and line numbers.
 
-@@ -654,17 +703,28 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -654,17 +705,28 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          if nt_err:
              return tool_error(nt_err)
          path = _hosted_tilde(path, task_id)  # a hosted read sends the path as given: ``~`` is the sandbox's home
@@ -23643,7 +23638,7 @@ index 7982b09f0..34933a071 100644
              kind = _special_file_kind(_resolved)
              if kind is not None:
                  return json.dumps({
-@@ -679,11 +739,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -679,11 +741,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          # credential stores). Runs BEFORE document extraction so a
          # protected SQLite store (state.db) cannot be read through the extractor. Pass the RESOLVED path: the denylist's own
          # resolve() uses the process cwd and would miss a relative "auth.json".
@@ -23660,7 +23655,7 @@ index 7982b09f0..34933a071 100644
          if extracted is not None:
              return extracted
 
-@@ -695,23 +758,42 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -695,23 +760,42 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
                  "Use vision_analyze for images, or terminal to inspect binary files.")
 
          resolved_str = str(_resolved)
@@ -23708,7 +23703,7 @@ index 7982b09f0..34933a071 100644
          result_dict = result.to_dict()
 
          # Failed reads cannot establish whole-file knowledge.
-@@ -719,9 +801,11 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -719,9 +803,11 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          if isinstance(_err, str) and _err.startswith("File not found:"):
              from tools.tool_result_storage import expired_archive_fields
              result_dict.update(expired_archive_fields(path))
@@ -23721,7 +23716,7 @@ index 7982b09f0..34933a071 100644
 
          # Char budget on the FORMATTED content (what enters context), BEFORE
          # redaction (skip the regex pass on huge content); truncate gracefully
-@@ -735,8 +819,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -735,8 +821,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
          redacted = False
          if result.content:
              unredacted = result.content
@@ -23732,7 +23727,7 @@ index 7982b09f0..34933a071 100644
              redacted = result.content != unredacted
              result_dict["content"] = result.content
 
-@@ -762,12 +846,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
+@@ -762,12 +848,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT,
              end_line = offset + limit - 1
              if isinstance(total_lines, int) and total_lines > 0:
                  end_line = min(end_line, total_lines)
@@ -23749,7 +23744,7 @@ index 7982b09f0..34933a071 100644
          if count >= 4:
              return tool_error(
                  f"BLOCKED: You have read this exact file region {count} times in a row. "
-@@ -898,6 +985,15 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
+@@ -898,6 +987,15 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
      (unadvertised in the schema; the mirror rejection error teaches it — the
      cross-PROFILE guard it was named for no longer exists).
      """
@@ -23765,7 +23760,7 @@ index 7982b09f0..34933a071 100644
      # write_file checks the binary-document guard before the mirror guard.
      err = (_check_sensitive_path(path, task_id)
             or _check_binary_document_write(path, task_id)
-@@ -985,6 +1081,25 @@ def _collect_v4a_header_paths(patch: str) -> tuple[list[str], list[str], list[st
+@@ -985,6 +1083,25 @@ def _collect_v4a_header_paths(patch: str) -> tuple[list[str], list[str], list[st
      return paths, content_paths, entry_paths
 
 
@@ -23791,7 +23786,7 @@ index 7982b09f0..34933a071 100644
  def patch_tool(mode: str = "replace", path: str | None = None, old_string: str | None = None,
                 new_string: str | None = None, replace_all: bool = False, patch: str | None = None,
                 task_id: str = "default", cross_profile: bool = False,
-@@ -994,6 +1109,9 @@ def patch_tool(mode: str = "replace", path: str | None = None, old_string: str |
+@@ -994,6 +1111,9 @@ def patch_tool(mode: str = "replace", path: str | None = None, old_string: str |
      ``cross_profile``: same semantics as ``write_file``'s flag (mirror-guard
      bypass only; unadvertised).
      """
@@ -23801,7 +23796,7 @@ index 7982b09f0..34933a071 100644
      _paths_to_check = [path] if path else []
      _content_write_paths = list(_paths_to_check)
      _entry_paths: list[str] = []
-@@ -1090,7 +1208,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+@@ -1090,7 +1210,8 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
 
          # Pagination args (and order) are part of the key so paging through truncated
          # results doesn't trip the repeated-search guard.
@@ -23811,7 +23806,7 @@ index 7982b09f0..34933a071 100644
          with _read_tracker_lock:
              task_data = _read_tracker.setdefault(task_id, {
                  "last_key": None, "consecutive": 0, "read_history": set()})
-@@ -1111,6 +1230,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
+@@ -1111,6 +1232,18 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
          if nt_err:
              return tool_error(nt_err)
          path = _hosted_tilde(path, task_id)

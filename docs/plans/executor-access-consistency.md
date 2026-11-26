@@ -783,8 +783,36 @@ nested skill names, one inline helper run as `runner`, and refusal to register
 project-requested profile credentials. These are Docker Desktop ARM64 probes.
 
 The follow-up release replay is `c11f741446c39f3a18012463ade8fae8edf728f2`.
-The focused Python suite passed 372 tests with eight Windows skips. The full
-upstream test run and the final cross-engine lifecycle runs are in progress.
+The focused Python suite passed 372 tests with eight Windows skips.
+
+The full upstream Python suite (`scripts/run_tests.sh`, 8,503 files, 92,013
+passed, 235 failed, 409 errors, 1,203 skipped) completed on `07db65a34` in
+`private-hermes-executor-access-native-tests:local`. Triage separated
+container-environment artifacts (missing `uv`/`node`/`pnpm`, Docker detection,
+`--network none`, writable `/workspace`, and mode checks) and pre-existing
+v0.23.3 PR1/PR3/PR6 test-double mismatches (already fixed on the `88a1c1f4b`
+submission branches) from nine concrete regressions in the executor-access
+work, including a fail-open fallback in `_managed_project_backend` when
+`profile_project_access()` returned `None`.
+
+Release replay `8b265aed9818d721bda756fa236d0b341fc1ab2d` fixes all nine
+regressions: restores `_local_backend`, keeps `managed_turn_text`'s
+three-argument signature using `row["session_id"]`, defaults `file_ops` in
+`_read_extracted_document`, catches `(OSError, RuntimeError)` in
+`_start_heartbeat_thread`, fails closed in `_managed_project_backend`, updates
+`test_web_server_fs_write_guard.py`, updates the `shell.cancel` contract,
+subprocess env guard, and runtime-resolution allowlists, and regenerates the
+serve-handler ledger. All nine affected test files passed in Docker (100
+passed, 2 Windows skips, 0 failed). The matching fixes landed on native PR2a
+`fix/ssh-workspace` (`73a53241def871e21e758dfc8abc448c6b848b7f`, 15/15 passed),
+PR4b `feat/webapp-executor-terminals`
+(`7229d440e3e7e706c3eec457e9ab5974bbb7113e`, 14/14 passed), and
+`feat/ssh-project-workspaces` (`5ca732033a76368274e41e97cb2936342416cc52`).
+The regenerated 317-path candidate patch SHA-256 is
+`fdc5a134e0aee61e23b26b8844a899a3282e5731a6a6938daae41e4c2eb5b88b`, and the
+full downstream patch series (`0001`–`0011`) applies cleanly to `caafe5389`.
+The final cross-engine lifecycle runs, remaining native submission topics, and
+final combined review remain open.
 
 Independent reviews traced the integrated workspace, file, delegation, skills,
 cron, Git, and media paths. Follow-up changes bind picker listings to applied
