@@ -1,0 +1,3 @@
+# Enforce LF line endings for all text files copied into Linux containers
+# (patches, shell scripts, and configs), even when core.autocrlf=true.
+* text=auto eol=lf
