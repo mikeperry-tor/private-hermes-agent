@@ -813,8 +813,41 @@ PR4b `feat/webapp-executor-terminals`
 The regenerated 317-path candidate patch SHA-256 is
 `765da9284355c286e5552732294b77648eb5a51fbe701671fba907eb6c02e24e`, and the
 full downstream patch series (`0001`–`0011`) applies cleanly to `caafe5389`.
-The final cross-engine lifecycle runs, remaining native submission topics, and
-final combined review remain open.
+
+Live cross-engine qualification on `debvml` (Debian 13 ARM64 ext4) caught two
+legacy-session gaps once the placeholder `/workspace` directory was removed
+from the Hermes image: `adopt_legacy_session` (`gateway/session_local_migration.py`)
+called `build_policy` without `executor_project`, and `_stored_terminal`
+(`hermes_cli/web_routers/session_files.py`) rejected pre-authority sessions
+without a canonical binding receipt. Release replay
+`1d3dec980055f3bbffaa15e5eabf7a998520d962` (66 commits from `caafe5389`,
+318-path candidate patch SHA-256
+`8e9ca5672881552e11f8c546c23ddfcfed7ae5ce7bc956faba77f82c03973e53`, wrapper
+`d018d29`) fixes both while keeping strict applied-root and SSH executor
+enforcement. With `d018d29`:
+- macOS Docker Desktop 29.9.3 passed `make check` (242 tests) and
+  `make hermes-ui-test` (TypeScript + 285 Vitest renderer tests across 16
+  files). Full local stack suites were not run on Docker Desktop to avoid
+  disturbing the operator's running stack on the fixed subnets.
+- Debian ARM64 native Docker 29.10.0 (`debvml`, Docker Compose 5.7.1) passed
+  `make check`, `make test`, `make webapp-test` (all 4 content modes across
+  Chromium, Firefox, and WebKit, Code and Agent terminals, model terminal
+  reads, Agent-to-chat sharing, legacy session adoption, and legacy local
+  executor media), and `tests/project_mount_lifecycle.py --prior-ref a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`
+  (lean executor).
+- Debian ARM64 rootless Podman 5.4.2 (`debvml`, Docker Compose 5.7.1) passed
+  `CONTAINER_ENGINE=podman make test`, `CONTAINER_ENGINE=podman make webapp-test`,
+  and `CONTAINER_ENGINE=podman tests/project_mount_lifecycle.py --prior-ref a6a6f642a2a02c9e28f9d660839bd3c869ae6e9e`
+  (lean executor).
+- An isolated Docker probe against the rebuilt `d018d29` images verified
+  `/init` over SSH (ignoring Hermes-local `AGENTS.md` and refusing SSH outage),
+  named-profile legacy absolute and `~/` cron script diagnostics, migrated
+  named-profile script execution as `runner` in the executor workdir, and cron
+  artifact delivery fetching executor bytes while refusing Hermes-only files.
+
+The remaining native submission topics (`feat/ssh-project-workspaces` Phase 2,
+`feat/ssh-skill-shell`, `feat/ssh-cron-execution`), submission draft updates,
+and final combined review remain open.
 
 Independent reviews traced the integrated workspace, file, delegation, skills,
 cron, Git, and media paths. Follow-up changes bind picker listings to applied

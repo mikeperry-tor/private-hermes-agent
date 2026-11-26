@@ -182,8 +182,9 @@ for chat, editor, and Code terminal checks. With `--skip-browser`, the test
 skips those checks and still exercises chat through `make chat`. Pass `--prior-ref <local-git-revision>` to populate the
 disposable checkout using an older wrapper before testing the in-place
 upgrade. The scratch checkout uses the committed source at `HEAD` for the
-new wrapper. The recorded upgrade fixture covers the lean image on Docker
-Desktop from `5131b69`.
+new wrapper. The recorded upgrade fixtures cover the lean image on Docker
+Desktop from `5131b69` and on ARM64 Debian 13 (native Docker 29.10.0 and
+rootless Podman 5.4.2, ext4 with POSIX ACLs) from `a6a6f642` to `d018d29`.
 
 ### Handling shared-namespace interruptions in tests
 
