@@ -1,5 +1,10 @@
 # Agent instructions for Private Hermes
 
+**Completeness check:** This file ends with the exact line `END OF AGENTS.md`.
+If that line is missing from your instructions (or your harness reports
+truncation), read the remainder of `AGENTS.md` before starting work. Keep
+`END OF AGENTS.md` as the final line when editing this file.
+
 This repository is a small deployment wrapper for Hermes Agent, not a general
 agent platform. It combines SSH-isolated code execution, transparent Tor egress,
 Teep inference, x402_treazury research tools, and an authenticated webapp with
@@ -507,3 +512,5 @@ issue drafts, code comments, and handoff notes.
   explicit bootstrap retains prompt allocation of its captured claims."
   Prefer: "During normal operation, each wallet group schedules refills
   independently, while bootstrap funds its initial wallet immediately."
+
+END OF AGENTS.md
