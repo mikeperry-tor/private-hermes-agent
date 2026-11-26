@@ -46,6 +46,11 @@ A complete plan states:
 - **Gaps and authority limits:** Missing coverage, unresolved decisions, and
   any live network exposure, financial action, or destructive step outside
   current task authorization.
+- **Resumable agent handoff:** Every plan must be resumable by a fresh
+  independent agent without prior conversation history. Include an
+  `## Agent handoff protocol` section with a `### Execution checkpoints`
+  subsection near the top of the plan (see
+  [Agent handoff and progress updates](#agent-handoff-and-progress-updates)).
 
 Check active and deferred plans under `docs/plans/` for shared-interface
 conflicts and reconcile them so superseded names, topologies, or tools are not
@@ -58,6 +63,61 @@ compatibility frameworks.
 Obtain independent design review before substantive implementation, resolve
 material findings before building on them, and commit material plan revisions
 before re-reviewing when design changes invalidate earlier conclusions.
+
+## Agent handoff and progress updates
+
+Assume any execution turn can stop mid-plan (for example, due to usage limits
+or switching agents). Structure every plan so an incoming agent can determine
+the exact state from Git and the plan file alone, without scraping prior
+transcripts or redoing finished work.
+
+### Required handoff structure
+
+Place `## Agent handoff protocol` directly after the opening objective and
+status block, using two standard parts:
+
+1. **Resume steps (under `## Agent handoff protocol`):**
+   - List the exact read-only commands an incoming agent runs first to reconcile
+     the checkout with the plan (for example, `git status`, `git log`, or branch
+     ref listings for multi-repo work).
+   - State the rule for skipping items already marked `Done` whose recorded
+     commits and evidence logs match the checkout.
+   - Reference or inline the self-contained build, test, and container commands
+     so the incoming agent does not rediscover flags, images, or paths.
+2. **Checkpoint table (under `### Execution checkpoints`):**
+   - Maintain one canonical Markdown table covering every phase or major work
+     item in execution order. Include columns for `Phase or item`, `Target`,
+     `Commit or ref`, `Validation`, `Review`, and `Status` (plans that track
+     extra per-item artifacts, such as submission drafts or target bases, may
+     add concise columns while keeping these core fields).
+   - Restrict `Status` to four values: `Pending`, `In progress`, `Blocked`, or
+     `Done`. Never mark an item `Done` until its required checks and review
+     gates have passed. When an item is `Blocked`, keep `Status` set to
+     `Blocked` and record the one-line blocker under
+     `#### Open findings and next action`.
+   - Include a short `#### Open findings and next action` bullet list directly
+     below the table whenever active blockers, unresolved review findings, or a
+     mid-phase next step exist.
+
+### Updating progress in place
+
+Keep plan updates uniform across agents so plans do not accumulate ad-hoc
+diaries or noisy commit churn:
+
+- **Edit checkpoints in place:** Update the matching row in
+  `### Execution checkpoints` with the new commit SHA, validation outcome,
+  review status, and `Status` value instead of appending dated status
+  paragraphs, chronological prose logs, or per-command narratives to the plan.
+- **Prune resolved items:** Remove fixed blockers, resolved review findings,
+  and superseded next actions from `#### Open findings and next action` once
+  verified, rather than crossing them out or keeping a running diary.
+- **Keep raw evidence out of Git:** Store verbose test logs, probe transcripts,
+  and diagnostic outputs in ignored local directories, and record only a brief
+  outcome summary and log path in the checkpoint row.
+- **Batch checkpoint commits:** Include checkpoint updates in the phase or
+  milestone commit rather than making standalone progress-only commits after
+  small edits. Commit a standalone checkpoint update only when pausing
+  mid-phase so the next agent inherits committed progress.
 
 ## Independent review
 
@@ -112,11 +172,13 @@ Validate behavior with focused tests and controlled fixtures:
   that share fixed networks or runtime state, and avoid arbitrary resource
   limits or work deadlines.
 
-Record phase results, review findings, dispositions, and open work inside the
-plan, keeping raw logs and private reports out of Git. Update maintained guides
-in place with current contracts, qualification status, and limits; never append
-phase or gate codes, approval logs, or dated investigation narratives to them.
-A retained plan is never a substitute for operator or maintained documentation.
+Update `### Execution checkpoints` and `#### Open findings and next action` in
+place with phase results, review dispositions, and remaining work (see
+[Updating progress in place](#updating-progress-in-place)), keeping raw logs
+and private reports out of Git. Update maintained guides in place with current
+contracts, qualification status, and limits; never append phase or gate codes,
+approval logs, or dated investigation narratives to them. A retained plan is
+never a substitute for operator or maintained documentation.
 
 ## Resolve findings and finish
 

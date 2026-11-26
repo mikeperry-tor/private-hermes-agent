@@ -45,34 +45,44 @@ identity `Mike Perry <mikeperry-git@untrusted.systems>`.
 If an agent stops mid-plan (for example, due to usage limits), the next agent
 must:
 
-1. Read the [Execution checkpoint](#execution-checkpoint) table below and run
+1. Read the [Execution checkpoints](#execution-checkpoints) table below and run
    `git -C upstream_work/hermes-agent for-each-ref --format='%(refname:short) %(objectname:short) %(subject)' refs/heads/fix/ refs/heads/feat/`
    along with `ls upstream_work/submissions/`.
 2. Never redo branches already marked `Done` with matching SHAs and saved logs
-   under `upstream_work/wave-rebase-evidence/`.
-3. Update the checkpoint table and commit the plan update in the wrapper repo at
-   the end of each completed phase (or after completing a major Wave 3 branch) so
-   progress is persisted in Git before moving on.
+   under `upstream_work/wave-rebase-evidence/`. Use the self-contained commands
+   in [Docker verification recipes](#3-docker-verification-recipes) for all
+   `scripts/check`, Python, OpenRPC, Desktop, and TUI checks.
+3. Update the checkpoint table in place (do not append dated progress
+   narratives), prune resolved bullets from
+   `#### Open findings and next action`, and commit the plan update with each
+   completed phase or major Wave 3 branch (or as a single handoff commit when
+   pausing mid-phase) so progress is persisted in Git before moving on.
 
-### Execution checkpoint
+### Execution checkpoints
 
-Update this table as each phase and branch completes.
+Update this table in place as each phase and branch completes.
 
-| Phase or item | Target branch | Target base | Current SHA | `scripts/check` | Docker tests | Draft renamed | Status |
+| Phase or item | Target branch | Target base | Commit or ref | Validation (`scripts/check` and Docker tests) | Draft renamed | Review | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Phase 0: Pre-flight and fetch `origin/main` | `origin/main` | `origin/main` | `88a1c1f4b` (stale; remote `02afb7489` or newer) | n/a | n/a | n/a | Pending |
-| `W1-1` Managed config | `fix/managed-config` | `MAIN_SHA` | `d4aa66920` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W1-2` SSH workspace fixes | `fix/ssh-workspace` | `MAIN_SHA` | `73a53241d` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W1-3` Desktop and browser fixes | `fix/executor-desktop-browser` | `MAIN_SHA` | `1f2eefc51` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W1-4` Literal SSH and OSC 7 `cwd` | `fix/terminal-ssh-cwd` | `MAIN_SHA` | `868773aa8` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W1-5` Speech output placement | `fix/tts-output-placement` | `MAIN_SHA` | `ecae8682a` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W2-1` Explicit SSH client config | `feat/ssh-client-config` | `W1-1` | `db7587772` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W2-2` URL reference opt-out | `feat/url-reference-fetching` | `W1-1` | `c3a6b8a0b` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W2-3` Managed tool denials | `feat/managed-tool-denials` | `W1-1` | `14e980021` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W3-1` Executor desktop and browser | `feat/executor-desktop-placement` | `W2-1` and `W1-3` | `24a750de0` (on `88a1c1f4b`) | Pending rebase | Pending rebase | Pending | Pending |
-| `W3-2` Operator shells and terminals | `feat/webapp-executor-terminals` | `W1-1` and `W1-4` | `7ae5fd82c` (on `88a1c1f4b`) | Failing (1 ruff, 11 health) | Pending rebase | Pending | Pending |
-| `W3-3` Managed SSH isolation (workspaces, skills, and cron) | `feat/ssh-executor-isolation` (consolidating `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `W1-1`, `W1-2`, and `W2-1` | `39cdc0ce2`, `0c67369ef`, and `c73e521b8` | Pending split and rebase | Pending rebase | Pending | Pending |
-| Phase 4: Combined native replay, docs, and review | Temporary merge of `W1-1` through `W3-3` | `MAIN_SHA` | Pending | Pending | Pending | n/a | Pending |
+| `W1-1` Managed config | `fix/managed-config` | `MAIN_SHA` | `d4aa66920` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-2` SSH workspace fixes | `fix/ssh-workspace` | `MAIN_SHA` | `73a53241d` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-3` Desktop and browser fixes | `fix/executor-desktop-browser` | `MAIN_SHA` | `1f2eefc51` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-4` Literal SSH and OSC 7 `cwd` | `fix/terminal-ssh-cwd` | `MAIN_SHA` | `868773aa8` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-5` Speech output placement | `fix/tts-output-placement` | `MAIN_SHA` | `ecae8682a` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W2-1` Explicit SSH client config | `feat/ssh-client-config` | `W1-1` | `db7587772` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W2-2` URL reference opt-out | `feat/url-reference-fetching` | `W1-1` | `c3a6b8a0b` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W2-3` Managed tool denials | `feat/managed-tool-denials` | `W1-1` | `14e980021` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W3-1` Executor desktop and browser | `feat/executor-desktop-placement` | `W2-1` and `W1-3` | `24a750de0` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W3-2` Operator shells and terminals | `feat/webapp-executor-terminals` | `W1-1` and `W1-4` | `7ae5fd82c` (on `88a1c1f4b`) | Failing (1 ruff, 11 health); pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W3-3` Managed SSH isolation (workspaces, skills, and cron) | `feat/ssh-executor-isolation` (consolidating `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `W1-1`, `W1-2`, and `W2-1` | `39cdc0ce2`, `0c67369ef`, and `c73e521b8` | Pending split and rebase | Pending | Combined in Phase 4 | Pending |
+| Phase 4: Combined native replay, docs, and review | Temporary merge of `W1-1` through `W3-3` | `MAIN_SHA` | Pending | Pending | n/a | Pending | Pending |
+
+#### Open findings and next action
+
+- Next action: start Phase 0 (create `backup/88a1c1f4b/*` refs, fetch latest
+  `origin/main`, prune stale worktrees, and discard leftover WIP in
+  `upstream_work/worktrees/combined-replay`).
 
 ## 1. Branches to submit
 
@@ -291,7 +301,7 @@ tests.
    push command (or push `backup/88a1c1f4b/*` refs) in the handoff note.
 3. **Fetch latest `origin/main`:** Run `git -C upstream_work/hermes-agent fetch origin main`
    and record the exact 40-character `MAIN_SHA` and commit date in the
-   [Execution checkpoint](#execution-checkpoint) table.
+   [Execution checkpoints](#execution-checkpoints) table.
 4. **Worktree hygiene:**
    - Run `git -C upstream_work/hermes-agent worktree prune` to clear the 13
      stale prunable `/private/tmp` and `/private/var/folders` entries.
