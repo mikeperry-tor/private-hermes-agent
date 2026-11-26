@@ -7,6 +7,8 @@ from tempfile import NamedTemporaryFile
 
 SSH_CONFIG = "/etc/ssh/ssh_config.d/99-private-hermes.conf"
 MODES = {"code": "executor", "agent": "gateway"}
+# Keep JSON valid in the YAML reader, including paths outside the BMP.
+YAML_ESCAPES = {ord(char): f"\\u{ord(char):04x}" for char in "\u2028\u2029\ufffe\uffff"}
 
 
 def policy(env):
@@ -38,6 +40,7 @@ def policy(env):
         "terminal": terminal,
         "webapp": {"terminal_environment": MODES[mode], "executor_ssh_config": SSH_CONFIG},
         "context_references": {"fetch_urls": False},
+        "cron": {"ssh_scripts_base": "/workspace/cron"},
         "tools": {"disabled": disabled},
         "bot_desktop": {"executor_only": True},
         "computer_use": {"backend": "cua", "permission_mode": "standard"},
@@ -54,6 +57,9 @@ def policy(env):
         dotenv[name] = dotenv[name.lower()] = ""
     dotenv.update({f"TERMINAL_{key.upper()}": value for key, value in terminal.items()
                    if key != "backend"})
+    roots = env.get("PRIVATE_HERMES_EXECUTOR_ROOTS")
+    if roots:
+        terminal["ssh_workspace_roots"] = json.loads(roots)
     return config, dotenv
 
 
@@ -75,7 +81,8 @@ def main():
     directory = Path("/etc/hermes")
     config, dotenv = policy(os.environ)
     directory.mkdir(mode=0o755, exist_ok=True)
-    publish(directory / "config.yaml", json.dumps(config, indent=2) + "\n")
+    config_text = json.dumps(config, indent=2, ensure_ascii=False).translate(YAML_ESCAPES)
+    publish(directory / "config.yaml", config_text + "\n")
     publish(directory / ".env", "".join(f"{key}={json.dumps(value)}\n" for key, value in dotenv.items()))
 
 

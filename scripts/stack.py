@@ -2,17 +2,24 @@
 """Apply validated deployment settings; Funnel is never enabled implicitly."""
 import argparse
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
+import shlex
 import subprocess
 import sys
 from deployment import (ROOT, check_bind_sources, check_engine, compose, compose_base, compose_files,
                         engine, engine_command, inspect_launch, maintenance_command, maintenance_compose, prepare_launch,
-                        remove_networks, render, settings, split_passthrough)
+                        parse_launch, remove_networks, render, settings, split_passthrough)
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config, report_research_config_diff
 from project_mounts import (PROJECTS, SETTING, bind_sources, check_project_model, engine_views, parse_mounts,
-                            project_override, source_ids, validate_sources)
+                            overlaps, project_override, source_ids, valid_destination, validate_sources)
+
+
+EXECUTOR_ROOTS = 'PRIVATE_HERMES_EXECUTOR_ROOTS'
+CHAT_SETTINGS = ('WEBAPP_TERMINAL_ENVIRONMENT', 'WEBAPP_EXTERNAL_CONTENT', 'COMPUTER_USE_ENABLED')
+RECOVERY = 'Close open chats and run make down, then make up.'
 
 
 def run(command, **kwargs):
@@ -57,18 +64,96 @@ def stop_funnel(all_command):
 def require_same_project_mounts(command, mounts):
     expected = {str(target): str(source) for target, source in mounts.items()}
     for executor in capture(command + ['ps', '-a', '-q', 'executor']).splitlines():
-        volumes = json.loads(capture([*engine_command(), 'inspect', '--format', '{{json .Mounts}}', executor]))
-        attached = {volume['Destination']: volume['Source'] for volume in volumes
-                    if Path(volume['Destination']).is_relative_to(PROJECTS)}
+        attached = attached_project_mounts(executor)
         if attached != expected:
             raise ValueError(f'Run make down before applying changes to {SETTING}.')
 
 
+def attached_project_mounts(executor):
+    unavailable = f'Could not verify the executor mounts. {RECOVERY}'
+    try:
+        volumes = json.loads(capture([*engine_command(), 'inspect', '--format', '{{json .Mounts}}', executor]))
+    except (subprocess.CalledProcessError, ValueError) as error:
+        raise RuntimeError(unavailable) from error
+    if not isinstance(volumes, list):
+        raise RuntimeError(unavailable)
+    attached = {}
+    workspace = False
+    for volume in volumes:
+        target = volume.get('Destination') if isinstance(volume, dict) else None
+        if not isinstance(target, str) or not target.startswith('/'):
+            raise RuntimeError(unavailable)
+        path = PurePosixPath(target)
+        if path != PurePosixPath('/workspace') and not path.is_relative_to(PROJECTS):
+            continue
+        source = volume.get('Source')
+        if volume.get('Type') != 'bind' or volume.get('RW') is not True or not isinstance(source, str) or not source.startswith('/'):
+            raise RuntimeError(unavailable)
+        if target == '/workspace' and not workspace:
+            workspace = True
+        elif not valid_destination(target) or any(overlaps(path, PurePosixPath(other)) for other in attached):
+            raise RuntimeError(unavailable)
+        else:
+            attached[target] = source
+    if not workspace:
+        raise RuntimeError(unavailable)
+    return attached
+
+
+def running_service(command, service):
+    unavailable = f'Could not identify the running {service} service. {RECOVERY}'
+    try:
+        # Compose includes one-off chats when ps receives --all or --status.
+        containers = capture(command + ['ps', '-q', service]).splitlines()
+        if len(containers) == 1:
+            container = containers[0]
+            if capture([*engine_command(), 'inspect', '--format', '{{.State.Status}}', container]) == 'running':
+                return container
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(unavailable) from error
+    raise RuntimeError(unavailable)
+
+
+def executor_roots(mounts):
+    return ['/workspace', *sorted(map(str, mounts))]
+
+
+def start_chat(chat_args=()):
+    command = maintenance_compose()
+    check_engine()
+    gateway = running_service(command, 'hermes')
+    executor = running_service(command, 'executor')
+    mounted = executor_roots(attached_project_mounts(executor))
+    unavailable = f'Could not verify the applied chat settings. {RECOVERY}'
+    try:
+        entries = json.loads(capture([*engine_command(), 'inspect', '--format', '{{json .Config.Env}}', gateway]))
+        if not isinstance(entries, list):
+            raise ValueError('container environment is not a list')
+        applied = dict(entry.split('=', 1) for entry in entries)
+        recorded = json.loads(applied[EXECUTOR_ROOTS])
+        mode, content, desktop = (applied[name] for name in CHAT_SETTINGS)
+    except (subprocess.CalledProcessError, ValueError, AttributeError, KeyError, TypeError) as error:
+        raise RuntimeError(unavailable) from error
+    if (recorded != mounted or mode not in ('code', 'agent') or desktop not in ('true', 'false')
+            or content not in ('tor_proxied', 'ask', 'off', 'browser_native')):
+        raise RuntimeError(unavailable)
+    command = ['env', *(f'{name}={applied[name]}' for name in CHAT_SETTINGS),
+               f'{EXECUTOR_ROOTS}={json.dumps(mounted)}', *command]
+    arguments = ['run', '--rm', '--no-deps', 'hermes', 'chat', *chat_args]
+    model, networked = inspect_launch(command, parse_launch(arguments))
+    if networked:
+        prepare_launch(command, model)
+    run(command + arguments)
+
+
 def main_unlocked():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=('build', 'up', 'down', 'config', 'compose'))
+    parser.add_argument('action', choices=('build', 'up', 'down', 'config', 'chat', 'compose'))
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.action == 'chat':
+        start_chat([*shlex.split(os.environ.get('PRIVATE_HERMES_CHAT_ARGS', '')), *args.arguments])
+        return
     if args.action == 'build':
         run(maintenance_compose(all_ingress=True, executor_build=True) + ['--profile', '*', 'build'])
         return
@@ -172,6 +257,10 @@ def start_stack(config, prefix, command, mounts, original_sources):
             if identity != original_sources[source]:
                 raise ValueError(f'{SETTING} source changed before creation: {source}.')
     run(command + ['up', '-d', '--wait', '--no-deps', *infrastructure])
+    executor = running_service(command, 'executor')
+    attached = attached_project_mounts(executor)
+    if attached != {str(target): str(source) for target, source in mounts.items()}:
+        raise RuntimeError(f'Executor mounts differ from the validated configuration. {RECOVERY}')
     try:
         run(command + ['exec', '-T', '--user', '65534:65534', 'tor', 'cat', '/tmp/local-grant-warnings'])
     except subprocess.CalledProcessError:
@@ -179,7 +268,8 @@ def start_stack(config, prefix, command, mounts, original_sources):
     controller = Controller(command, ROOT)
     # Setup already removed research registrations. The recreated gateway
     # reads that configuration without needing an old gateway's control RPC.
-    run(command + ['up', '-d', '--no-deps', '--force-recreate', *application])
+    run(command + ['up', '-d', '--no-deps', '--force-recreate', *application],
+        env={**os.environ, EXECUTOR_ROOTS: json.dumps(executor_roots(attached))})
     if funnel:
         run(command + ['up', '-d', '--no-deps', *funnel])
     controller.startup()
