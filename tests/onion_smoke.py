@@ -73,6 +73,7 @@ def run_suite(folder, data):
     refused = target(check=False)
     assert refused.returncode and 'invalid native format' in refused.stderr, refused.stderr
     guarded = subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none',
+        '--sysctl', 'net.ipv4.ip_forward=0',
         '--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE', '-e', 'TOR_ONION_ENABLED=true',
         '-v', f'{data / "tor"}:/var/lib/tor', '--entrypoint', 'python3',
         'private-hermes-network:local', '/opt/network.py', 'router'], text=True, capture_output=True)

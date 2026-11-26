@@ -1,4 +1,4 @@
-# Exact minimal closure from Hermes caafe5389 uv.lock; install with --no-deps.
+# Exact minimal closure from Hermes 8fc037444 (v0.23.4) uv.lock; install with --no-deps.
 # Retains the upstream Pillow 13 override of browser-harness's Pillow 12 pin.
 anyio==4.15.1 \
     --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101 \

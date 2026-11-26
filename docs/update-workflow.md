@@ -42,7 +42,7 @@ Hermes Agent release.
 preserve each release's topic commits and combined replay so maintainers can
 reproduce `0001-upstream-candidates.patch` even after `upstream-pr/*` submission
 branches advance. The local working clone is `upstream_work/hermes-agent/`; see
-[v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance).
+[packaged release provenance](plans/hermes-upstream-prep.md#5-packaged-release-provenance).
 
 When a new Hermes release still needs candidate patches:
 

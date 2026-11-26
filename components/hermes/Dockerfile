@@ -1,5 +1,5 @@
-# Official v0.23.3, source caafe5389ae585ef77387a962aee05b1bcf17029.
-FROM nousresearch/hermes-agent@sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355 AS upstream
+# Official v0.23.4, source 8fc0374447313e276f6b9a2764bfc750190c966a.
+FROM nousresearch/hermes-agent@sha256:ef0650d523ee1b5ab32c779acabc446d9936869a9932591553688a62bcf0c42f AS upstream
 
 FROM upstream AS webapp-build
 COPY components/hermes/verify-build.mjs /tmp/verify-build.mjs

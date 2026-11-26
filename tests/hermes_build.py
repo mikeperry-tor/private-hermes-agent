@@ -50,7 +50,7 @@ assert _external_content_mode == original
                  '--version', check=False)
     if result.returncode:
         raise RuntimeError(result.stderr)
-    assert '0.23.3' in result.stdout, result.stdout
+    assert '0.23.4' in result.stdout, result.stdout
     result = run('run', '--rm', '--network', 'none', '-e', 'HERMES_UID=10000',
                  '-e', 'HERMES_GID=10000', '-e', 'WEBAPP_EXTERNAL_CONTENT=tor_proxied', IMAGE,
                  PYTHON, '-c', 'import os; assert os.getuid()==10000 and os.getgid()==10000')

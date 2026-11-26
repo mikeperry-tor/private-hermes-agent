@@ -9,7 +9,7 @@ from deployment import engine_command  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'private-hermes-webapp-build:qualification'
 # The runtime image omits this file, imported by an upstream TypeScript test.
-# Copied verbatim from source caafe5389ae585ef77387a962aee05b1bcf17029:
+# Copied verbatim from source 8fc0374447313e276f6b9a2764bfc750190c966a (v0.23.4):
 # tests/fixtures/session-resume-active-turn.json. Not used by runtime services.
 FIXTURE = ROOT / 'tests/fixtures/session-resume-active-turn.json'
 WORKSPACE = '/opt/hermes/.build/webapp-workspace/apps/desktop'

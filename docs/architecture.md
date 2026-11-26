@@ -310,7 +310,7 @@ on a non-isolated network.
   Tor runs as UID 101 with empty capability sets and exposes no TCP control API,
   TCP SOCKS port, or HTTP proxy. Only `x402_treazury` mounts its private SOCKS
   Unix socket.
-- **Hermes:** derived from official Hermes v0.23.3, with base digest and source
+- **Hermes:** derived from official Hermes v0.23.4, with base digest and source
   verification in `components/hermes/`. Runtime and offline maintenance share
   this image; see
   [derived Hermes build and patch maintenance](updates-and-plugins.md#derived-hermes-build-and-patch-maintenance).

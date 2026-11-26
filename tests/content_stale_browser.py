@@ -32,7 +32,8 @@ with sync_playwright() as p:
         assert input()=='restart'
         # Existing native cookie and remembered permission survive recreation.
         assert EXTERNAL in fetch(page,'/api/private-content/policy')['body']['origins']
-        page.evaluate("fetch('/auth/logout',{method:'POST'})")
+        assert page.evaluate("() => fetch('/auth/logout',{method:'POST'}).then(r=>r.status)") in (200, 204)
+        page.goto('about:blank')
         login()
         assert EXTERNAL in fetch(page,'/api/private-content/policy')['body']['origins']
         assert fetch(page,'/api/private-content/consent',{'origin':EXTERNAL,'remember':False})['status']==200
