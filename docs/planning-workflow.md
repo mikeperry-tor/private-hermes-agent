@@ -119,6 +119,25 @@ diaries or noisy commit churn:
   small edits. Commit a standalone checkpoint update only when pausing
   mid-phase so the next agent inherits committed progress.
 
+### Planned pauses and multi-stage transitions
+
+When a plan pauses for separate intervening work (such as a release upgrade or
+deployment before a later phase), keep the handoff bounded in three steps:
+
+- **Before pausing:** Update the opening status block, completed checkpoint
+  rows, and `#### Open findings and next action` in place. Keep verification
+  recipes, test lists, conflict rules, and later-phase instructions intact so
+  the resuming agent does not lose needed commands.
+- **During intervening work:** Limit edits to the paused plan to updating the
+  opening status block, marking the pause row `Done`, recording follow-up fixes
+  and the resume next action under `#### Open findings and next action`, and
+  updating owned provenance references.
+- **On resume:** When a resumed phase re-runs per-item rows against a new
+  target base, mark that phase row `In progress` with the target ref. Update
+  each per-item row's `Target` or `Target base`, keep the prior ref in
+  `Commit or ref` until replaced, and reset `Validation`, `Review`, and
+  `Status` to `Pending` while leaving earlier phase-gate rows `Done`.
+
 ## Independent review
 
 Follow [independent subagent review](../AGENTS.md#independent-subagent-review)
