@@ -206,12 +206,14 @@ for `PR7`). The author identity is
 | PR3a Desktop, CUA, and Chromium fixes | `PR3a-executor-desktop-browser-fixes.md` | `fix/executor-desktop-browser` | `1f2eefc51cddeec8f7d1c02de4e46a25f9f40b65` | Upstream main |
 | PR3b Executor desktop and browser placement | `PR3b-executor-desktop-browser.md` | `feat/executor-desktop-placement` | `24a750de04e194f58004db78156db25439b95b1a` | PR2b + PR3a |
 | PR4a Literal SSH/OSC 7 working directories | `PR4a-terminal-ssh-cwd.md` | `fix/terminal-ssh-cwd` | `868773aa8ba037511134868cf9a9c3bbf90a1337` | Upstream main |
-| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `7229d440e3e7e706c3eec457e9ab5974bbb7113e` | PR1 + PR4a |
+| PR4b WebApp SSH executor terminals | `PR4b-executor-terminals.md` | `feat/webapp-executor-terminals` | `7ae5fd82c5369718a0073d8795e3ca14ec7fd930` | PR1 + PR4a |
 | PR5 URL reference fetching | `PR5-url-reference-fetching.md` | `feat/url-reference-fetching` | `c3a6b8a0bc49a16b907f98917cfbc50c5cd84e4e` | PR1 |
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
-| Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `8ba4892861228e6b593e476c6a06aed7a034a9fb` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` |
-| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `5ca732033a76368274e41e97cb2936342416cc52` | PR1, PR2a, and PR2b, including the writer cleanup |
+| Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `ecae8682a4c5915ae58d760e1d46f40ade4aa1b7` | Upstream main (`88a1c1f4b`) |
+| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `39cdc0ce20d2e96cdb9f88348944f0938d481b21` | `feat/managed-ssh-grants` (`0bf150642`) |
+| Managed skill shell and discovery | `ssh-skill-shell.md` | `feat/ssh-skill-shell` | `0c67369ef44cb027283929dd288dd591bfa8ca2e` | `feat/ssh-project-workspaces` |
+| Managed cron execution | `ssh-cron-execution.md` | `feat/ssh-cron-execution` | `c73e521b871ffdbd2ef93be6c5bd91ad1464c748` | `feat/ssh-project-workspaces` |
 
 The original `upstream-pr/*` refs preserve the exact qualification heads.
 The current submission refs add commented configuration examples, including
@@ -239,8 +241,9 @@ tree, including the Doctor module, passed 590 Python tests with 21 skips
 and the same three baseline failures. Exact-tip and baseline logs are in
 `upstream_work/pr2-split-evidence/`.
 
-For SSH checkpoint refusal, guarded file reads, and the local v0.23.3 replay, see
-[executor access qualification](executor-access-consistency.md#phase-1-progress).
+For the executor-access native topic verification and the v0.23.3 release replay
+carrying those topics, see [Local correction evidence](#local-correction-evidence)
+and [v0.23.3 build provenance](#v0233-build-provenance).
 
 PR2b makes Doctor probe the terminal's port when an explicit SSH file is
 selected. Omission defaults to 22, and invalid configured values fail before
@@ -369,7 +372,11 @@ For a later release, use the
 | `executor-project-integration` | `1d3dec980055f3bbffaa15e5eabf7a998520d962` | 66 | Integrated project selection, context, Git, skills, cron, legacy session SSH adoption/files, and full-suite regression fixes |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
-- Local combined replay: `stack-patches/v0.23.3/combined`
+- Exported release replay: `stack-patches/v0.23.3/executor-project-integration`
+  `1d3dec980055f3bbffaa15e5eabf7a998520d962` (66 commits, exported to
+  `components/hermes/patches/0001-upstream-candidates.patch` with SHA-256
+  `8e9ca5672881552e11f8c546c23ddfcfed7ae5ce7bc956faba77f82c03973e53`).
+- Earlier pre-executor-access combined replay: `stack-patches/v0.23.3/combined`
   `3b285164393886d89e36f2e5d3d69f32011ad74b` (57 commits).
 - The pre-correction replay was `087222ccf6cbd04ac89096bab4182e05e2af6b0f`.
 - Wrapper branch `hermes-upstreaming` (squashed on top of `origin/main`;
@@ -405,12 +412,36 @@ and receiver acknowledgement.
 Docker Desktop ARM64 and Debian 13 rootless Podman ARM64 pass the affected
 packaged tests for replay `553cd75ac`. The managed-policy image build and
 URL, context, and tool matrix use that replay. Browser, desktop, and terminal
-fixtures cover the unchanged executor and renderer code. Fresh independent
-reviews cover the combined topics, managed scope, release parity and the
-local branch handoff. Current operating limits are recorded in the
-[qualification guide](../development.md#packaged-hermes-qualification). See
-[executor access qualification](executor-access-consistency.md#phase-1-progress)
-for the newer executor access replay and its package checks.
+fixtures cover the unchanged executor and renderer code.
+
+The executor-access native topics on `88a1c1f4b` pass Linux ARM64 Docker
+qualification as UID 10000 (`upstream_work/executor-access-evidence/`):
+- `feat/ssh-project-workspaces` (`39cdc0ce2`): all 22 `scripts/check --base 0bf150642`
+  checks (164 files, 0 blocking, 0 advisory), 31 Python test files (352 passed,
+  14 skipped), `apps/desktop` `tsc --noEmit` and 7 Vitest files (120 passed),
+  and `ui-tui` `tsc --noEmit` and `canonicalGateway.test.ts` (9 passed).
+- `feat/ssh-skill-shell` (`0c67369ef`): all 22 `scripts/check --base 39cdc0ce2`
+  checks (11 files, 0 blocking, 0 advisory) and 11 Python test files (177 passed,
+  12 skipped).
+- `feat/ssh-cron-execution` (`c73e521b8`): all 22 `scripts/check --base 39cdc0ce2`
+  checks (15 files, 0 blocking, 0 advisory) and full `tests/cron/` plus CI checks
+  (201 of 202 files, 1,793 passed, 10 skipped; the single failing file
+  `tests/cron/test_file_permissions.py` reproduces identically on unmodified
+  `88a1c1f4b` inside Docker).
+- `fix/tts-output-placement` (`ecae8682a`): all 22 `scripts/check --base 88a1c1f4b`
+  checks (2 files, 0 blocking, 0 advisory) and 5 TTS and CI test files (15 passed).
+- `feat/webapp-executor-terminals` (`7ae5fd82c`): 6 operator-shell, wire-contract,
+  ledger, and CI test files (22 passed).
+- Combined native merge (`feat/webapp-executor-terminals` +
+  `feat/ssh-project-workspaces` + `feat/ssh-skill-shell` +
+  `feat/ssh-cron-execution` + `fix/tts-output-placement`): merged with zero
+  conflicts and passed 32 cross-topic Python test files (403 passed, 15 skipped).
+
+Current packaged cross-engine runtime qualification for the exported v0.23.3
+replay `1d3dec980` is recorded in the
+[qualification guide](../development.md#packaged-hermes-qualification). Fresh
+independent reviews cover the combined topics, managed scope, release parity,
+executor-access integration, and local branch handoff.
 
 The local submission branches and drafts are prepared. Submission and
 qualification against the first official release carrying the accepted changes

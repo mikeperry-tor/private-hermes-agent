@@ -168,8 +168,6 @@ The managed startup test covers model file edits and instruction approvals
 through CLI and WebApp chat, host access after WebApp editor saves, and
 authenticated Code terminal writes. It also checks executor recovery
 through `make up` and clearing all shares without shutting down the stack.
-For managed edit and upgrade results, see the
-[executor access plan](plans/executor-access-consistency.md#managed-project-workspace-topic).
 Stop stacks that use the fixed subnets before running the test.
 
 ```sh
@@ -293,14 +291,25 @@ The derived Hermes image builds from official Hermes v0.23.3
 build verifies the ARM64 source stamp and renderer receipt against official
 source hash `03efd94d420bfdd70ea477a985c14fc56574e265e6e1a0f6cf601a33d07ec8af`
 before applying the [downstream patches](updates-and-plugins.md#downstream-responsibility-inventory).
-The local executor access replay `ffc64df1dcd433cfa5efd5962df51f38a30972f1` produces
-WebApp source hash `18a05aad0be750ec2becb54a42fc71cfec80192c990a7233964cdeabc465739d`
-and TUI source hash `07604be7ad1b3d8e6b27127491f4fd70eabf03b9fe4607deac6e448c7c378309`.
-See [executor access qualification](plans/executor-access-consistency.md#phase-1-progress)
-for the checks on that package.
+The packaged candidate patch (`0001-upstream-candidates.patch`, SHA-256
+`8e9ca5672881552e11f8c546c23ddfcfed7ae5ce7bc956faba77f82c03973e53`) is exported
+from release replay `1d3dec980055f3bbffaa15e5eabf7a998520d962`. On wrapper
+`d018d29`, macOS Docker Desktop 29.9.3 passed `make check` (242 tests) and
+`make hermes-ui-test` (TypeScript and 285 Vitest renderer tests across 16
+files); Debian 13 ARM64 native Docker 29.10.0 and rootless Podman 5.4.2 passed
+`make test`, `make webapp-test` (all four content modes across Chromium,
+Firefox, and WebKit, Code and Agent terminals, model terminal reads,
+Agent-to-chat sharing, and legacy session adoption and media), and
+`tests/project_mount_lifecycle.py --prior-ref a6a6f642` (lean); and an isolated
+Docker probe verified `/init`, named-profile cron script diagnostics and
+execution, and executor cron artifact delivery. See
+[v0.23.3 build provenance](plans/hermes-upstream-prep.md#v0233-build-provenance)
+for the local topic and replay record.
 
-The table records the package built from replay `553cd75ac`, with
-WebApp source hash `de3582b39cdfa7b69fb5dbf4958d3ee718ae0ed29198c7108af27df6e7e5834f`.
+The table records the broader v0.23.3 matrix built from replay `553cd75ac`, with
+WebApp source hash `de3582b39cdfa7b69fb5dbf4958d3ee718ae0ed29198c7108af27df6e7e5834f`
+(covering desktop executor, CUA, browser harness, plugin persistence, image
+proxy, and v0.23.2-to-v0.23.3 migration paths unchanged in `1d3dec980`).
 
 | Check or contract | Docker Desktop ARM64 | Rootless Podman ARM64 |
 | --- | --- | --- |
@@ -511,21 +520,22 @@ with isolated homes, `--init`, no engine socket, and no private mounts (using
 `scripts/check` and containerized Python and Node toolchains). The release
 replay targets Hermes v0.23.3 (`caafe5389ae585ef77387a962aee05b1bcf17029`).
 The [submission plan](plans/hermes-upstream-prep.md#1-branches-to-submit) records
-the bases for PR1 through PR7. The
-[speech output topic](plans/executor-access-consistency.md#speech-output-topic)
-records its submission and release bases.
+the local submission branches and bases for all upstream candidate topics.
 
 | Candidate | Recorded passing checks | Scope |
 | --- | --- | --- |
 | PR1: managed configuration | Config and profile unit tests, and Docker and Podman managed-policy image fixtures | Strict reads, dotenv bootstrap and reload precedence, routed interpolation, secret ownership |
-| PR2a: SSH workspace fixes | Sync tests, packaged shell and HTTP checks, and [guarded SSH file tools](plans/executor-access-consistency.md#phase-1-progress) | Browser-profile sync exclusion, missing-file `ENOENT` and 404, read baselines, search filtering, and executor version and path checks before edits |
+| PR2a: SSH workspace fixes | Sync tests, guarded SSH file tool tests, and packaged shell and HTTP checks | Browser-profile sync exclusion, missing-file `ENOENT` and 404, read baselines, search filtering, and executor version and path checks before edits |
 | PR2b: explicit SSH client config | SSH environment and config tests, and packaged shell checks | Pinned SSH client options across terminal, workspace, streams, and Doctor |
 | PR3: executor desktop and browser | 224 Python tests, 6 desktop renderer tests, browser and SSH suites, live SSH Chromium checks | Cold executor discovery, viewer identity, warm CUA driver, named-profile RFB, raw CDP refusal, vault lease, scratch, screenshots, sandboxing |
-| PR4: operator terminals and exact `cwd` | 80 Python tests, 95 terminal renderer tests, live SSH checks | Placement pinning, rollback refusal, Bash and `cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |
+| PR4: operator terminals and exact `cwd` | Operator-shell, wire-contract, ledger, and terminal renderer tests, plus live SSH checks | Placement pinning, rollback refusal, Agent profile anchoring, Bash and `cwd` setup, startup wait, terminal ID acknowledgement, relay close, pinned trust |
 | PR5: selectable URL context | 74 reference, gateway-turn, and config tests | Managed no-fetch in normal and bypass sessions, validated snapshots, malformed config handling |
 | PR6: managed tool denial | 87 policy, MCP, and discovery tests plus prompt and worker persistence tests | CLI readiness, catalogs, prompt guidance, connectors, background review, direct and deferred schemas, dispatch enforcement |
 | PR7: WebApp content privacy | Design review only | Shared renderer ownership and authenticated consent storage and API remain open |
-| Speech output placement | Hermes TTS and playback tests and a Docker Desktop ARM64 controlled audio probe | Profile cache placement, gateway audio attachments, and explicit internal playback destinations |
+| Speech output placement | All 22 `scripts/check` checks, 15 TTS and CI tests on `88a1c1f4b`, and Docker controlled audio probe | Profile cache placement, gateway audio attachments, and explicit internal playback destinations |
+| Managed project workspaces | All 22 `scripts/check` checks, 352 Python tests, `apps/desktop` `tsc` and 120 Vitest tests, `ui-tui` `tsc` and 9 Vitest tests | Applied SSH write roots, project selection, context files, `@` references, `/init`, `/diff`, WebApp files and Git, delegation, Kanban, gateway media, and remote Python `cwd` |
+| Managed skill shell and discovery | All 22 `scripts/check` checks and 177 skill, prompt, and SSH tests | Executor project skill discovery, mapped inline shell dispatch, upload-only skill sync, and project-skill credential and dependency boundaries |
+| Managed cron execution | All 22 `scripts/check` checks and 1,793 `tests/cron/` and CI tests (excluding 1 pre-existing Docker mode test) | Executor cron workdirs, scheduled scripts with Linux descendant cleanup, `hermes cron doctor`, worktree maintenance exclusions, and SSH media delivery |
 
 ### Limits and test ownership
 

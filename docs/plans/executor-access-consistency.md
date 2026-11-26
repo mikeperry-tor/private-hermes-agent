@@ -845,9 +845,43 @@ enforcement. With `d018d29`:
   named-profile script execution as `runner` in the executor workdir, and cron
   artifact delivery fetching executor bytes while refusing Hermes-only files.
 
-The remaining native submission topics (`feat/ssh-project-workspaces` Phase 2,
-`feat/ssh-skill-shell`, `feat/ssh-cron-execution`), submission draft updates,
-and final combined review remain open.
+All native `88a1c1f4b` submission topics and drafts are now split and verified
+in Linux ARM64 Docker as UID 10000 (`upstream_work/executor-access-evidence/`):
+- `feat/webapp-executor-terminals` (`7ae5fd82c5369718a0073d8795e3ca14ec7fd930`):
+  includes Agent shell profile anchoring; 6 operator-shell, wire-contract,
+  ledger, and CI test files passed (22 passed).
+- `fix/tts-output-placement` (`ecae8682a4c5915ae58d760e1d46f40ade4aa1b7`):
+  rebased onto `88a1c1f4b`; all 22 `scripts/check --base 88a1c1f4b` checks and
+  5 TTS and CI test files passed (15 passed).
+- `feat/ssh-project-workspaces` (`39cdc0ce20d2e96cdb9f88348944f0938d481b21`):
+  complete Phase 2-3 project workspaces, context, Git, files, `/diff`, `/init`,
+  delegation, Kanban, gateway media, and remote Python with regenerated OpenRPC
+  contracts and serve-handler ledger; all 22 `scripts/check --base 0bf150642`
+  checks (164 files, 0 blocking, 0 advisory), 31 Python test files (352 passed,
+  14 skipped), `apps/desktop` `tsc --noEmit` and 7 Vitest files (120 passed),
+  and `ui-tui` `tsc --noEmit` and `canonicalGateway.test.ts` (9 passed).
+- `feat/ssh-skill-shell` (`0c67369ef44cb027283929dd288dd591bfa8ca2e`, based on
+  `feat/ssh-project-workspaces`): executor project skill discovery, mapped
+  inline shell dispatch, upload-only skill sync, project-skill credential and
+  dependency boundaries, `tests/agent/test_ssh_skill_shell.py`, and
+  `website/docs/user-guide/features/skills.md`; all 22
+  `scripts/check --base 39cdc0ce2` checks (11 files, 0 blocking, 0 advisory) and
+  11 Python test files passed (177 passed, 12 skipped).
+- `feat/ssh-cron-execution` (`c73e521b871ffdbd2ef93be6c5bd91ad1464c748`, based on
+  `feat/ssh-project-workspaces`): executor cron workdirs, scripts with Linux
+  subreaper descendant cleanup, `hermes cron doctor`, worktree maintenance
+  exclusions, SSH artifact delivery, `tests/cron/test_executor_script.py`, and
+  `website/docs/user-guide/features/cron.md`; all 22
+  `scripts/check --base 39cdc0ce2` checks (15 files, 0 blocking, 0 advisory) and
+  201 of 202 `tests/cron/` + CI files passed (1,793 passed, 10 skipped; the
+  single failing file `tests/cron/test_file_permissions.py` reproduces
+  identically on unmodified `88a1c1f4b` inside Docker).
+- Combined native merge of all five topics on `88a1c1f4b`: merged with zero
+  conflicts and passed 32 cross-topic Python test files (403 passed, 15 skipped).
+
+Updated `docs/plans/hermes-upstream-prep.md`, `docs/development.md`, and all
+five drafts under `upstream_work/submissions/`. Ready for the final combined
+independent review against `a6a6f642` and both tested Hermes trees.
 
 Independent reviews traced the integrated workspace, file, delegation, skills,
 cron, Git, and media paths. Follow-up changes bind picker listings to applied
