@@ -223,10 +223,10 @@ engines after modifying patches or base pins.
 
 ### Local preparation package dispositions
 
-Upstream submission drafts for PR1-PR6 live under `upstream_work/submissions/`
-and use the local `fix/*` and `feat/*` submission branches in
-`upstream_work/hermes-agent/`. The fork also carries release and qualification
-refs. Submissions target
+Upstream submission drafts for PR1-PR6 and the follow-up executor-access and
+speech topics live under `upstream_work/submissions/` and use the local `fix/*`
+and `feat/*` submission branches in `upstream_work/hermes-agent/`. The fork
+also carries release and qualification refs. Submissions target
 `NousResearch/hermes-agent` (`origin`) under author identity
 `Mike Perry <mikeperry-git@untrusted.systems>`. Follow the branch heads and
 merge order in the
@@ -238,10 +238,14 @@ merge order in the
 | PR1 | Strict managed config reads, dotenv bootstrap and reload precedence, and profile-specific interpolation. |
 | PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT` and 404 classification, guarded SSH reads, searches, and edits, and pinned SSH client options (required by PR3). |
 | PR3 | Executor-only desktop and browser placement, SSH transport, and Chromium sandboxing. |
-| PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes (builds on PR1). |
+| PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes, including Agent profile anchoring (builds on PR1). |
 | PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on PR1). |
 | PR6 | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on PR1). |
 | PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`-`0010`). |
+| Speech output placement | Keeps model TTS audio inside the active profile's audio cache (`fix/tts-output-placement`). |
+| Managed project workspaces | Routes applied SSH write roots, project selection, context files, `@` references, `/init`, `/diff`, WebApp files and read-only Git, delegation, Kanban boundaries, gateway media, and remote Python `cwd` over SSH (`feat/ssh-project-workspaces`). |
+| Managed skill shell and discovery | Discovers trusted project skills on the SSH executor, runs inline skill shells in mapped executor directories, keeps project skills out of profile credentials and local deps, and makes synced skill roots upload-only (`feat/ssh-skill-shell`). |
+| Managed cron execution | Validates cron workdirs and runs scheduled scripts on the SSH executor with Linux descendant cleanup, keeps `hermes cron doctor` on the executor, excludes executor workdirs from host worktree sweeps, and fetches cron media artifacts over SSH (`feat/ssh-cron-execution`). |
 
 PR7 is not submission-ready: it still needs decisions on shared Ask and Always
 renderer ownership and authenticated consent storage and API while preserving

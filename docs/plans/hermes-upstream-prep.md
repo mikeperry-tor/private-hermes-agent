@@ -211,7 +211,7 @@ for `PR7`). The author identity is
 | PR6 Deployment tool restrictions | `PR6-deployment-restrictions.md` | `feat/managed-tool-denials` | `14e980021941c92aef57d2dd305332eb36fa2773` | PR1 |
 | PR7 WebApp content privacy | `PR7-webapp-content-privacy.md` | `upstream-pr/webapp-content-privacy` | `25a1302eacb563c59eb3b7454c1a53f8c89f274c` | Deferred |
 | Speech output placement | `tts-output-placement.md` | `fix/tts-output-placement` | `ecae8682a4c5915ae58d760e1d46f40ade4aa1b7` | Upstream main (`88a1c1f4b`) |
-| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `39cdc0ce20d2e96cdb9f88348944f0938d481b21` | `feat/managed-ssh-grants` (`0bf150642`) |
+| Managed project workspaces | `ssh-project-workspaces.md` | `feat/ssh-project-workspaces` | `39cdc0ce20d2e96cdb9f88348944f0938d481b21` | PR1, PR2a, and PR2b (`0bf150642`) |
 | Managed skill shell and discovery | `ssh-skill-shell.md` | `feat/ssh-skill-shell` | `0c67369ef44cb027283929dd288dd591bfa8ca2e` | `feat/ssh-project-workspaces` |
 | Managed cron execution | `ssh-cron-execution.md` | `feat/ssh-cron-execution` | `c73e521b871ffdbd2ef93be6c5bd91ad1464c748` | `feat/ssh-project-workspaces` |
 
