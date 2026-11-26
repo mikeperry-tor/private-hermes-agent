@@ -177,6 +177,7 @@ for upgrade steps.
 | `0009-browser-response-policy` | Response CSP, trusted bootstrap headers, exact-origin WebSockets, and inert private previews. | Verify with browser response, WebSocket, and active-file checks. |
 | `0010-browser-content` | Shared content rendering, image consent UI, and image Save and Copy through the Tor proxy. | Verify with renderer unit tests and cross-browser tests across all four content modes. |
 | `0011-mcp-probe-redirects` | Leaves HTTP redirects to the MCP SDK and treats redirected `initialize` responses in Hermes's separate diagnostic probe as inconclusive. | Verify `HEAD`, `GET`, and `initialize` redirects in `tests/local_integration_smoke.py`; remove once upstream's diagnostic respects the SDK's redirect boundary. |
+| `0012-mcp-server-instructions` | Surfaces connected MCP servers' `InitializeResult.instructions` in Hermes's volatile system-prompt tier with tool/scope gating, Tool Search awareness, threat scanning, delimiter neutralization, and strict size caps (eager servers only; `lazy: true` servers omit instructions until connected and rebuilt). | Verify extraction, scope isolation, Tool Search, sanitization, delimiter neutralization, and caps in `tests/hermes_build.py`; remove once upstream Hermes natively surfaces MCP server instructions. |
 
 ### Managed container config and executor packaging
 

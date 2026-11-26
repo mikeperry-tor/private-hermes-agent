@@ -136,6 +136,9 @@ with patch.object(approval, '_yolo_active', return_value=True), \\
     run('run', '--rm', '-i', '--network', 'none', '--cap-drop', 'ALL',
         '--entrypoint', PYTHON, IMAGE, '-c',
         (ROOT / 'tests/fixtures/ssh-workspace-files.py').read_text())
+    run('run', '--rm', '-i', '--network', 'none', '--cap-drop', 'ALL',
+        '--entrypoint', PYTHON, IMAGE, '-c',
+        (ROOT / 'tests/fixtures/mcp-server-instructions.py').read_text())
     print('PASS: native dispatch/version, selected rebuilt renderer, strict modes and profile-override resistance')
 
 
