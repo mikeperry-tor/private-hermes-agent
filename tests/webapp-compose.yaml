@@ -2,6 +2,10 @@ services:
   hermes:
     command: [gateway, run]
   setup:
+    environment:
+      # Select the model served by the local inference fixture.
+      TEEP_ENABLED: "true"
+      TEEP_INSTALL_MODEL: neardirect:z-ai/glm-5.3-flash
     volumes:
       - type: bind
         source: ${WEBAPP_TEST_CONFIG:?test auth directory required}
