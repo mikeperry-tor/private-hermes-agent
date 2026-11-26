@@ -133,8 +133,8 @@ asyncio.run(check())
                 'assert (await session.list_tools()).tools', 'assert not (await session.list_tools()).tools')
             compose('exec', '-T', 'hermes', '/opt/hermes/.venv/bin/python', '-c',
                     'TOKEN=' + repr(token) + '\n' + empty_peer)
-            assert 'ERROR' in result.stderr, result.stderr
-            print('PASS: reduced coverage ERROR diagnostics and an empty endpoint do not block authenticated activation')
+            assert 'WARN' in result.stderr and 'No static API tools are selected for listener "web"' in result.stderr, result.stderr
+            print('PASS: reduced coverage WARN diagnostics and an empty endpoint do not block authenticated activation')
         finally:
             if child and child.poll() is None:
                 child.communicate(timeout=120)

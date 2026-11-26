@@ -17,7 +17,7 @@ from deployment import ROOT, engine_command, inspect_launch, maintenance_compose
 from provisioning import initialize_research_config, research_config_diff, report_research_config_diff
 
 
-# Native terminal diagnostics at pinned ee92a067; coverage ERRORs are not fatal.
+# Native terminal diagnostics at pinned 04494a74; reduced-coverage WARNs are not fatal.
 ENDPOINT_FAILURES = (
     'MCP endpoint unavailable; catalog startup failed; correct the reported cause and restart',
     'MCP endpoint tools are unavailable because its tool selection is invalid; correct the configuration and restart',

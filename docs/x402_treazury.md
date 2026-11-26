@@ -54,11 +54,11 @@ New Hermes profiles disable Hermes Tool Search while keeping
 ### Upstream pin and deferred funding policy
 
 The image builds unmodified upstream commit
-`ee92a067655d8d34d5cbc490ddbeb938635d0144` (Rust 1.99.1, locked dependencies).
+`04494a748aa5d9d78a4941b02c3b5fb701ccfb0e` (Rust 1.99.1, locked dependencies).
 The wrapper overrides only the Tor SOCKS socket path, persistent state path, and
 HTTP `Host` allowlists; wallet groups, rotation, funding, payment caps, and tool
 lists follow upstream policy
-([upstream wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-rotation.md)).
+([upstream wallet rotation guide](https://github.com/mikeperry-tor/x402_treazury/blob/04494a748aa5d9d78a4941b02c3b5fb701ccfb0e/docs/wallet-rotation.md)).
 
 The packaged `research_desk.toml` sets `[wallet_bootstrap]` with
 `bootstrap_group = "general"` and
@@ -172,7 +172,7 @@ Renaming preserves the group's UUID, payer keys, funds, history, and pending
 work (as well as its historical payer correlation). The destination name must be
 unused. Changing the name only in TOML creates a brand-new empty group on
 startup and leaves the old group's funds unused. See the
-[upstream wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md#rename-a-managed-wallet-group).
+[upstream wallet rename guide](https://github.com/mikeperry-tor/x402_treazury/blob/04494a748aa5d9d78a4941b02c3b5fb701ccfb0e/docs/wallet-cli.md#rename-a-managed-wallet-group).
 
 ## Create the wallet and deposit when ready
 
@@ -214,7 +214,7 @@ python3 scripts/stack.py compose run --rm --no-deps --entrypoint /usr/local/bin/
 ```
 
 See the
-[upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/ee92a067655d8d34d5cbc490ddbeb938635d0144/docs/wallet-cli.md)
+[upstream wallet CLI guide](https://github.com/mikeperry-tor/x402_treazury/blob/04494a748aa5d9d78a4941b02c3b5fb701ccfb0e/docs/wallet-cli.md)
 for `wallet preview` and `wallet rename` constraints.
 
 ## Prepare and connect research tools
@@ -372,16 +372,17 @@ make test
 
 ### Current qualification
 
-Commit `ee92a067655d8d34d5cbc490ddbeb938635d0144` is qualified on Linux ARM64
-under Docker Desktop 29.9.3 / Compose 5.7.0 and Debian 13 ARM64 rootless Podman
-5.4.2 / Compose 5.7.1 (unit tests, effective Compose models, native treasury
-builds, endpoint readiness, offline configuration, degraded warming during Tor
-outage, and unfunded smoke fixtures).
+Commit `04494a748aa5d9d78a4941b02c3b5fb701ccfb0e` is qualified on Linux ARM64
+under Docker Desktop 29.9.3 / Compose 5.7.1 (unit tests, effective Compose
+models, native treasury build, endpoint readiness, offline configuration,
+degraded warming during Tor outage, and unfunded smoke fixtures).
 
-On Podman, the treasury build is native while Teep in the test run used an
-imported ARM64 image matching the unchanged Dockerfile (not a fresh native
-Podman Teep build). Unfunded fixtures do not test live wallet sync, funded
-bootstrap, paid relay downloads, or settlement.
+Rootless Podman qualification was last run on commit
+`ee92a067655d8d34d5cbc490ddbeb938635d0144` (Debian 13 ARM64 rootless Podman
+5.4.2 / Compose 5.7.1, with a native treasury build and an imported ARM64 Teep
+image) and has not been re-run on `04494a748aa5d9d78a4941b02c3b5fb701ccfb0e`.
+Unfunded fixtures do not test live wallet sync, funded bootstrap, paid relay
+downloads, or settlement.
 
 ## Pending live qualification
 

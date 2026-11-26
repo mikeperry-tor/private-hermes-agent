@@ -24,7 +24,7 @@ Registration rejects changed managed URLs rather than applying operator edits.
 
 The earlier inspected reference revision was
 `424f36a814711d542fbff27f139842c9d08d5b76`; the current treasury Dockerfile pins
-`ee92a067655d8d34d5cbc490ddbeb938635d0144`. Reinspect native inventory, validation
+`04494a748aa5d9d78a4941b02c3b5fb701ccfb0e`. Reinspect native inventory, validation
 and serving diagnostics against the packaged revision before implementation.
 The earlier inspection found native support for named listeners, validation of
 identifiers, references and address uniqueness, and a requirement for at least
@@ -95,7 +95,7 @@ to fund groups or download catalogs under the existing financial policy.
   identity checks, cancellable probes and regular waiting messages. Replace fixed
   counts with the actual inventory; add no startup deadline or retry cutoff.
   Preserve the pinned framework contract: degraded warming completes on zero
-  exit, and empty tool inventories or coverage ERROR logs do not fail successful
+  exit, and empty tool inventories or coverage WARN logs do not fail successful
   authenticated initialize/list. Do not add source/tool completeness gates.
   Stop/edit/start is the policy-change contract; concurrent operator edits during
   activation are unsupported, not a reason to add configuration locking/journaling.
