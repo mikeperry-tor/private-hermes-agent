@@ -151,9 +151,10 @@ provider later** if prompted in the WebApp. Open **Settings -> Model**, select
 **Teep**, choose a model, and apply the selection. In `make chat`, choose
 **Teep** and a model in the provider setup prompt.
 
-The browser's Code terminal opens in the same executor workspace as the agent.
-For an agent administration shell, set `WEBAPP_TERMINAL_ENVIRONMENT=agent`, run
-`make up`, and reload the browser. See
+The browser's Code terminal and `!command` in `make chat` run in the same SSH
+executor as the agent. For an administration shell, set
+`WEBAPP_TERMINAL_ENVIRONMENT=agent`, run `make up`, then reload the browser and
+reopen `make chat`. See
 [terminal operation](docs/webapp.md#terminal-environment).
 
 If you prefer terminal use, open the terminal client with:
@@ -297,14 +298,18 @@ CODE_EXECUTOR_BIND_MOUNTS="/home/me/my-app:/mnt/projects/my-app,/home/me/notes:/
 ```
 
 Use your own folder paths, then run `make down && make up`. Ask the agent to
-use its terminal to work in `/mnt/projects/my-app` or `/mnt/projects/notes`.
-Its edits update the files on your computer. See the
-[shared project setup](docs/configuration.md#shared-project-setup) for applying
-changes and removing shares.
+work in `/mnt/projects/my-app` or `/mnt/projects/notes`. Its file tools can
+write and patch project files, and you can save them in the WebApp editor.
+Model edits to non-instruction files proceed without an approval prompt when
+the runner has write access. The agent requests approval before editing an
+instruction file such as `AGENTS.md`.
+See [shared project setup](docs/configuration.md#shared-project-setup) for
+applying changes and removing shares.
 
 Share only folders whose contents the agent and any software it runs may
-read, change, or delete. Keep credentials outside shared folders and keep
-backups. Review changes before using host tools that can run project scripts,
+read, change, or delete. Keep credentials outside shared folders and include
+the host folders in your [backups](docs/configuration.md#backup-scope).
+Review changes before using host tools that can run project scripts,
 Git hooks, or editor tasks. The same risk applies when you work on the host
 with files from `data/executor/workspace/` or `data/executor/home/`, even if
 you never set `CODE_EXECUTOR_BIND_MOUNTS`.
@@ -465,6 +470,13 @@ Update component images in place with:
 ```bash
 make down
 git pull
+```
+
+Back up the stopped stack before pulling the update. If you run scheduled
+scripts, follow the [script migration steps](docs/updates-and-plugins.md#move-scheduled-scripts-to-the-executor)
+before starting the new build.
+
+```bash
 make up
 ```
 

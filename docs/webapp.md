@@ -250,8 +250,10 @@ bounding capability sets:
 An authenticated WebApp user has administrative authority over the Hermes
 container. The default **Code** terminal runs in the SSH executor, while the
 optional **Agent** terminal runs inside Hermes with access to `/opt/data`. The
-browser file API uses SSH for workspace paths, while staged agent files remain
-in Hermes. Do not treat WebApp UI controls as executor sandboxing. The executor
+browser resolves a file link or edit against the chat that opened it. Project
+files use that chat's SSH directory in both modes. An explicitly staged upload
+uses its owning attachment interface in Hermes. The administrative file API
+serves Hermes files independently of the chat's project. The executor
 has no ingress network membership, no WebApp or Tailscale credentials, and no
 path to private WebApp listeners.
 
@@ -382,13 +384,29 @@ for an **Agent** terminal inside Hermes with administrative access to
 `/opt/data`. Browser input and profile config cannot override this deployment
 setting. Saved gateway terminals keep their separate remote-Hermes path.
 
+The same applied setting selects the shell for `!command` in classic and TUI
+chat. Reopen `make chat` after applying a change. In Code mode, `!pwd` uses the
+chat's last executor directory or starts in `/workspace`. In Agent mode, `!pwd`
+uses the owning profile's directory in Hermes. In either mode, saved `quick_commands` of
+type `exec` run in the chat's executor directory. The model's terminal tool
+uses the executor in both modes.
+
+In classic chat, Ctrl+C stops a foreground executor shell command and keeps
+any draft in the composer. Saving a shell command from the Ctrl+G editor
+submits it through the same command path as Enter.
+
+The model's `read_terminal` tool reads visible output and scrollback from the
+selected **Code** terminal when its gateway and profile match the focused chat.
+The WebApp refuses reads from **Agent** terminals and tabs whose placement it
+cannot verify. You can still select terminal output and use **Add to chat** to
+share it yourself.
+
 - **Working directory:** Code terminals start in `/workspace` (or the requested
   executor directory, or parent directory for a file path). Missing paths,
   inaccessible directories, and control-character paths fail cleanly instead of
   falling back. Bash OSC prompt updates track `cd` changes (preserving spaces,
-  Unicode, and shell metacharacters). The workspace file API always targets the
-  executor, so in Agent mode its view can differ from local container files;
-  agent-side `/workspace` is empty and ephemeral across restarts.
+  Unicode, and shell metacharacters). Project previews follow the chat's saved
+  executor directory independently of tabs that run an administrative shell.
 - **Lifecycle and cancellation:** Page refresh reattaches to a surviving shell
   and replays buffered output. Closing a Code tab during startup cancels the
   pending SSH probe, and closing an open tab terminates the shell and foreground
@@ -437,9 +455,10 @@ Interactive opt-in and streaming media remain deferred.
   raster and size limits, and authentication and consent rules. (Does not itself
   prove Tor routing.)
 - **`make webapp-test`:** Runs against production images with seeded history,
-  local media, TCP and TLS canaries, and simulated HTTPS on ports `19120` and
-  `10000`. All four content modes run on Chromium 156.0.8078.4, Firefox 157.0,
-  and WebKit 27.2 on ARM64; Chromium additionally runs `ask` consent over HTTPS
+  deterministic local inference, local media, TCP and TLS canaries, and
+  simulated HTTPS on ports `19120` and `10000`. All four content modes run on
+  Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 on ARM64. Chromium
+  additionally runs `ask` consent over HTTPS
   plus ingress auth, cookies, origin checks, terminals, and a live WebSocket
   chat turn (Firefox and WebKit run focused HTTPS auth and navigation checks).
   Direct DNS and preconnect NetLog observation is Chromium-only. Although

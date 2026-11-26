@@ -101,17 +101,24 @@ When host-port or LAN grants are enabled, startup allows `tor` to write to
 
 ### Code execution and SSH isolation
 
-Hermes terminal commands, remote Python `execute_code`, and backend-aware file
-tools run over SSH in the executor. Subagents stay in the Hermes process as
-orchestrator instances and run their code in the same executor. All sessions and
-subagents share one executor user (UID 10000) and `/workspace`: this separates
-the agent from executed code, not tasks or tenants from each other.
+Model terminal commands, Python execution, and project file tools run over SSH
+in the executor. A subagent starts in its parent's executor directory and
+resumes in its own last saved directory. Scheduled scripts and enabled inline
+skill commands also run as `runner`. Each session shares UID 10000 and the
+executor's workspace. Isolation separates Hermes from executed code.
 
 - Provider credentials and the `hermes-data` volume are not mounted in the
   executor.
-- Hermes can still copy skills, caches, and operator-declared credential files
-  to remote backends. Review `terminal.credential_files` and skill passthrough
-  declarations accordingly.
+- Hermes can copy approved profile skills, caches, and operator-declared
+  credentials to the executor. An operator can trust project skills by their
+  verified executor checkout. Those skills can read their own supporting files
+  and use installed executor dependencies. Hermes does not register their
+  requests for profile environment variables, credential files, or packages.
+- The managed project list comes from the applied mounts. Project-aware
+  commands refuse work when SSH or the saved directory is unavailable. Existing
+  transcripts and job records stay available for inspection. Managed SSH
+  checkpoints, delegated Git worktree isolation, and Kanban worktree workers
+  decline workspace operations that require a local checkout.
 - Code running in the executor can invoke allowlisted Hermes tools over RPC;
   this is an authorized tool capability, not a network bypass.
 - The executor's browser profile stays in its persistent home mount and is
@@ -384,10 +391,26 @@ and wrapper lookups prefer system directories, preventing a UID-10000 executable
 from shadowing a root service command while still resolving uniquely named
 wrappers.
 
-Other Hermes options have narrower scopes and are not part of this stack's
-execution boundary:
+Hermes tools and configuration provide these additional controls.
 
-- `HERMES_WRITE_SAFE_ROOT` guards some file tools, not arbitrary shell commands.
+- With the SSH backend, `read_file` resolves paths and checks protected files on the executor.
+  It records complete, unredacted text reads by SSH endpoint and file version.
+- `search_files` checks each executor path before returning or counting matches.
+  Multiline content search requires ripgrep on the executor.
+- `HERMES_WRITE_SAFE_ROOT=/opt/data` limits local structured writes. The SSH
+  file tools use the roots supplied by managed startup and refuse writes when
+  that list is unavailable. They inspect the executor's requested path,
+  resolved file, and directory entry. A whole-file replacement requires the
+  task to have read every page without redaction or written the current version.
+  The executor checks the version before publishing. SSH patches use the
+  executor's permissions and keep instruction-file approvals.
+  The executor mounts and runner permissions govern access to shared files.
+  See [shared project permissions](configuration.md#shared-project-filesystem-permissions).
+- The model's `text_to_speech` tool writes to the active Hermes profile's audio
+  cache. Internal voice playback can supply a temporary output file.
+- Filesystem checkpoints, rollback, and checkpoint-based session diffs are
+  unavailable for SSH workspaces. Hermes keeps profile checkpoint records for
+  administrative inspection.
 - Python `code_execution.mode: strict` changes staging and interpreter
   selection, not OS containment.
 - Iron-proxy can broker SDK credentials and enforce HTTP destination rules, but

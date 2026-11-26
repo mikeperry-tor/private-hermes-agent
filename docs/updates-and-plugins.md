@@ -65,6 +65,33 @@ make up
   updates, so its built-in core version check reports an unsupported install;
   use `make check-updates` instead.
 
+### Move scheduled scripts to the executor
+
+When upgrading from a Private Hermes build that runs cron scripts inside
+Hermes to the v0.23.3-based build that runs them over SSH, keep the job records,
+run history, and original profile scripts. The [pre-upgrade backup](configuration.md#backup-scope)
+covers the Hermes named volume and the executor workspace.
+
+Before starting the upgraded gateway, copy any script that is due to the
+matching profile's `data/executor/workspace/cron/<profile>/scripts/` directory.
+Use `default` for the default profile or the profile's saved name. Copy its
+supporting files and give `runner` access as described in
+[shared project filesystem permissions](configuration.md#shared-project-filesystem-permissions).
+For example, a default profile job saved as `check.sh` looks for
+`/workspace/cron/default/scripts/check.sh` in the executor.
+
+Check saved pre-run and monitor paths, explicit workdirs, and Python
+interpreters. A relative script name uses the new directory. Absolute script
+paths must resolve inside it, and `~/` means the executor user's home. Pause
+jobs with old Hermes paths before the upgrade. After startup, use the owning
+profile's cron editor to select the copied script by relative name and set an
+executor Python interpreter if required. The job's explicit workdir must be
+an applied directory in the executor.
+
+Run `hermes cron doctor` from the Hermes administration shell to see the
+expected script location and interpreter errors. A failed one-shot can consume
+its scheduled occurrence. Check its run history before scheduling another.
+
 ## Manage persistent user plugins
 
 ```sh
@@ -142,8 +169,8 @@ for upgrade steps.
 
 | Patch | Responsibility | Checks and removal condition |
 | --- | --- | --- |
-| `0001-upstream-candidates` | Strict managed config reader and reload precedence, SSH trust and file error handling, executor desktop and browser transport, Code and Agent terminals, configurable URL context, and managed tool denial (PR1-PR6). | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
-| `0002-managed-policy` | Generates root-owned `/etc/hermes/config.yaml` and `/etc/hermes/.env` at container startup before Hermes loads profiles. | Verify effective settings under conflicting profile input, reloads, and offline jobs. |
+| `0001-upstream-candidates` | Managed configuration and SSH trust, workspace selection and project operations, guarded file tools, executor shells and Python, SSH checkpoint refusal, desktop and browser transport, skills and cron placement, and artifact delivery. | Drop adopted portions once the official Hermes release includes them and packaged tests pass. |
+| `0002-managed-policy` | Generates root-owned files in `/etc/hermes` at startup and requires applied workspace grants for managed SSH writes. | Verify effective settings under conflicting profile input, reloads, and offline jobs. Keep the missing-grant check until Hermes can require the list for a managed deployment. |
 | `0003-desktop-and-terminal-policy` | Enforces explicit desktop enablement and recovery diagnostics, local Code and Agent terminal labels and startup acknowledgement, and safe absolute Code `cwd` handling. | Keep until upstream deployment controls satisfy the desktop and terminal checks. |
 | `0004-deployment-policy` | Captures `WEBAPP_EXTERNAL_CONTENT` and `COMPUTER_USE_ENABLED` before profile dotenv loading and validates WebApp content policy. | Keep until upstream deployment config preserves the same authority. |
 | `0008-private-image-routes` | Authenticated Tor image proxy and origin-consent APIs with bounded public IPv4 raster retrieval. | Verify with image endpoint, CDN consumer, and outage checks. |
@@ -159,6 +186,12 @@ At startup, the Hermes entrypoint writes `/etc/hermes/config.yaml` and
 - The SSH file backend, endpoint, and OpenSSH client config, plus executor-only
   desktop, Chromium sandbox, operator terminal mode, `context_references.fetch_urls: false`,
   and the `tools.disabled` list.
+- The executor workspace destinations. `make up` verifies the attached mounts
+  and publishes only `/workspace` and the exact project destinations.
+  `make chat` compares the running gateway's list with the executor's mounts
+  before copying the destinations into its managed config.
+- The SSH cron base directory at `/workspace/cron`. Hermes resolves relative
+  script names under the owning profile's `scripts/` directory there.
 - Cleared `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` values (applied on top
   of Compose defaults and reapplied across profile reloads) so the namespace
   firewall and `tor` gateway remain the single enforcement point for local
@@ -174,9 +207,13 @@ At startup, the Hermes entrypoint writes `/etc/hermes/config.yaml` and
 The desktop executor pairs the pinned `hermes-sandbox` image with OpenSSH and a
 hash-locked browser harness under `/opt/browser-harness` (following Hermes's
 Python lockfile plus the Pillow 13 `--no-deps` override). Hermes sends the
-runner and screenshot helper over SSH, keeps the live browser profile excluded
-from SSH sync archives, and provides an empty agent-side `/workspace` directory
-(separate from the executor's `/workspace`) for session `cwd` validation.
+runner and screenshot helper over SSH, and excludes the live browser profile
+from SSH sync archives.
+
+The image rebuilds the WebApp and TUI from the patched source. The TUI launcher
+uses the rebuilt bundle at either packaged lookup path. The runtime image pins
+`HERMES_MANAGED_DIR` to `/etc/hermes`, so a missing managed policy prevents chat
+shell startup.
 
 Run `make hermes-ui-test` to execute TypeScript type-checking and focused
 renderer tests in the build stage (using `tests/fixtures/session-resume-active-turn.json`,
@@ -186,12 +223,10 @@ engines after modifying patches or base pins.
 
 ### Local preparation package dispositions
 
-Upstream submission drafts for PR1-PR6 live under `upstream_work/submissions/`
-and use the `fix/*` and `feat/*` submission branches in
-`upstream_work/hermes-agent/`, pushed to the `fork` remote
-([mikeperry-tor/hermes-agent](https://github.com/mikeperry-tor/hermes-agent))
-alongside the `stack-patches/v0.23.3/*` release refs and the original
-`upstream-pr/*` qualification refs. Submissions target
+Upstream submission drafts for PR1-PR6 and the follow-up executor-access and
+speech topics live under `upstream_work/submissions/` and use the local `fix/*`
+and `feat/*` submission branches in `upstream_work/hermes-agent/`. The fork
+also carries release and qualification refs. Submissions target
 `NousResearch/hermes-agent` (`origin`) under author identity
 `Mike Perry <mikeperry-git@untrusted.systems>`. Follow the branch heads and
 merge order in the
@@ -201,12 +236,16 @@ merge order in the
 | Package | Scope in Private Hermes |
 | --- | --- |
 | PR1 | Strict managed config reads, dotenv bootstrap and reload precedence, and profile-specific interpolation. |
-| PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT` and 404 classification, and pinned SSH client options (required by PR3). |
+| PR2 | Browser-profile SSH sync exclusion, missing-path `ENOENT` and 404 classification, guarded SSH reads, searches, and edits, and pinned SSH client options (required by PR3). |
 | PR3 | Executor-only desktop and browser placement, SSH transport, and Chromium sandboxing. |
-| PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes (builds on PR1). |
+| PR4 | Executor and gateway terminal selection backing the stack's Code and Agent modes, including Agent profile anchoring (builds on PR1). |
 | PR5 | Managed `context_references.fetch_urls: false` for normal and config-bypass turns (builds on PR1). |
 | PR6 | Managed `tools.disabled` enforcement across discovery, prompt guidance, background review, CLI banners, and connectors without dropping registered MCP servers (builds on PR1). |
 | PR7 | Deferred design only. Private Hermes retains its downstream content, raster-proxy, and consent patches (`0008`-`0010`). |
+| Speech output placement | Keeps model TTS audio inside the active profile's audio cache (`fix/tts-output-placement`). |
+| Managed project workspaces | Routes applied SSH write roots, project selection, context files, `@` references, `/init`, `/diff`, WebApp files and read-only Git, delegation, Kanban boundaries, gateway media, and remote Python `cwd` over SSH (`feat/ssh-project-workspaces`). |
+| Managed skill shell and discovery | Discovers trusted project skills on the SSH executor, runs inline skill shells in mapped executor directories, keeps project skills out of profile credentials and local deps, and makes synced skill roots upload-only (`feat/ssh-skill-shell`). |
+| Managed cron execution | Validates cron workdirs and runs scheduled scripts on the SSH executor with Linux descendant cleanup, keeps `hermes cron doctor` on the executor, excludes executor workdirs from host worktree sweeps, and fetches cron media artifacts over SSH (`feat/ssh-cron-execution`). |
 
 PR7 is not submission-ready: it still needs decisions on shared Ask and Always
 renderer ownership and authenticated consent storage and API while preserving

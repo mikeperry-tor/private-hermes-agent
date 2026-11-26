@@ -217,6 +217,16 @@ keeping shares, or moving or replacing a shared directory, even if its path
 stays the same. Then run `make up`. To remove all shares, clear the setting
 and run `make up`.
 
+A new `make chat` checks that the executor's attached shares match the running
+gateway's policy. Apply changes before opening a chat that needs those shares.
+
+Choose a project with the WebApp workspace picker or run
+`make chat 'CHAT_ARGS=--in "/mnt/projects/my-app"'`. A new chat without a
+selection starts in `/workspace`. A
+resumed chat retains its saved project. After you remove a share, its chats
+remain in history. Select an available project before asking the model to do
+more work, or restore the share at its saved destination.
+
 With shares configured, the executor stays stopped after an exit. Run
 `make up` to check the project sources and start it again. If the executor's
 network namespace owner also needs recovery, follow the
@@ -225,10 +235,10 @@ network namespace owner also needs recovery, follow the
 ### Shared project filesystem permissions
 
 Setup leaves project ownership, labels, modes, and ACLs under your control.
-Use the agent's terminal or the Code terminal for edits. Hermes's file tools
-can read project files, and their write policy still limits writes to
-`/opt/data`.
-
+`make up` gives the SSH file tools and WebApp editor write roots at
+`/workspace` and the applied project destinations. The runner needs write
+access to the file and its containing directory. The file tools keep
+instruction-file approvals and credential denials within shared projects.
 
 | Engine | Permission behavior |
 | --- | --- |
@@ -258,11 +268,21 @@ setfacl -m "u:${runner_uid}:rw" "$project/notes.md"
 ```
 
 Repeat the directory step for existing subdirectories that both users
-should write to. Default ACLs apply to new files and directories below
-them. A tool that creates private files with mode `0600` can keep the
-other writer out. Use `getfacl` to check the ACL and effective mask after
-an edit or rename. The host user also needs permission to list and traverse
-each directory for the startup scan to complete. Confirm that the mounted
+should write to. New files inherit the destination directory's default ACL.
+A tool that creates private files with mode `0600` can keep the other writer
+out. The host user also needs permission to list and traverse each directory
+for the startup scan to complete.
+
+The SSH file tools and WebApp editor replace changed files atomically.
+Replacement can change ownership to the runner. On Linux, Hermes preserves
+effective read, write, and execute permissions through the file ACL. Give the
+runner the same effective access as the owner when both users edit a host-owned
+file, including execute access for an executable. Use `getfacl` to check the
+ACL and effective mask. If Hermes cannot preserve access, it leaves the original
+file in place. Docker Desktop on macOS supports the tested executable modes
+and host edit access. Native macOS ACLs are outside those checks.
+
+Confirm that the mounted
 source is the one you intended, and apply any filesystem security labels
 through the host's policy.
 
@@ -309,10 +329,12 @@ git --no-pager diff --cached
 git --no-pager log -p -n 5
 ```
 
-In WebApp chat or `make chat`, you can also ask the agent to run these
-commands with its terminal tool in the project directory and show the output.
-Both the **Code** terminal and the agent's terminal tool run Git inside the
-executor.
+In Code mode, both interfaces in `make chat` run operator shell commands in the
+executor. Use `!git -C /mnt/projects/my-app status --short` or
+`!git -C /mnt/projects/my-app --no-pager diff`. You can also ask the agent to
+run the same commands with its terminal tool in either mode. Use `/diff` for
+the chat's executor checkout, or open the WebApp's Git view to inspect and
+stage changes. Use the Code terminal for network Git commands and commits.
 
 ### Host-side shared project security enforcement
 
@@ -575,9 +597,9 @@ review the [risks of opening executor-written files](#security-considerations-fo
 
 | Storage | Contents |
 | --- | --- |
-| `hermes-data` (named volume) | Hermes profile, configuration, credentials, conversations, memory, skills, plugins, uploads, and `webapp-image-consent.sqlite3` |
+| `hermes-data` (named volume) | Profiles, settings, credentials, conversations, memory, skills, plugins, uploads, cron jobs and history, legacy profile `scripts/`, and `webapp-image-consent.sqlite3` |
 | `x402_treazury-data` (named volume) | Treasury home: encrypted wallet state, decryption key, financial journals, catalog cache, and onboarding record |
-| `data/executor/workspace/` | Agent-created repositories, documents, and scripts (durable, not cleared automatically) |
+| `data/executor/workspace/` | Repositories, documents, and active cron scripts under `cron/<profile>/scripts/` |
 | `data/executor/home/` | Executor home directory, shell and tool config, browser profile, and caches |
 | `data/ssh/agent/` | Hermes SSH client key and pinned executor host key |
 | `data/ssh/executor/` | Executor SSH host key and authorized client key |
@@ -632,7 +654,10 @@ together while preserving persistent data. Run `make build` after modifying
 tracked implementation files.
 
 Use the same full `make down` and `make up` sequence to recover from an
-`agent-net` or `executor-net` failure. Restarting only a namespace owner can
+`agent-net` or `executor-net` failure or an interrupted deployment. Close
+open `make chat` sessions before shutdown. If shutdown fails, correct the
+error and repeat `make down`. Once shutdown completes, correct any startup
+error, run `make up`, and reopen chat. Restarting only a namespace owner can
 leave its application containers attached to an obsolete namespace (see
 [failure behavior and shared-namespace restarts](architecture.md#failure-behavior-and-shared-namespace-restarts)).
 Never add `--volumes` (`-v`) during recovery.
@@ -648,6 +673,10 @@ A complete backup covers:
 3. Both application named volumes: `hermes-data` and `x402_treazury-data`.
 4. The Git commit hash of this repository so matching images and defaults can be
    rebuilt.
+
+Back up the host sources listed in `CODE_EXECUTOR_BIND_MOUNTS` separately.
+Their files live outside the stack's `data/` directory and named volumes.
+Preserve any filesystem ACLs you use for two-way editing on Linux.
 
 Protect all of these artifacts as secrets: `.env` holds provider API keys and
 optional Tailscale keys, `data/tor/onion-service/` holds the onion identity
@@ -747,30 +776,30 @@ after preparation and do not use this file.
 
 ## WebApp terminal environment
 
-`WEBAPP_TERMINAL_ENVIRONMENT` defaults to `code` when unset:
+`WEBAPP_TERMINAL_ENVIRONMENT` controls the WebApp terminal and `!command` in
+`make chat`. It defaults to `code` when unset.
 
-- **`code`:** Opens a `runner` bash shell in the SSH executor at `/workspace`.
+- **`code`:** Uses a `runner` bash shell in the SSH executor.
 - **`agent`:** Opens a shell inside the Hermes container with administrative
   access to `/opt/data`.
 
 Empty or unknown values fail serving validation while leaving inspection,
-backup, repair, and shutdown available. After editing `.env`, run `make up` and
-reload browser tabs. Switching modes recreates Hermes, preserves credentials and
-executor files, and clears local terminal tabs, saved working directories, and
-scrollback from the previous mode (saved gateway tabs survive, and running
-processes never migrate between environments).
+backup, repair, and shutdown available. After editing `.env`, run `make up`,
+reload browser tabs, and reopen `make chat`. Switching modes recreates Hermes,
+preserves credentials and executor files, and clears local terminal tabs,
+saved working directories, and scrollback from the previous mode. Saved gateway
+tabs survive. Running processes stay in their original environment.
 
-In Code mode, requested directories are validated inside the executor (files
-open in their parent directory). Missing or inaccessible paths, control
-characters, and invalid UTF-8 are rejected, while spaces, Unicode, and shell
-metacharacters are treated safely as path data. SSH errors never fall back to an
-Agent shell: fix the executor or SSH keys and open a fresh terminal without
+The WebApp Code terminal starts at `/workspace` and validates requested
+directories inside the executor. Selecting a file opens its parent directory.
+The WebApp rejects missing or inaccessible paths, control characters, and
+invalid UTF-8. It passes spaces, Unicode, and shell metacharacters as path data.
+On SSH errors, fix the executor or SSH keys and open a fresh terminal without
 regenerating keys unnecessarily. Upgrading from the pre-v0.23.3 wrapper also
 clears previously saved local terminal tabs (saved gateway tabs and executor
 files survive).
 
-The profile's `terminal.cwd` setting applies to model execution and Agent
-shells. Workspace file APIs always read the executor, so their files can differ
-from what an Agent shell sees locally. Agent-side `/workspace` is ephemeral;
-durable agent files live under `/opt/data`. See
+The profile's `terminal.cwd` setting can choose the starting directory for
+executor tools within the applied roots. Agent chat shells use the profile's
+Hermes directory. Durable Hermes files live under `/opt/data`. See
 [terminal environment](webapp.md#terminal-environment).
