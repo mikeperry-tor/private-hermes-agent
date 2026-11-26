@@ -366,7 +366,7 @@ For a later release, use the
 | `webapp-content-privacy` (PR7) | `caafe5389ae585ef77387a962aee05b1bcf17029` | 0 | Deferred privacy candidate |
 | `tts-output-placement` | `9aa64cfdf3e692d097a33c9b70f7b9e86813098b` | 1 | Model speech output in the profile audio cache |
 | `ssh-project-workspaces` | `761b2893c2e72e13a0908a2f431cd3c278b92e9d` | 21 | Managed grants and a shared publisher for model and editor writes |
-| `executor-project-integration` | `8b265aed9818d721bda756fa236d0b341fc1ab2d` | 63 | Integrated project selection, context, Git, skills, cron, and full-suite regression fixes |
+| `executor-project-integration` | `0936b7c933687ebe46e733b561b0162d8250695e` | 64 | Integrated project selection, context, Git, skills, cron, and full-suite regression fixes |
 
 - Exact release base: Hermes v0.23.3 `caafe5389ae585ef77387a962aee05b1bcf17029`.
 - Local combined replay: `stack-patches/v0.23.3/combined`

@@ -8528,7 +8528,7 @@ index 577262650..cf1577235 100644
 
      return {'items': await asyncio.to_thread(listing)}
 diff --git a/gateway/session_context_refs.py b/gateway/session_context_refs.py
-index 401961332..349592ab6 100644
+index 401961332..91e4e22cc 100644
 --- a/gateway/session_context_refs.py
 +++ b/gateway/session_context_refs.py
 @@ -15,13 +15,15 @@ from gateway.config import Platform
@@ -8585,12 +8585,13 @@ index 401961332..349592ab6 100644
 
 
  async def turn_references(runner, event, source, session_key, text):
-@@ -103,8 +107,12 @@ async def managed_turn_text(authority, row, policy):
+@@ -103,8 +107,13 @@ async def managed_turn_text(authority, row, policy):
      except Exception as exc:
          logger.warning("@ context reference expansion failed: %s", exc, exc_info=True)
          return text, None
 +    import json
-+    attachment_session_id = row.get('session_id') if isinstance(row, dict) else None
++    from collections.abc import Mapping
++    attachment_session_id = row.get('target_session_id') if isinstance(row, Mapping) else None
      return await expand_references(text, cwd=policy.cwd, context_length=context_length,
 -                                   plugins=not policy.ignore_user_config)
 +                                   plugins=not policy.ignore_user_config,
@@ -15081,7 +15082,7 @@ index 054fa7734..7183ea242 100644
          await ws.close(code=_CLOSE_DESKTOP_GONE, reason="Bot Desktop is not running")
          return
 diff --git a/hermes_cli/web_routers/files.py b/hermes_cli/web_routers/files.py
-index 08df7512c..cd54a9e62 100644
+index 08df7512c..c9bcdfb63 100644
 --- a/hermes_cli/web_routers/files.py
 +++ b/hermes_cli/web_routers/files.py
 @@ -12,6 +12,7 @@ import hashlib
@@ -15462,7 +15463,7 @@ index 08df7512c..cd54a9e62 100644
          return _remote_download_response(request, backend, target, size)
      target = await _fs_download_path(path, profile, session_id, session=session)
      await asyncio.to_thread(_hosted_fs_read_guard, target, request)
-@@ -1557,8 +1663,45 @@ async def fs_download(
+@@ -1557,8 +1663,43 @@ async def fs_download(
      )
 
 
@@ -15477,9 +15478,7 @@ index 08df7512c..cd54a9e62 100644
 +    if not uses_managed_executor():
 +        return None
 +    with _config_profile_scope(profile):
-+        access = profile_project_access()
-+        if access is None:
-+            return None
++        access = profile_project_access() or ((), {})
 +        if path is None:
 +            return profile_project_location(access)
 +        if not _absolute_project(path):
@@ -15508,7 +15507,7 @@ index 08df7512c..cd54a9e62 100644
      backend = await asyncio.to_thread(_fs_backend, profile)
      if backend is not None:
          try:
-@@ -1576,6 +1719,8 @@ async def fs_git_root(path: str, profile: Optional[str] = None):
+@@ -1576,6 +1717,8 @@ async def fs_git_root(path: str, profile: Optional[str] = None):
 
  @router.get("/api/fs/default-cwd")
  async def fs_default_cwd(profile: Optional[str] = None):

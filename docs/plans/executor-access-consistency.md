@@ -795,21 +795,23 @@ submission branches) from nine concrete regressions in the executor-access
 work, including a fail-open fallback in `_managed_project_backend` when
 `profile_project_access()` returned `None`.
 
-Release replay `8b265aed9818d721bda756fa236d0b341fc1ab2d` fixes all nine
-regressions: restores `_local_backend`, keeps `managed_turn_text`'s
-three-argument signature using `row["session_id"]`, defaults `file_ops` in
+Release replay `0936b7c933687ebe46e733b561b0162d8250695e` (64 commits from
+`caafe5389`) fixes all nine regressions plus the independent-review follow-ups:
+restores `_local_backend`, keeps `managed_turn_text`'s three-argument
+signature using `row["target_session_id"]`, defaults `file_ops` in
 `_read_extracted_document`, catches `(OSError, RuntimeError)` in
-`_start_heartbeat_thread`, fails closed in `_managed_project_backend`, updates
-`test_web_server_fs_write_guard.py`, updates the `shell.cancel` contract,
+`_start_heartbeat_thread`, fails closed in `_managed_project_backend` and
+`_managed_fs_project`, updates `test_web_server_fs_write_guard.py`, adds a
+`target_session_id` regression test, updates the `shell.cancel` contract,
 subprocess env guard, and runtime-resolution allowlists, and regenerates the
-serve-handler ledger. All nine affected test files passed in Docker (100
+serve-handler ledger. All ten affected test files passed in Docker (101
 passed, 2 Windows skips, 0 failed). The matching fixes landed on native PR2a
 `fix/ssh-workspace` (`73a53241def871e21e758dfc8abc448c6b848b7f`, 15/15 passed),
 PR4b `feat/webapp-executor-terminals`
 (`7229d440e3e7e706c3eec457e9ab5974bbb7113e`, 14/14 passed), and
 `feat/ssh-project-workspaces` (`5ca732033a76368274e41e97cb2936342416cc52`).
 The regenerated 317-path candidate patch SHA-256 is
-`fdc5a134e0aee61e23b26b8844a899a3282e5731a6a6938daae41e4c2eb5b88b`, and the
+`765da9284355c286e5552732294b77648eb5a51fbe701671fba907eb6c02e24e`, and the
 full downstream patch series (`0001`–`0011`) applies cleanly to `caafe5389`.
 The final cross-engine lifecycle runs, remaining native submission topics, and
 final combined review remain open.
