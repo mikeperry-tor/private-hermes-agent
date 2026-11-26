@@ -7,13 +7,23 @@ for clean submission to `NousResearch/hermes-agent` (`origin`) under author
 identity `Mike Perry <mikeperry-git@untrusted.systems>`.
 
 - **Plan path:** `docs/plans/hermes-upstream-prep.md`
-- **Wrapper branch and starting commit:** `executor-access-consistency_gem` at
-  `d3fc3a5`
+- **Wrapper branch and starting commit:** `main` at `e8d7da4`
 - **Current status:** Ready to start Phase 0 (this revised plan passed
   independent review before execution). All 13 prior local candidate branches
   are verified on `88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5` (2026-11-22), and
   the packaged v0.23.3 release replay is qualified at
   `1d3dec980055f3bbffaa15e5eabf7a998520d962`.
+- **Two-step rebase strategy (`88a1c1f4b` -> `v0.23.4` -> `origin/main`):**
+  Upstream `v0.23.4` (`8fc0374447313e276f6b9a2764bfc750190c966a`, 2026-11-24) is
+  a direct descendant of `88a1c1f4b` (387 commits ahead) and a direct ancestor
+  of `origin/main` (`02afb7489`, 55 commits ahead as of 2026-11-25). Phases 0-4
+  target `v0.23.4` (`8fc037444`) first to produce both clean wave branches and
+  `stack-patches/v0.23.4/combined` without redoing the 565 commits already
+  resolved between `v0.23.3` (`caafe5389`) and `88a1c1f4b`. After Phase 4, pause
+  this plan to run the separate Private Hermes `v0.23.4` stack upgrade and live
+  cross-engine qualification under [docs/update-workflow.md](../update-workflow.md),
+  then resume for Phase 5 to fold back any live-stack fixes and rebase all 11
+  branches the short distance from `v0.23.4` onto latest `origin/main`.
 - **Target restructuring:** Reorganize submissions into **3 waves (11 active PRs
   and 1 deferred design)** using wave-numbered drafts (`W1-*.md`, `W2-*.md`,
   `W3-*.md`, `deferred-*.md`) instead of `PR[1-7]*.md`. Keep each security and
@@ -22,10 +32,11 @@ identity `Mike Perry <mikeperry-git@untrusted.systems>`.
   split off a tail cleanly if requested.
 - **Engine and qualification scope:** Upstream native branch verification runs
   in offline Linux ARM64 Docker containers as UID 10000. Packaged Private
-  Hermes runtime requalification on Docker Desktop, native Linux Docker, and
-  rootless Podman is required only if Phase 2 or Phase 3 uncovers a v0.23.3
-  runtime or security defect that also needs backporting into
-  `components/hermes/patches/0001-upstream-candidates.patch`.
+  Hermes cross-engine runtime qualification on Docker Desktop, native Linux
+  Docker, and rootless Podman runs in the separate `v0.23.4` upgrade plan
+  between Phase 4 and Phase 5 (testing every `W3-2` and `W3-3` refactor in a
+  live stack before upstream PR submission). Backporting to `v0.23.3` is not
+  needed unless a critical security fix must ship before the `v0.23.4` upgrade.
 - **Hard constraints:**
   - Never weaken isolation boundaries, fail-closed checks, or existing wrapper
     security contracts (`AGENTS.md`).
@@ -48,9 +59,10 @@ must:
 1. Read the [Execution checkpoints](#execution-checkpoints) table below and run
    `git -C upstream_work/hermes-agent for-each-ref --format='%(refname:short) %(objectname:short) %(subject)' refs/heads/fix/ refs/heads/feat/`
    along with `ls upstream_work/submissions/`.
-2. Never redo branches already marked `Done` with matching SHAs and saved logs
-   under `upstream_work/wave-rebase-evidence/`. Use the self-contained commands
-   in [Docker verification recipes](#3-docker-verification-recipes) for all
+2. Never redo branches already marked `Done` against the row's current
+   `Target base` with matching SHAs and saved logs under
+   `upstream_work/wave-rebase-evidence/`. Use the self-contained commands in
+   [Docker verification recipes](#3-docker-verification-recipes) for all
    `scripts/check`, Python, OpenRPC, Desktop, and TUI checks.
 3. Update the checkpoint table in place (do not append dated progress
    narratives), prune resolved bullets from
@@ -64,25 +76,28 @@ Update this table in place as each phase and branch completes.
 
 | Phase or item | Target branch | Target base | Commit or ref | Validation (`scripts/check` and Docker tests) | Draft renamed | Review | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Phase 0: Pre-flight and fetch `origin/main` | `origin/main` | `origin/main` | `88a1c1f4b` (stale; remote `02afb7489` or newer) | n/a | n/a | n/a | Pending |
-| `W1-1` Managed config | `fix/managed-config` | `MAIN_SHA` | `d4aa66920` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-2` SSH workspace fixes | `fix/ssh-workspace` | `MAIN_SHA` | `73a53241d` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-3` Desktop and browser fixes | `fix/executor-desktop-browser` | `MAIN_SHA` | `1f2eefc51` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-4` Literal SSH and OSC 7 `cwd` | `fix/terminal-ssh-cwd` | `MAIN_SHA` | `868773aa8` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
-| `W1-5` Speech output placement | `fix/tts-output-placement` | `MAIN_SHA` | `ecae8682a` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| Phase 0: Pre-flight and fetch `v0.23.4` | `v0.23.4` (`8fc037444`) | `v0.23.4` (`8fc037444`) | `88a1c1f4b` (387 commits behind `v0.23.4`) | n/a | n/a | n/a | Pending |
+| `W1-1` Managed config | `fix/managed-config` | `8fc037444` (`v0.23.4`) | `d4aa66920` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-2` SSH workspace fixes | `fix/ssh-workspace` | `8fc037444` (`v0.23.4`) | `73a53241d` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-3` Desktop and browser fixes | `fix/executor-desktop-browser` | `8fc037444` (`v0.23.4`) | `1f2eefc51` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-4` Literal SSH and OSC 7 `cwd` | `fix/terminal-ssh-cwd` | `8fc037444` (`v0.23.4`) | `868773aa8` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
+| `W1-5` Speech output placement | `fix/tts-output-placement` | `8fc037444` (`v0.23.4`) | `ecae8682a` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
 | `W2-1` Explicit SSH client config | `feat/ssh-client-config` | `W1-1` | `db7587772` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
 | `W2-2` URL reference opt-out | `feat/url-reference-fetching` | `W1-1` | `c3a6b8a0b` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
 | `W2-3` Managed tool denials | `feat/managed-tool-denials` | `W1-1` | `14e980021` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
 | `W3-1` Executor desktop and browser | `feat/executor-desktop-placement` | `W2-1` and `W1-3` | `24a750de0` (on `88a1c1f4b`) | Pending rebase | Pending | Combined in Phase 4 | Pending |
 | `W3-2` Operator shells and terminals | `feat/webapp-executor-terminals` | `W1-1` and `W1-4` | `7ae5fd82c` (on `88a1c1f4b`) | Failing (1 ruff, 11 health); pending rebase | Pending | Combined in Phase 4 | Pending |
 | `W3-3` Managed SSH isolation (workspaces, skills, and cron) | `feat/ssh-executor-isolation` (consolidating `feat/ssh-project-workspaces`, `feat/ssh-skill-shell`, and `feat/ssh-cron-execution`) | `W1-1`, `W1-2`, and `W2-1` | `39cdc0ce2`, `0c67369ef`, and `c73e521b8` | Pending split and rebase | Pending | Combined in Phase 4 | Pending |
-| Phase 4: Combined native replay, docs, and review | Temporary merge of `W1-1` through `W3-3` | `MAIN_SHA` | Pending | Pending | n/a | Pending | Pending |
+| Phase 4: Combined `v0.23.4` replay, `stack-patches/v0.23.4/combined`, and review | `stack-patches/v0.23.4/combined` | `8fc037444` (`v0.23.4`) | Pending | Pending | n/a | Pending | Pending |
+| Pause: Private Hermes `v0.23.4` stack upgrade | Separate upgrade plan (`docs/update-workflow.md`) | `8fc037444` (`v0.23.4`) | Pending Phase 4 | Cross-engine Docker and Podman | n/a | Separate plan | Pending |
+| Phase 5: Hop qualified `W1-1` through `W3-3` onto latest `origin/main` | `W1-1` through `W3-3` plus combined check | `MAIN_SHA` (`origin/main`) | Pending `v0.23.4` upgrade | Pending | Refresh SHAs | Pending | Pending |
 
 #### Open findings and next action
 
-- Next action: start Phase 0 (create `backup/88a1c1f4b/*` refs, fetch latest
-  `origin/main`, prune stale worktrees, and discard leftover WIP in
-  `upstream_work/worktrees/combined-replay`).
+- Next action: start Phase 0 (create `backup/88a1c1f4b/*` refs, fetch tag
+  `v0.23.4` (`8fc0374447313e276f6b9a2764bfc750190c966a`) and `origin/main` into
+  `upstream_work/hermes-agent/`, prune stale worktrees, and discard leftover WIP
+  in `upstream_work/worktrees/combined-replay`).
 
 ## 1. Branches to submit
 
@@ -200,8 +215,9 @@ TypeScript compiler is required).
 *Known container-only baseline skips and failures:* Inside Docker (`/.dockerenv`),
 `tests/cron/test_file_permissions.py` fails 4 mode assertions (`0755` and `0644`
 instead of `0700` and `0600`) identically on unmodified upstream `main`, and
-Windows-only tests skip on Linux. Compare any unexpected failure against
-unmodified `MAIN_SHA` in the same container before treating it as a regression.
+Windows-only tests skip on Linux. Compare any unexpected failure against the
+unmodified target base (`8fc037444` in Phases 1-4, or `MAIN_SHA` in Phase 5) in
+the same container before treating it as a regression.
 
 ### Regenerating OpenRPC contracts and serve-handler ledger
 
@@ -284,7 +300,7 @@ tests.
 
 ## 4. Phased execution plan
 
-### Phase 0: Pre-flight, safety refs, and `origin/main` fetch
+### Phase 0: Pre-flight, safety refs, and `v0.23.4` fetch
 
 1. **Snapshot current `88a1c1f4b` heads locally before any rebase:** Create
    read-only backup refs `backup/88a1c1f4b/<branch-leaf>` for all 13 active
@@ -299,9 +315,13 @@ tests.
    requires host access outside the agent sandbox; if the operator has not
    pushed those 6 fast-forward and new branches yet, record the exact non-force
    push command (or push `backup/88a1c1f4b/*` refs) in the handoff note.
-3. **Fetch latest `origin/main`:** Run `git -C upstream_work/hermes-agent fetch origin main`
-   and record the exact 40-character `MAIN_SHA` and commit date in the
-   [Execution checkpoints](#execution-checkpoints) table.
+3. **Fetch `v0.23.4` (`8fc0374447313e276f6b9a2764bfc750190c966a`) and latest
+   `origin/main`:** Run `git -C upstream_work/hermes-agent fetch origin --tags main`
+   (or fetch read-only from `reference_repos/hermes-agent` if working offline),
+   verify `git -C upstream_work/hermes-agent rev-parse v0.23.4^{commit}` equals
+   `8fc0374447313e276f6b9a2764bfc750190c966a`, and confirm linear ancestry
+   `88a1c1f4b -> 8fc037444 -> origin/main`. Use `8fc037444` (`v0.23.4`) as the
+   rebase base for Phases 1-4.
 4. **Worktree hygiene:**
    - Run `git -C upstream_work/hermes-agent worktree prune` to clear the 13
      stale prunable `/private/tmp` and `/private/var/folders` entries.
@@ -309,44 +329,45 @@ tests.
      `upstream_work/worktrees/combined-replay` (on `stack-patches/v0.23.3/combined`,
      which is superseded by `stack-patches/v0.23.3/executor-project-integration`
      at `1d3dec980`). Do not remove or modify any `stack-patches/v0.23.3/*` ref.
-   - Check upstream commits in `88a1c1f4b..MAIN_SHA` for any merged fixes that
-     overlap with `W1-1` through `W3-3` (run `git log --oneline 88a1c1f4b..MAIN_SHA`
-     filtered by touched paths).
-5. **Phase 0 gate:** `MAIN_SHA` recorded, backup refs created, prunable
-   worktrees cleared, and overlap notes recorded in the checkpoint table.
+   - Check upstream commits in `88a1c1f4b..8fc037444` (387 commits) for any
+     merged fixes that overlap with `W1-1` through `W3-3` (run
+     `git log --oneline 88a1c1f4b..8fc037444` filtered by touched paths).
+5. **Phase 0 gate:** `v0.23.4` (`8fc037444`) verified in `upstream_work/hermes-agent/`,
+   backup refs created, prunable worktrees cleared, and overlap notes recorded
+   in the checkpoint table.
 
-### Phase 1: Rebase Waves 1 and 2 (`W1-1`..`W1-5`, `W2-1`..`W2-3`)
+### Phase 1: Rebase Waves 1 and 2 (`W1-1`..`W1-5`, `W2-1`..`W2-3`) onto `v0.23.4`
 
 Use clean temporary worktrees under `upstream_work/worktrees/` (always setting
 `GIT_COMMITTER_NAME="Mike Perry"` and
 `GIT_COMMITTER_EMAIL="mikeperry-git@untrusted.systems"`).
 
-1. **Wave 1 (`origin/main` = `MAIN_SHA`):**
+1. **Wave 1 (base = `8fc037444`, `v0.23.4`):**
    - **`W1-1` (`fix/managed-config`):** Rebase `88a1c1f4b..d4aa66920` onto
-     `MAIN_SHA` (2 commits). Run `scripts/check --base MAIN_SHA` and tests:
+     `8fc037444` (2 commits). Run `scripts/check --base 8fc037444` and tests:
      `tests/hermes_cli/test_managed_scope*.py`,
      `tests/hermes_cli/test_config*.py`, `tests/ci/test_docs_drift.py`, and
      `tests/ci/test_prompt_surface.py`.
    - **`W1-2` (`fix/ssh-workspace`):** Rebase `88a1c1f4b..73a53241d` onto
-     `MAIN_SHA` (8 commits; keep `73a53241d` as a clean standalone tip commit,
+     `8fc037444` (8 commits; keep `73a53241d` as a clean standalone tip commit,
      or fold its `tools/file_tools.py` change into `eb93959ce` and its
      `tests/agent/test_subprocess_env_guard.py` change into `23be2f3b5`). Run
-     `scripts/check --base MAIN_SHA` and tests:
+     `scripts/check --base 8fc037444` and tests:
      `tests/tools/test_ssh_environment.py`, `tests/tools/test_file_tools*.py`,
      `tests/hermes_cli/test_ssh_workspace_fs.py`,
      `tests/agent/test_subprocess_env_guard.py`, `tests/ci/test_docs_drift.py`,
      and `tests/ci/test_prompt_surface.py`.
    - **`W1-3` (`fix/executor-desktop-browser`):** Rebase `88a1c1f4b..1f2eefc51`
-     onto `MAIN_SHA` (3 commits). Run `scripts/check --base MAIN_SHA` and
+     onto `8fc037444` (3 commits). Run `scripts/check --base 8fc037444` and
      desktop, CUA, and browser fix tests (`tests/tools/test_computer_use*.py`,
      `tests/tools/test_browser*.py`, `tests/tools/test_bot_desktop*.py`,
      `tests/ci/test_docs_drift.py`, and `tests/ci/test_prompt_surface.py`).
    - **`W1-4` (`fix/terminal-ssh-cwd`):** Rebase `88a1c1f4b..868773aa8` onto
-     `MAIN_SHA` (1 commit). Run `scripts/check --base MAIN_SHA`, terminal and
+     `8fc037444` (1 commit). Run `scripts/check --base 8fc037444`, terminal and
      SSH `cwd` Python tests, and Desktop `cwd-tracking.test.ts` and
      `ssh-connection.test.ts`.
    - **`W1-5` (`fix/tts-output-placement`):** Rebase `88a1c1f4b..ecae8682a` onto
-     `MAIN_SHA` (1 commit). Run `scripts/check --base MAIN_SHA` and
+     `8fc037444` (1 commit). Run `scripts/check --base 8fc037444` and
      `tests/tools/test_tts_output_placement.py`,
      `tests/tools/test_tts_output_dir_profile_scope.py`,
      `tests/tools/test_tts_path_traversal.py`, `tests/ci/test_docs_drift.py`,
@@ -388,8 +409,9 @@ Use clean temporary worktrees under `upstream_work/worktrees/` (always setting
 #### `W3-1`: `feat/executor-desktop-placement` (base: rebased `W2-1` and `W1-3`)
 
 1. Build a clean prerequisite base combining rebased `W2-1` and `W1-3` (with
-   one clean merge commit on top of `MAIN_SHA` for the review base), then replay
-   all **4 commits** (`16816db7d..24a750de0`, 53 files, +3,100 / -278) onto it.
+   one clean merge commit on top of `8fc037444` for the review base), then
+   replay all **4 commits** (`16816db7d..24a750de0`, 53 files, +3,100 / -278)
+   onto it.
 2. Preserve the 4 already-clean sequential commits so browser and desktop
    maintainers can inspect their respective ranges directly:
    - **Commit 1 (`feat(browser): add browser.require_sandbox to enforce Chromium sandboxing`, from `ed5acd3d8`):**
@@ -617,7 +639,7 @@ and 10 to split off cleanly into standalone follow-up PRs if maintainers ask):
 
 *Exact-tree sanity check:* Before committing the final `W3-3` tip, diff
 `W3-3` against the merged pre-split tree (excluding only the 2 intentional
-review cleanups and `MAIN_SHA` conflict resolutions) to confirm zero production
+review cleanups and `8fc037444` conflict resolutions) to confirm zero production
 lines were accidentally dropped during the 10-commit split.
 
 #### Phase 3 verification and draft
@@ -627,7 +649,7 @@ lines were accidentally dropped during the 10-commit split.
 2. Run focused Docker tests for workspaces (31+ files), skills (11 files), and
    full `tests/cron/` with CI checks (201 of 202 files, noting the
    container-only `test_file_permissions.py` artifact if it still reproduces on
-   `MAIN_SHA`).
+   `8fc037444`).
 3. Run `apps/desktop` `tsc --noEmit` with 7 Vitest files and `ui-tui`
    `tsc --noEmit` with `canonicalGateway.test.ts` in Docker.
 4. Write `upstream_work/submissions/W3-3-ssh-executor-isolation.md` using the
@@ -640,37 +662,114 @@ lines were accidentally dropped during the 10-commit split.
    and Python, Desktop, and TUI Docker tests; draft is written; checkpoint table
    is committed.
 
-### Phase 4: Combined native qualification, docs alignment, and independent review
+### Phase 4: Combined `v0.23.4` qualification, `stack-patches/v0.23.4/combined`, and pause for stack upgrade
 
-1. **Combined native replay on `MAIN_SHA`:** In a temporary Docker checkout,
-   merge all 11 active branches (`W1-1` through `W3-3`), resolving the
+1. **Combined native replay on `v0.23.4` (`8fc037444`):** Merge all 11 active
+   branches (`W1-1` through `W3-3`) on top of `8fc037444`, resolving the
    documented shared paths and regenerating OpenRPC contracts and the
-   serve-handler ledger if needed. Run:
-   - `scripts/check --base MAIN_SHA`
+   serve-handler ledger if needed. Save the verified merge as local branch
+   `stack-patches/v0.23.4/combined` (keeping the 11 individual `W1-1` through
+   `W3-3` branches untouched) and run:
+   - `scripts/check --base 8fc037444`
    - Cross-topic Python suite covering all 11 topics (all workspace, skill,
      cron, operator-shell, desktop and browser, URL reference, tool-denial, TTS,
      wire-contract, ledger, docs-drift, and prompt-surface tests)
    - `apps/desktop` `tsc --noEmit` and combined Vitest files
    - `ui-tui` `tsc --noEmit` and combined Vitest files
-2. **Wrapper docs alignment:** Update `docs/development.md` and
-   `docs/updates-and-plugins.md` to match the final `W1-1` through `W3-3` wave
-   naming and `MAIN_SHA` qualification numbers (keeping `v0.23.3` packaged
-   evidence intact). Verify local markdown links, anchors, `git diff --check`,
-   and `make check`.
-3. **Final independent subagent review (covers Phases 1-4, including `W3-2`
-   operator-shell refactors and `W3-3` fail-closed cleanups):** Spawn a fresh
-   read-only `general` subagent to audit:
-   - All 11 rebased branches (`MAIN_SHA..HEAD`) for commit cleanliness,
-     `scripts/check` results, absence of unintended merge commits or leaked
-     wrapper paths, and exact parity against pre-rebase `backup/88a1c1f4b/*`
-     (accounting for `MAIN_SHA` changes, `W3-2` `scripts/check` refactors, and
-     the 2 intentional `W3-3` cleanups).
+2. **Independent subagent review (covers Phases 1-4 on `v0.23.4`, including
+   `W3-2` operator-shell refactors and `W3-3` fail-closed cleanups):** Spawn a
+   fresh read-only `general` subagent to audit:
+   - All 11 rebased branches (`8fc037444..HEAD`) and
+     `stack-patches/v0.23.4/combined` for commit cleanliness, `scripts/check`
+     results, absence of unintended merge commits or leaked wrapper paths, and
+     exact parity against pre-rebase `backup/88a1c1f4b/*` (accounting for
+     `88a1c1f4b..8fc037444` upstream changes, `W3-2` `scripts/check` refactors,
+     and the 2 intentional `W3-3` cleanups).
    - All 11 `W*.md` drafts and `deferred-webapp-content-privacy.md` for factual
      accuracy, exact SHAs, ASCII punctuation, and template compliance.
-   - All wrapper doc edits (`docs/plans/hermes-upstream-prep.md`,
-     `docs/development.md`, and `docs/updates-and-plugins.md`).
-4. **Resolve findings and hand off:** Fix any material findings, re-verify
-   modified branches, update the checkpoint table to `Done`, commit the wrapper
+3. **Phase 4 gate, pause updates, and handoff to the `v0.23.4` upgrade:** Fix
+   any material findings and re-verify modified branches, then update this plan
+   **in place** before pausing and committing:
+   - **Update in place:**
+     - `## Objective and status`: set `Current status` to
+       `Paused after Phase 4 (v0.23.4 branches and stack-patches/v0.23.4/combined ready; awaiting separate v0.23.4 stack upgrade before Phase 5)`.
+     - `### Execution checkpoints`: mark Phase 0, `W1-1` through `W3-3`, and
+       Phase 4 `Done` with their `v0.23.4` commit SHAs, validation summaries,
+       and `Clean` review status; leave the `Pause` row and `Phase 5` row
+       `Pending`.
+     - `#### Open findings and next action`: prune resolved Phase 0-4 bullets
+       and set the sole next action to running the separate `v0.23.4` stack
+       upgrade plan.
+     - `## 1. Branches to submit`: update the `Current head` column header to
+       `Current head (v0.23.4 base)`, record the new `v0.23.4`-based SHAs,
+       commit counts, and diffstats, and mark legacy drafts replaced.
+   - **Preserve untouched (do not truncate or condense):** Keep `## 2`
+     (submission and shared-path conflict rules), `## 3` (Docker verification
+     recipes), the per-branch test path lists in Phases 1-3 (reused by Phase 5),
+     `### Phase 5`, and `## 5` (release provenance and its inbound anchors)
+     intact so the Phase 5 agent inherits every command and contract.
+   - **Intervening `v0.23.4` stack upgrade boundary:** Execute the separate
+     Private Hermes `v0.23.4` upgrade plan under
+     [docs/update-workflow.md](../update-workflow.md) (auditing
+     `caafe5389..8fc037444`, verifying the official `v0.23.4` image digest
+     `sha256:ef0650d523ee1b5ab32c779acabc446d9936869a9932591553688a62bcf0c42f`,
+     exporting `0001-upstream-candidates.patch` from
+     `stack-patches/v0.23.4/combined`, rebasing downstream patches `0002`-`0011`,
+     and running live cross-engine Docker Desktop, native Debian Docker, and
+     rootless Podman qualification including populated `v0.23.3 -> v0.23.4`
+     migration). When that upgrade completes, limit its edits to this plan to
+     four spots (leaving `## 1`-`## 4` intact): (a) update `Current status` in
+     `## Objective and status` to ready for Phase 5, (b) mark the `Pause` row
+     `Done` with the upgraded `v0.23.4` wrapper commit SHA, (c) list any
+     live-stack fix commits under `#### Open findings and next action` and set
+     the next action to starting Phase 5, and (d) update
+     `## 5. Packaged release provenance` to `v0.23.4` alongside any inbound
+     anchor updates in `docs/development.md`, `docs/update-workflow.md`, and
+     `docs/updates-and-plugins.md`.
+
+### Phase 5: Post-`v0.23.4` hop onto latest `origin/main` for upstream submission
+
+Resume here after the `v0.23.4` stack upgrade passes cross-engine qualification:
+
+1. **Fold back any `v0.23.4` live-stack fixes:** If live cross-engine
+   qualification of `v0.23.4` surfaced any runtime or security bug in `W1-1`
+   through `W3-3` (listed under `#### Open findings and next action`), fold
+   each fix cleanly into its owning branch and commit on `8fc037444` before
+   rebasing forward.
+2. **Fetch latest `origin/main` (`MAIN_SHA`), transition checkpoints, and rebase
+   `W1-1` through `W3-3`:**
+   - Save `backup/v0.23.4/<branch-leaf>` refs for all 11 branches and fetch
+     latest `origin/main` (`MAIN_SHA`).
+   - Before rebasing `W1-1`, update `Current status` to `Phase 5 in progress`
+     with the fetched `MAIN_SHA`, set the `Phase 5` row's `Target base` to that
+     concrete SHA and `Status` to `In progress`, and transition rows `W1-1`
+     through `W3-3` in `### Execution checkpoints` in place so Phase 5 stays
+     resumable branch by branch: update Wave 1 `Target base` cells from
+     `8fc037444` (`v0.23.4`) to the concrete `MAIN_SHA`, keep the prior SHA in
+     `Commit or ref` as `<v0.23.4-sha> (on v0.23.4)`, set `Validation` to
+     `Pending Phase 5 rebase`, set `Review` to `Combined in Phase 5`, and reset
+     `Status` to `Pending` while leaving Phase 0, Phase 4, and the `Pause` row
+     `Done`.
+   - Rebase all 11 clean branches from `8fc037444` onto `MAIN_SHA` (55 commits
+     and 58 files ahead of `v0.23.4` as of 2026-11-25), reusing the per-branch
+     test path lists from Phases 1-3 and the commands in
+     [Docker verification recipes](#3-docker-verification-recipes), saving Phase 5
+     logs under `upstream_work/wave-rebase-evidence/main/` so they stay
+     distinct from `v0.23.4` logs. Re-run `scripts/check` and focused Docker
+     Python, Desktop, and TUI tests on each branch, plus a temporary combined
+     merge on `MAIN_SHA`, updating each row's SHA, validation summary, and
+     `Status` to `Done` as it finishes.
+3. **Refresh submission drafts, Section 1, and wrapper docs:** Update branch
+   and base SHAs in `upstream_work/submissions/W*.md`, refresh
+   `## 1. Branches to submit` with the `MAIN_SHA` heads, commit counts, and
+   diffstats, align `docs/development.md` and `docs/updates-and-plugins.md` to
+   the `W1-1` through `W3-3` wave naming and `MAIN_SHA` qualification numbers,
+   and verify local markdown links, anchors, `git diff --check`, and
+   `make check`.
+4. **Final independent review and handoff:** Spawn a fresh read-only `general`
+   subagent to audit the `MAIN_SHA`-rebased branches, drafts, and wrapper doc
+   edits. Resolve any findings, update `Current status` to ready to submit on
+   `MAIN_SHA`, mark Phase 5 `Done` in the checkpoint table, commit the wrapper
    updates, and report the exact `git -C upstream_work/hermes-agent push ...`
    command for the operator to run when ready to publish to `fork`.
 
@@ -705,9 +804,11 @@ official Hermes release, follow
   Docker Desktop 29.9.3, Debian 13 ARM64 native Docker 29.10.0, and Debian 13
   ARM64 rootless Podman 5.4.2 is recorded in
   [Packaged Hermes qualification](../development.md#packaged-hermes-qualification).
-- **Note on Phase 2 and Phase 3 changes vs. the v0.23.3 patch:** Pure commit
-  reordering, lint and code-health refactors, and `origin/main` rebase
-  adjustments do not require rebuilding `0001-upstream-candidates.patch`. Only
+- **Note on Phase 2 and Phase 3 changes vs. the v0.23.3 patch:** Phases 1-4
+  target `v0.23.4` (`8fc037444`) and feed `stack-patches/v0.23.4/combined`
+  into the separate `v0.23.4` stack upgrade plan. Pure commit reordering, lint
+  and code-health refactors, and `v0.23.4` rebase adjustments do not require
+  rebuilding the `v0.23.3` patch (`0001-upstream-candidates.patch`). Only
   backport to `stack-patches/v0.23.3/executor-project-integration` and
-  re-qualify the packaged image on both Docker and rootless Podman if Phase 2 or
-  Phase 3 uncovers a runtime or security defect that also affects v0.23.3.
+  re-qualify the `v0.23.3` image on Docker and rootless Podman if a critical
+  security defect must ship before the `v0.23.4` upgrade.
