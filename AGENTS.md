@@ -3,7 +3,9 @@
 **Completeness check:** This file ends with the exact line `END OF AGENTS.md`.
 If that line is missing from your instructions (or your harness reports
 truncation), read the remainder of `AGENTS.md` before starting work. Keep
-`END OF AGENTS.md` as the final line when editing this file.
+`END OF AGENTS.md` as the final line when editing this file. You must follow
+the FULL set of AGENTS.md rules, from this instruction through the final
+`END OF AGENTS.md` marker.
 
 This repository is a small deployment wrapper for Hermes Agent, not a general
 agent platform. It combines SSH-isolated code execution, transparent Tor egress,
