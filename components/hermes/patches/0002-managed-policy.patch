@@ -15,3 +15,16 @@ index 0ac091319..9ffdd6170 100644
  if [ "$$" -eq 1 ]; then
      # The interactive CMD owns the terminal. Supervised gateways and dashboard
      # output must go to s6's logger instead of overwriting the TUI or shell.
+diff --git a/tools/file_tools_paths.py b/tools/file_tools_paths.py
+--- a/tools/file_tools_paths.py
++++ b/tools/file_tools_paths.py
+@@ -31,7 +31,9 @@ def managed_ssh_workspace_roots() -> tuple[str, ...] | None:
+     terminal = managed.get("terminal", {})
+     if not isinstance(terminal, dict):
+         raise ValueError("The managed terminal settings must be a mapping.")
+     if "ssh_workspace_roots" not in terminal:
++        if "PRIVATE_HERMES_EXECUTOR_ROOTS" in os.environ:
++            raise ValueError("The applied SSH workspace roots are missing. Restart with make up.")
+         return None
+     roots = terminal["ssh_workspace_roots"]
+     if not isinstance(roots, list) or not roots or any(
