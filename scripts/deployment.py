@@ -389,6 +389,22 @@ def _atomic_write_text(path, text, mode=0o644):
             temporary.unlink(missing_ok=True)
 
 
+def command_env_prefix(command):
+    """Return the leading `env` prefix (single-token options and KEY=VALUE assignments)."""
+    if not command or command[0] != 'env':
+        return []
+    index = 1
+    while index < len(command):
+        token = command[index]
+        if token == '--':
+            return list(command[:index + 1])
+        if token.startswith('-') or '=' in token:
+            index += 1
+            continue
+        break
+    return list(command[:index]) if index > 1 else []
+
+
 def maintenance_compose(all_ingress=False, executor_build=False, extra=(), *,
                         allow_invalid_network=True, validate_project=False, env=None, env_path=None):
     # These operations must not start ingress, inference or the agent with

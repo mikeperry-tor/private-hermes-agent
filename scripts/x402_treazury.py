@@ -13,7 +13,7 @@ import subprocess
 import sys
 import threading
 import time
-from deployment import (ROOT, engine_command, inspect_launch,
+from deployment import (ROOT, command_env_prefix, engine_command, inspect_launch,
                         maintenance_compose, parse_launch, prepare_launch)
 from addressing import DEFAULT_NETWORK_PREFIX
 from provisioning import initialize_research_config, research_config_diff, report_research_config_diff
@@ -250,17 +250,11 @@ class Controller:
         subprocess.run([sys.executable, str(self.root / 'scripts/init-config.py'), '--wallet'],
                        cwd=self.root, check=True)
         initialize_research_config(self.command, self.root)
-        preflight_env = dict(os.environ)
-        if self.command and self.command[0] == 'env':
-            for token in self.command[1:]:
-                if '=' not in token:
-                    break
-                key, value = token.split('=', 1)
-                preflight_env[key] = value
         try:
             subprocess.run(
-                [sys.executable, str(self.root / 'scripts/preflight.py'), '--skip-ports', '--services', 'tor', 'agent-net'],
-                cwd=self.root, env=preflight_env, check=True,
+                [*command_env_prefix(self.command), sys.executable,
+                 str(self.root / 'scripts/preflight.py'), '--skip-ports', '--services', 'tor', 'agent-net'],
+                cwd=self.root, check=True,
             )
         except subprocess.CalledProcessError as error:
             raise SystemExit(error.returncode) from None
@@ -325,29 +319,48 @@ class Controller:
             print('Hermes is available; research activation failed: ' + str(error), file=sys.stderr)
 
 
-def _running_stack_prefix():
+def _running_stack_prefix(command=None):
     """Read applied NETWORK_PREFIX from an existing agent-net, hermes, or tor container."""
-    command = maintenance_compose(validate_project=True)
+    command = command or maintenance_compose(validate_project=True)
+    services = ('agent-net', 'hermes', 'tor')
     for ps_args in (('ps', '-q'), ('ps', '-a', '-q')):
-        containers = subprocess.run([*command, *ps_args, 'agent-net', 'hermes', 'tor'],
+        containers = subprocess.run([*command, *ps_args, *services],
                                     cwd=ROOT, text=True, capture_output=True)
         if containers.returncode != 0:
             continue
         ids = [cid for cid in containers.stdout.strip().splitlines() if cid]
         if not ids:
             continue
-        inspected = subprocess.run([*engine_command(), 'inspect', '--format', '{{json .Config.Env}}', ids[0]],
-                                   cwd=ROOT, text=True, capture_output=True)
+        inspected = subprocess.run(
+            [*engine_command(), 'inspect', '--format',
+             '{{index .Config.Labels "com.docker.compose.service"}} {{json .Config.Env}}', *ids],
+            cwd=ROOT, text=True, capture_output=True,
+        )
         if inspected.returncode != 0:
             continue
-        try:
-            entries = json.loads(inspected.stdout)
+        by_service = {}
+        fallback = None
+        for line in inspected.stdout.splitlines():
+            service, sep, raw_env = line.partition(' ')
+            if not sep:
+                continue
+            try:
+                entries = json.loads(raw_env)
+            except ValueError:
+                continue
             if not isinstance(entries, list):
                 continue
             container_env = dict(entry.split('=', 1) for entry in entries if '=' in entry)
-            return container_env.get('NETWORK_PREFIX') or DEFAULT_NETWORK_PREFIX
-        except ValueError:
-            continue
+            prefix = container_env.get('NETWORK_PREFIX') or DEFAULT_NETWORK_PREFIX
+            if service in services:
+                by_service.setdefault(service, prefix)
+            elif fallback is None:
+                fallback = prefix
+        for service in services:
+            if service in by_service:
+                return by_service[service]
+        if fallback is not None:
+            return fallback
     return None
 
 
@@ -358,14 +371,16 @@ def main():
     # Only treasury and existing Hermes control RPC are used here. Actual treasury
     # policy is validated by its own admin/job, not unrelated ingress settings.
     offline = args.action in ('status', 'config', 'config-diff')
-    overrides = None
-    if not offline:
-        applied_prefix = _running_stack_prefix()
-        if applied_prefix:
-            overrides = {'NETWORK_PREFIX': applied_prefix}
-    controller = Controller(maintenance_compose(
-        allow_invalid_network=offline, validate_project=not offline, env=overrides,
-    ))
+    if offline:
+        command = maintenance_compose(allow_invalid_network=True, validate_project=False)
+    else:
+        probe_command = maintenance_compose(allow_invalid_network=True, validate_project=True)
+        applied_prefix = _running_stack_prefix(probe_command)
+        overrides = {'NETWORK_PREFIX': applied_prefix} if applied_prefix else None
+        command = maintenance_compose(
+            allow_invalid_network=False, validate_project=False, env=overrides,
+        )
+    controller = Controller(command)
     if args.action == 'config-diff':
         research_config_diff(controller.command, ROOT)
         return

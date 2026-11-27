@@ -234,6 +234,16 @@ class ComposeMultiInstanceModelTests(unittest.TestCase):
                     self.assertEqual(services['tailscale']['networks']['funnel-link']['ipv4_address'], '10.205.87.2')
                     self.assertEqual(services['webapp-proxy']['networks']['funnel-link']['ipv4_address'], '10.205.87.3')
 
+        desktop_model = self.render_model(
+            ('compose.yaml',), COMPOSE_PROJECT_NAME='agent-two', NETWORK_PREFIX='10.205',
+            COMPUTER_USE_ENABLED='true',
+        )
+        self.assertEqual(desktop_model['services']['executor']['image'], 'agent-two-executor-true:local')
+        self.assertEqual(
+            desktop_model['services']['executor']['environment']['PRIVATE_HERMES_EXECUTOR_SSH_HOST'],
+            '10.205.82.3',
+        )
+
     def test_preflight_conflict_diagnostic_guides_to_network_prefix(self):
         config = {
             'networks': {
@@ -299,13 +309,19 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             controller_cls.return_value.prepare.assert_called_once()
 
     def test_x402_running_stack_prefix_checks_agent_net_and_pre_upgrade_containers(self):
-        # Single compose ps call returns running containers across agent-net, hermes, and tor.
+        # Single compose ps call returns running containers across agent-net, hermes, and tor,
+        # and agent-net takes priority regardless of compose ps ordering.
         def fake_run_agent_net(args, **_kwargs):
             if 'ps' in args and '-a' not in args:
                 self.assertEqual(args[-3:], ['agent-net', 'hermes', 'tor'])
-                return subprocess.CompletedProcess(args, 0, stdout='cid-agent-net\n', stderr='')
+                return subprocess.CompletedProcess(args, 0, stdout='cid-tor\ncid-agent-net\n', stderr='')
             if 'inspect' in args:
-                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(['NETWORK_PREFIX=10.205']), stderr='')
+                self.assertEqual(args[-2:], ['cid-tor', 'cid-agent-net'])
+                stdout = (
+                    'tor ' + json.dumps(['NETWORK_PREFIX=10.206']) + '\n'
+                    'agent-net ' + json.dumps(['NETWORK_PREFIX=10.205']) + '\n'
+                )
+                return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr='')
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
         with patch.object(x402_treazury, 'maintenance_compose', return_value=['docker', 'compose']) as maint, \
@@ -319,13 +335,52 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             if 'ps' in args and '-a' not in args:
                 return subprocess.CompletedProcess(args, 0, stdout='cid-hermes\n', stderr='')
             if 'inspect' in args:
-                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(['PATH=/usr/bin']), stderr='')
+                return subprocess.CompletedProcess(
+                    args, 0, stdout='hermes ' + json.dumps(['PATH=/usr/bin']) + '\n', stderr='',
+                )
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
         with patch.object(x402_treazury, 'maintenance_compose', return_value=['docker', 'compose']), \
                 patch.object(x402_treazury, 'engine_command', return_value=['docker']), \
                 patch.object(x402_treazury.subprocess, 'run', side_effect=fake_run_pre_upgrade):
             self.assertEqual(x402_treazury._running_stack_prefix(), DEFAULT_NETWORK_PREFIX)
+
+    def test_x402_cold_start_init_uses_configured_prefix_without_double_project_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.env').write_text('COMPOSE_PROJECT_NAME=agent-two\nNETWORK_PREFIX=10.205\n', encoding='utf-8')
+            with patch.object(deployment, 'ROOT', root), \
+                    patch.object(deployment, 'compose_base', return_value=['docker', 'compose']), \
+                    patch.object(deployment, 'compose_files', return_value=['-f', 'compose.yaml']), \
+                    patch.object(deployment, 'validate_project_name', wraps=deployment.validate_project_name) as validate_project, \
+                    patch.dict(os.environ), \
+                    patch.object(sys, 'argv', ['x402_treazury.py', 'init']), \
+                    patch.object(x402_treazury, '_running_stack_prefix', return_value=None) as prefix_mock, \
+                    patch.object(x402_treazury, 'operation_lock'), \
+                    patch.object(x402_treazury, 'Controller') as controller_cls:
+                os.environ.pop('COMPOSE_PROJECT_NAME', None)
+                os.environ.pop('NETWORK_PREFIX', None)
+                x402_treazury.main()
+            self.assertEqual(validate_project.call_count, 1)
+            self.assertEqual(prefix_mock.call_count, 1)
+            probe_command = prefix_mock.call_args.args[0]
+            self.assertEqual(probe_command[0], 'env')
+            self.assertIn(f'NETWORK_PREFIX={DEFAULT_NETWORK_PREFIX}', probe_command)
+            controller_command = controller_cls.call_args.args[0]
+            self.assertNotIn(f'NETWORK_PREFIX={DEFAULT_NETWORK_PREFIX}', controller_command)
+            controller_cls.return_value.initialize.assert_called_once()
+
+    def test_command_env_prefix_handles_assignments_options_and_plain_commands(self):
+        self.assertEqual(
+            deployment.command_env_prefix(['env', '--unset=DOCKER_HOST', 'A=1', 'B=2', 'docker', 'compose', 'up']),
+            ['env', '--unset=DOCKER_HOST', 'A=1', 'B=2'],
+        )
+        self.assertEqual(
+            deployment.command_env_prefix(['env', 'A=1', '--', 'docker', 'compose']),
+            ['env', 'A=1', '--'],
+        )
+        self.assertEqual(deployment.command_env_prefix(['env', 'docker', 'compose']), [])
+        self.assertEqual(deployment.command_env_prefix(['docker', 'compose', 'up']), [])
 
     def test_build_and_networked_x402_reject_invalid_project_name_while_offline_allows_it(self):
         for bad_project in ('agent--2', 'agent___2', 'agent-', 'BadName'):
@@ -599,6 +654,39 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             firewall_mock.assert_called_once_with('interface', 'eth2', '10.205.90.4', 9121, False, False, '10.205')
             execvp_mock.assert_called_once()
 
+            # Funnel and onion enabled: all three internal IPs (.85.3, .86.3, .87.3) are excluded from edge selection.
+            cfg.write_text(
+                '# WEBAPP_EXTERNAL_CONTENT=tor_proxied\n'
+                '# PORT_FORWARDER=interface\n'
+                '# TOR_ONION_ENABLED=true\n'
+                '# NETWORK_PREFIX=10.205\n'
+                'global\n',
+                encoding='utf-8',
+            )
+            funnel_ip_json = json.dumps([
+                {'ifname': 'lo', 'addr_info': [{'scope': 'host', 'local': '127.0.0.1'}]},
+                {'ifname': 'eth0', 'addr_info': [{'scope': 'global', 'local': '10.205.85.3'}]},
+                {'ifname': 'eth1', 'addr_info': [{'scope': 'global', 'local': '10.205.86.3'}]},
+                {'ifname': 'eth2', 'addr_info': [{'scope': 'global', 'local': '10.205.87.3'}]},
+                {'ifname': 'eth3', 'addr_info': [{'scope': 'global', 'local': '10.205.90.4'}]},
+            ])
+
+            def fake_run_funnel(*args, **_kwargs):
+                if args[:4] == ('ip', '-j', '-4', 'addr'):
+                    return subprocess.CompletedProcess(args, 0, stdout=funnel_ip_json, stderr='')
+                return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
+
+            funnel_env = {**env, 'TOR_ONION_ENABLED': 'true', 'TAILSCALE_FUNNEL_ENABLED': 'true'}
+            with patch.dict(os.environ, funnel_env, clear=False), \
+                    patch.object(proxy_start, 'run', side_effect=fake_run_funnel), \
+                    patch.object(proxy_start, 'Path', return_value=cfg), \
+                    patch.object(proxy_start, 'firewall', return_value='') as funnel_fw_mock, \
+                    patch.object(proxy_start.os, 'execvp') as funnel_execvp_mock:
+                proxy_start.main()
+                self.assertEqual(os.environ['PRIVATE_HERMES_EDGE_IP'], '10.205.90.4')
+            funnel_fw_mock.assert_called_once_with('interface', 'eth3', '10.205.90.4', 9121, True, True, '10.205')
+            funnel_execvp_mock.assert_called_once()
+
     def test_preflight_address_plan_changed_mentions_compose_project_name(self):
         config = {
             'networks': {
@@ -683,7 +771,9 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             if 'ps' in args and '-a' in args:
                 return subprocess.CompletedProcess(args, 0, stdout='cid-tor-stopped\n', stderr='')
             if 'inspect' in args:
-                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(['NETWORK_PREFIX=10.205']), stderr='')
+                return subprocess.CompletedProcess(
+                    args, 0, stdout='tor ' + json.dumps(['NETWORK_PREFIX=10.205']) + '\n', stderr='',
+                )
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
         with patch.object(x402_treazury, 'maintenance_compose', return_value=['docker', 'compose']), \
@@ -704,7 +794,7 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
 
             def fake_run(args, **kwargs):
                 calls.append((args, kwargs.get('env')))
-                if 'preflight.py' in str(args[1]):
+                if any('preflight.py' in str(token) for token in args):
                     raise subprocess.CalledProcessError(1, args)
                 return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
@@ -721,11 +811,13 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             call_mock.assert_not_called()
             wallet_mock.assert_not_called()
             preflight_args, preflight_env = calls[-1]
+            self.assertIsNone(preflight_env)
+            self.assertEqual(preflight_args[0], 'env')
+            self.assertIn('NETWORK_PREFIX=10.205', preflight_args)
+            self.assertIn('WEBAPP_PORT=9120', preflight_args)
+            self.assertIn('COMPUTER_USE_ENABLED=false', preflight_args)
+            self.assertIn('PRIVATE_HERMES_TEEP_PORT_OVERRIDE=8337', preflight_args)
             self.assertEqual(preflight_args[-4:], ['--skip-ports', '--services', 'tor', 'agent-net'])
-            self.assertEqual(preflight_env['NETWORK_PREFIX'], '10.205')
-            self.assertEqual(preflight_env['WEBAPP_PORT'], '9120')
-            self.assertEqual(preflight_env['COMPUTER_USE_ENABLED'], 'false')
-            self.assertEqual(preflight_env['PRIVATE_HERMES_TEEP_PORT_OVERRIDE'], '8337')
 
     def test_compose_passthrough_build_validates_project_name(self):
         with patch.dict(os.environ, {'COMPOSE_PROJECT_NAME': 'Bad_Name_'}), \
