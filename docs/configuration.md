@@ -784,6 +784,11 @@ the host or LAN. To connect an HTTP MCP server deployed on the stack's internal
 
 4. Recreate the namespace and Hermes with `make down` followed by `make up`.
 
+If you change `NETWORK_PREFIX` on an existing instance, update any static
+`<prefix>.84.x` addresses in `config/network/mcp-allowlist.json` and
+`mcp_servers` before running `make up`; otherwise `agent-net` fails closed at
+startup.
+
 Other ports on that MCP container stay blocked, and the executor gets no access.
 HTTP streaming and SSE work directly without a forwarding proxy. Do not give an
 internal MCP container a direct uplink, host mounts, or container-engine access
