@@ -371,7 +371,8 @@ class ProjectMountTests(unittest.TestCase):
         root = '/mnt/projects/nested/with space ${NAME}'
         entries = ['WEBAPP_TERMINAL_ENVIRONMENT=code', 'WEBAPP_EXTERNAL_CONTENT=ask', 'COMPUTER_USE_ENABLED=true',
                    f'{stack.EXECUTOR_ROOTS}={json.dumps(["/workspace", root])}']
-        with patch.object(stack, 'maintenance_compose', return_value=['docker', 'compose']), \
+        with patch.object(deployment, 'compose_base', return_value=['docker', 'compose']), \
+                patch.object(deployment, 'compose_files', return_value=['-f', 'compose.yaml']), \
                 patch.object(stack, 'check_engine'), patch.object(stack, 'running_service', side_effect=['gateway', 'executor']), \
                 patch.object(stack, 'attached_project_mounts', return_value={root: '/private/source'}), \
                 patch.object(stack, 'capture', return_value=json.dumps(entries)), \
@@ -379,7 +380,9 @@ class ProjectMountTests(unittest.TestCase):
                 patch.object(stack, 'prepare_launch') as prepare, patch.object(stack, 'run') as run:
             stack.start_chat(['--in', root])
             command = run.call_args.args[0]
-            self.assertEqual(command[:5], ['env', *entries])
+            self.assertEqual(command[0], 'env')
+            for entry in entries:
+                self.assertIn(entry, command)
             self.assertEqual(command[-7:], ['run', '--rm', '--no-deps', 'hermes', 'chat', '--in', root])
             self.assertNotIn('/private/source', repr(command))
             prepare.assert_called_once()

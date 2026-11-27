@@ -55,31 +55,51 @@ def _output(*args):
     return subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=True).stdout
 
 
+def _configured_env_paths(path=None, root=None):
+    base = ROOT if root is None else Path(root)
+    if path is not None:
+        if isinstance(path, (tuple, list)):
+            return tuple(Path(entry) for entry in path)
+        return (Path(path),)
+    env_files = os.environ.get('COMPOSE_ENV_FILES', '')
+    entries = [entry.strip() for entry in env_files.split(',') if entry.strip()]
+    if not entries:
+        return (base / '.env',)
+    return tuple(Path(entry) if Path(entry).is_absolute() else base / entry for entry in entries)
+
+
+def read_env_binding(key, path=None, *, root=None, error_type=ValueError):
+    if key in os.environ:
+        return os.environ[key], 'the environment'
+    value, source = None, None
+    for candidate in _configured_env_paths(path, root=root):
+        try:
+            text = candidate.read_text(encoding='utf-8')
+        except FileNotFoundError:
+            continue
+        except (OSError, UnicodeDecodeError) as error:
+            raise error_type(
+                f'Cannot read {candidate}: {getattr(error, "strerror", None) or error.__class__.__name__}'
+            ) from None
+        for binding in parse_stream(io.StringIO(text)):
+            if binding.error:
+                raise error_type(f'{candidate}, line {binding.original.line}: not a valid assignment')
+            if binding.key == key:
+                value = binding.value if binding.value is not None else ''
+                source = str(candidate)
+    return value, source
+
+
 def read_selector(path=None):
     """Return the engine that CONTAINER_ENGINE selects: docker or podman.
 
-    An exported value takes precedence over the root .env. Without either, the
-    engine is Docker. A blank or other value is an error, never a fallback.
-    Only this key is read from .env; nothing is exported or interpolated.
+    An exported value takes precedence over the Compose env files (default .env).
+    Without either, the engine is Docker. A blank or other value is an error,
+    never a fallback. Only this key is read; nothing is exported or interpolated.
     """
-    if SELECTOR in os.environ:
-        value, source = os.environ[SELECTOR], 'the environment'
-    else:
-        path = Path(path or ROOT / '.env')
-        try:
-            text = path.read_text(encoding='utf-8')
-        except FileNotFoundError:
-            return 'docker'
-        except (OSError, UnicodeDecodeError) as error:
-            raise EngineError(f'Cannot read {path}: {getattr(error, "strerror", None) or error.__class__.__name__}') from None
-        value, source = None, str(path)
-        for binding in parse_stream(io.StringIO(text)):
-            if binding.error:
-                raise EngineError(f'{path}, line {binding.original.line}: not a valid assignment')
-            if binding.key == SELECTOR:
-                value = binding.value if binding.value is not None else ''
-        if value is None:
-            return 'docker'
+    value, source = read_env_binding(SELECTOR, path=path, error_type=EngineError)
+    if value is None:
+        return 'docker'
     if value not in ENGINES:
         raise EngineError(f'{SELECTOR} in {source} must be docker or podman')
     return value
@@ -343,36 +363,9 @@ def compose(config, all_ingress=False, extra=()):
     return [*compose_base(), *compose_files(config.funnel or all_ingress, extra)]
 
 
-def _configured_env_paths(path=None):
-    if path is not None:
-        return (Path(path),)
-    env_files = os.environ.get('COMPOSE_ENV_FILES', '')
-    entries = [entry.strip() for entry in env_files.split(',') if entry.strip()]
-    if not entries:
-        return (ROOT / '.env',)
-    return tuple(Path(entry) if Path(entry).is_absolute() else ROOT / entry for entry in entries)
-
-
 def configured_env_value(key, default='', path=None):
     """Read one key from process environment or Compose env files without exporting it."""
-    if key in os.environ:
-        value = os.environ[key]
-    else:
-        value = None
-        for candidate in _configured_env_paths(path):
-            try:
-                text = candidate.read_text(encoding='utf-8')
-            except FileNotFoundError:
-                continue
-            except (OSError, UnicodeDecodeError) as error:
-                raise ValueError(
-                    f'Cannot read {candidate}: {getattr(error, "strerror", None) or error.__class__.__name__}'
-                ) from None
-            for binding in parse_stream(io.StringIO(text)):
-                if binding.error:
-                    raise ValueError(f'{candidate}, line {binding.original.line}: not a valid assignment')
-                if binding.key == key:
-                    value = binding.value if binding.value is not None else ''
+    value, _ = read_env_binding(key, path=path, error_type=ValueError)
     return value or default
 
 
@@ -397,22 +390,32 @@ def _atomic_write_text(path, text, mode=0o644):
 
 
 def maintenance_compose(all_ingress=False, executor_build=False, extra=(), *,
-                        allow_invalid_network=True, validate_project=False):
+                        allow_invalid_network=True, validate_project=False, env=None, env_path=None):
     # These operations must not start ingress, inference or the agent with
     # placeholders. Actual treasury policy remains in its mounted configuration.
     # Compose still interpolates unused services and publications.
+    overrides = dict(MAINTENANCE_PLACEHOLDERS)
+    extra_env = dict(env or {})
     if validate_project:
-        validate_project_name(configured_env_value('COMPOSE_PROJECT_NAME', DEFAULT_PROJECT_NAME))
+        if 'COMPOSE_PROJECT_NAME' in extra_env:
+            project = extra_env['COMPOSE_PROJECT_NAME']
+        else:
+            project = configured_env_value('COMPOSE_PROJECT_NAME', DEFAULT_PROJECT_NAME, path=env_path)
+        validate_project_name(project)
     if allow_invalid_network:
-        os.environ['NETWORK_PREFIX'] = DEFAULT_NETWORK_PREFIX
+        overrides['NETWORK_PREFIX'] = DEFAULT_NETWORK_PREFIX
     else:
-        validate_network_prefix(configured_env_value('NETWORK_PREFIX', DEFAULT_NETWORK_PREFIX))
-    os.environ.update(MAINTENANCE_PLACEHOLDERS)
+        prefix = extra_env.get('NETWORK_PREFIX')
+        if prefix is None:
+            prefix = configured_env_value('NETWORK_PREFIX', DEFAULT_NETWORK_PREFIX, path=env_path)
+        validate_network_prefix(prefix)
     if not executor_build:
         # Saved-state inspection/shutdown do not select or build an executor.
         # An invalid optional desktop preference must not block those operations.
-        os.environ['COMPUTER_USE_ENABLED'] = 'false'
-    return [*compose_base(), *compose_files(all_ingress, extra)]
+        overrides['COMPUTER_USE_ENABLED'] = 'false'
+    overrides.update(extra_env)
+    return ['env', *(f'{key}={value}' for key, value in overrides.items()),
+            *compose_base(), *compose_files(all_ingress, extra)]
 
 
 def maintenance_command(launch):

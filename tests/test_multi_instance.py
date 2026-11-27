@@ -272,9 +272,10 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
 
     def test_maintenance_compose_fallback_vs_strict_network_prefix(self):
         with patch.dict(os.environ, {'COMPOSE_PROJECT_NAME': 'agent-two', 'NETWORK_PREFIX': '10.204'}):
-            deployment.maintenance_compose(allow_invalid_network=True)
+            command = deployment.maintenance_compose(allow_invalid_network=True)
             self.assertEqual(os.environ['COMPOSE_PROJECT_NAME'], 'agent-two')
-            self.assertEqual(os.environ['NETWORK_PREFIX'], DEFAULT_NETWORK_PREFIX)
+            self.assertEqual(os.environ['NETWORK_PREFIX'], '10.204')
+            self.assertIn(f'NETWORK_PREFIX={DEFAULT_NETWORK_PREFIX}', command)
         with patch.dict(os.environ, {'COMPOSE_PROJECT_NAME': 'agent-two', 'NETWORK_PREFIX': '10.204'}):
             with self.assertRaises(ValueError):
                 deployment.maintenance_compose(allow_invalid_network=False)
@@ -293,7 +294,8 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
                 patch.object(x402_treazury, 'operation_lock'), \
                 patch.object(x402_treazury, 'Controller') as controller_cls:
             x402_treazury.main()
-            self.assertEqual(os.environ['NETWORK_PREFIX'], '10.205')
+            self.assertEqual(os.environ['NETWORK_PREFIX'], '10.204')
+            self.assertIn('NETWORK_PREFIX=10.205', controller_cls.call_args.args[0])
             controller_cls.return_value.prepare.assert_called_once()
 
     def test_x402_running_stack_prefix_checks_agent_net_and_pre_upgrade_containers(self):
@@ -306,11 +308,11 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, stdout=json.dumps(['NETWORK_PREFIX=10.205']), stderr='')
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
-        with patch.object(x402_treazury, 'compose_base', return_value=['docker', 'compose']), \
-                patch.object(x402_treazury, 'compose_files', return_value=['-f', 'compose.yaml']), \
+        with patch.object(x402_treazury, 'maintenance_compose', return_value=['docker', 'compose']) as maint, \
                 patch.object(x402_treazury, 'engine_command', return_value=['docker']), \
                 patch.object(x402_treazury.subprocess, 'run', side_effect=fake_run_agent_net):
             self.assertEqual(x402_treazury._running_stack_prefix(), '10.205')
+        maint.assert_called_once_with(validate_project=True)
 
         # Pre-upgrade running hermes without NETWORK_PREFIX in Config.Env defaults to 10.203.
         def fake_run_pre_upgrade(args, **_kwargs):
@@ -320,8 +322,7 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, stdout=json.dumps(['PATH=/usr/bin']), stderr='')
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
-        with patch.object(x402_treazury, 'compose_base', return_value=['docker', 'compose']), \
-                patch.object(x402_treazury, 'compose_files', return_value=['-f', 'compose.yaml']), \
+        with patch.object(x402_treazury, 'maintenance_compose', return_value=['docker', 'compose']), \
                 patch.object(x402_treazury, 'engine_command', return_value=['docker']), \
                 patch.object(x402_treazury.subprocess, 'run', side_effect=fake_run_pre_upgrade):
             self.assertEqual(x402_treazury._running_stack_prefix(), DEFAULT_NETWORK_PREFIX)
@@ -451,7 +452,8 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             'PRIVATE_HERMES_EXECUTOR_ROOTS=["/workspace"]',
             'NETWORK_PREFIX=10.205',
         ]
-        with patch.object(stack, 'maintenance_compose', return_value=['docker', 'compose']), \
+        with patch.object(deployment, 'compose_base', return_value=['docker', 'compose']), \
+                patch.object(deployment, 'compose_files', return_value=['-f', 'compose.yaml']), \
                 patch.object(stack, 'check_engine'), \
                 patch.object(stack, 'running_service', side_effect=['hermes-cid', 'exec-cid']), \
                 patch.object(stack, 'attached_project_mounts', return_value={}), \
@@ -461,6 +463,8 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             stack.start_chat(['--resume'])
         executed = run_mock.call_args.args[0]
         self.assertIn('NETWORK_PREFIX=10.205', executed)
+        self.assertNotIn('NETWORK_PREFIX=10.203', executed)
+        self.assertIn('WEBAPP_PORT=9120', executed)
         self.assertEqual(executed[-3:], ['hermes', 'chat', '--resume'])
 
     def test_bootstrap_updates_managed_teep_url_and_preserves_custom_url(self):
@@ -527,14 +531,16 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             (root / '.env').write_text('NETWORK_PREFIX=bad\nCOMPOSE_PROJECT_NAME=from-root\n', encoding='utf-8')
             first = root / 'first.env'
             second = root / 'second.env'
-            first.write_text('NETWORK_PREFIX=10.205\nCOMPOSE_PROJECT_NAME=from-first\n', encoding='utf-8')
+            first.write_text('NETWORK_PREFIX=10.205\nCOMPOSE_PROJECT_NAME=from-first\nCONTAINER_ENGINE=podman\n', encoding='utf-8')
             second.write_text('NETWORK_PREFIX=10.206\n', encoding='utf-8')
             with patch.object(deployment, 'ROOT', root), patch.dict(os.environ):
                 os.environ.pop('NETWORK_PREFIX', None)
                 os.environ.pop('COMPOSE_PROJECT_NAME', None)
+                os.environ.pop('CONTAINER_ENGINE', None)
                 os.environ['COMPOSE_ENV_FILES'] = f'{first},second.env'
                 self.assertEqual(deployment.configured_env_value('NETWORK_PREFIX'), '10.206')
                 self.assertEqual(deployment.configured_env_value('COMPOSE_PROJECT_NAME'), 'from-first')
+                self.assertEqual(deployment.read_selector(), 'podman')
                 deployment.maintenance_compose(allow_invalid_network=False, validate_project=True)
                 os.environ['COMPOSE_ENV_FILES'] = ''
                 self.assertEqual(deployment.configured_env_value('NETWORK_PREFIX'), 'bad')
@@ -680,8 +686,7 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, stdout=json.dumps(['NETWORK_PREFIX=10.205']), stderr='')
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
 
-        with patch.object(x402_treazury, 'compose_base', return_value=['docker', 'compose']), \
-                patch.object(x402_treazury, 'compose_files', return_value=['-f', 'compose.yaml']), \
+        with patch.object(x402_treazury, 'maintenance_compose', return_value=['docker', 'compose']), \
                 patch.object(x402_treazury, 'engine_command', return_value=['docker']), \
                 patch.object(x402_treazury.subprocess, 'run', side_effect=fake_run_stopped):
             self.assertEqual(x402_treazury._running_stack_prefix(), '10.205')

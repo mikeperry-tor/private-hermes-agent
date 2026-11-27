@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """Create an offline onion identity or display its saved public address."""
-import os
 import subprocess
 import sys
 
-from deployment import ROOT, check_bind_sources, engine, maintenance_compose
+from deployment import ROOT, check_bind_sources, maintenance_compose
 
 sys.path.insert(0, str(ROOT / 'components/network'))
 from onion import hostname
 
 
 def maintenance(arguments, *, check=True):
-    # Maintenance placeholders must not leak into a caller applying real policy.
-    engine()
-    saved = os.environ.copy()
     try:
         command = maintenance_compose()
         check_bind_sources(command, arguments)
@@ -21,9 +17,6 @@ def maintenance(arguments, *, check=True):
                               capture_output=True, check=check)
     except subprocess.CalledProcessError as error:
         raise RuntimeError('Onion maintenance command failed:\n' + (error.stderr or str(error))) from None
-    finally:
-        os.environ.clear()
-        os.environ.update(saved)
 
 
 def inspect_address():
