@@ -1,6 +1,6 @@
 #!/bin/sh
 # Allowed and forbidden network paths of a running rootless Podman stack
-# (project private-hermes). Run after `make up` on Podman:
+# (configured project). Run after `make up` on Podman:
 #   make podman-paths-test
 # The allowed-path checks need Internet access: they fetch
 # https://check.torproject.org/api/ip through Tor and through teep's uplink.
@@ -15,7 +15,10 @@ case "$(python3 scripts/deployment.py compose-command)" in
   *) echo "FAIL  select Podman first: CONTAINER_ENGINE=podman make podman-paths-test"; exit 2;;
 esac
 podman() { command podman --remote=false "$@"; }
-P=private-hermes
+P=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import deployment; print(deployment.configured_env_value("COMPOSE_PROJECT_NAME", "private-hermes"))') || { echo "FAIL  could not read COMPOSE_PROJECT_NAME"; exit 2; }
+PREFIX=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import deployment; from addressing import validate_network_prefix; print(validate_network_prefix(deployment.configured_env_value("NETWORK_PREFIX", "10.203")))') || { echo "FAIL  could not read valid NETWORK_PREFIX"; exit 2; }
+WEBAPP_PORT=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import deployment; print(deployment.configured_env_value("WEBAPP_PORT", "9120"))') || { echo "FAIL  could not read WEBAPP_PORT"; exit 2; }
+[ -n "$P" ] && [ -n "$PREFIX" ] && [ -n "$WEBAPP_PORT" ] || { echo "FAIL  empty project, network prefix, or webapp port"; exit 2; }
 c() { echo "${P}-$1-1"; }
 pass=0; fail=0
 expect() { # name, expected (open|blocked), actual (open|blocked)
@@ -75,21 +78,21 @@ for svc in executor hermes; do
 done
 r=$(podman exec "$(c teep)" sh -c 'curl -s --max-time 90 https://check.torproject.org/api/ip' 2>/dev/null)
 case "$r" in *'"IsTor":false'*) expect "teep direct HTTPS on its isolated uplink" open open;; *) expect "teep direct HTTPS on its isolated uplink" open "blocked ($r)";; esac
-expect "hermes -> teep 10.203.83.3:8337" open "$(tcp hermes 10.203.83.3 8337)"
-expect "hermes -> executor SSH 10.203.82.3:2222" open "$(tcp hermes 10.203.82.3 2222)"
+expect "hermes -> teep ${PREFIX}.83.3:8337" open "$(tcp hermes "${PREFIX}.83.3" 8337)"
+expect "hermes -> executor SSH ${PREFIX}.82.3:2222" open "$(tcp hermes "${PREFIX}.82.3" 2222)"
 # Hermes answers 503 through HAProxy until its webapp is ready.
 for _ in $(seq 60); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:9120/)
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:${WEBAPP_PORT}/")
   [ "$code" = 503 ] || [ "$code" = 000 ] || break
   sleep 2
 done
 [ "$code" = 302 ] && expect "webapp via HAProxy (302 to login)" open open || expect "webapp via HAProxy (302 to login)" open "blocked ($code)"
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H 'Host: evil.example' http://127.0.0.1:9120/)
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H 'Host: evil.example' "http://127.0.0.1:${WEBAPP_PORT}/")
 [ "$code" = 421 ] && expect "webapp wrong Host refused (421)" open open || expect "webapp wrong Host refused (421)" open "blocked ($code)"
 
 echo "== Forbidden paths"
-expect "executor -> teep 10.203.83.3:8337" blocked "$(tcp executor 10.203.83.3 8337)"
-expect "hermes -> HAProxy 10.203.85.3:9120" blocked "$(tcp hermes 10.203.85.3 9120)"
+expect "executor -> teep ${PREFIX}.83.3:8337" blocked "$(tcp executor "${PREFIX}.83.3" 8337)"
+expect "hermes -> HAProxy ${PREFIX}.85.3:9120" blocked "$(tcp hermes "${PREFIX}.85.3" 9120)"
 for svc in executor hermes; do
   expect "$svc -> host service via pasta 169.254.1.2:11111" blocked "$(tcp $svc 169.254.1.2 11111)"
 done
@@ -104,7 +107,7 @@ edge=$(ip_of webapp-proxy webapp-publish)
 torup=$(ip_of tor tor-uplink)
 teepup=$(ip_of teep teep-uplink)
 echo "   (HAProxy edge $edge, Tor uplink $torup, teep uplink $teepup)"
-expect "teep -> HAProxy edge $edge:9120 (between networks)" blocked "$(tcp teep "$edge" 9120)"
+expect "teep -> HAProxy edge $edge:${WEBAPP_PORT} (between networks)" blocked "$(tcp teep "$edge" "$WEBAPP_PORT")"
 expect "teep -> Tor uplink $torup:9040 (between networks)" blocked "$(tcp teep "$torup" 9040)"
 expect "tor -> teep uplink $teepup:8337 (between networks)" blocked "$(tcp tor "$teepup" 8337)"
 for svc in executor hermes; do
@@ -113,9 +116,9 @@ for svc in executor hermes; do
 import socket
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)
 try:
-    s.sendto(bytes.fromhex(\"123401000001000000000000076578616d706c6503636f6d0000010001\"),(\"10.203.82.1\",53)); s.recv(4096); print(\"open\")
+    s.sendto(bytes.fromhex(\"123401000001000000000000076578616d706c6503636f6d0000010001\"),(\"'"${PREFIX}"'.82.1\",53)); s.recv(4096); print(\"open\")
 except OSError: print(\"blocked\")"' 2>/dev/null)
-  expect "$svc -> aardvark-dns at gateway 10.203.82.1:53" blocked "$r"
+  expect "$svc -> aardvark-dns at gateway ${PREFIX}.82.1:53" blocked "$r"
 done
 for svc in executor hermes; do
   # A global-scope IPv6 address (scope 00) outside loopback would allow IPv6
@@ -128,7 +131,7 @@ done
 # Docker-compatible API would give the stack isolate=true only, which does not
 # block this source; the stack's networks need isolate=strict.
 IMAGE=$(podman inspect "$(c teep)" --format '{{.ImageName}}')
-podman network create --subnet 10.203.95.0/24 "$PLAIN" >/dev/null
+podman network create --subnet "${PREFIX}.95.0/24" "$PLAIN" >/dev/null
 podman run -d --name "$PLAIN" --network "$PLAIN" --entrypoint sleep "$IMAGE" 600 >/dev/null
 # Positive control for the DNS probe: Podman's DNS server answers on the
 # disposable network's gateway.
@@ -137,7 +140,7 @@ r=$(podman run --rm --network "$PLAIN" --entrypoint python3 "$EXECUTOR_IMAGE" -c
 import socket
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)
 try:
-    s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),('10.203.95.1',53)); s.recv(4096); print('open')
+    s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),('${PREFIX}.95.1',53)); s.recv(4096); print('open')
 except OSError: print('blocked')" 2>/dev/null)
 expect "DNS probe control: Podman DNS answers on a plain network" open "$r"
 # Positive control for the TCP probes: a listener on the same plain network is reachable.
@@ -159,7 +162,7 @@ expect "TCP probe control: plain network -> listener $plainpeer:7000" open "$r"
 podman run -d --name "$PLAIN-control" --network "$PLAIN" --entrypoint sleep "$IMAGE" 600 >/dev/null
 r=$(podman exec "$PLAIN-control" sh -c "nc -z -w 5 169.254.1.2 11111 && echo open || echo blocked" 2>/dev/null)
 expect "host-service probe control: plain network -> 169.254.1.2:11111" open "$r"
-for target in "$teepup 8337 teep-uplink" "$edge 9120 HAProxy-edge" "10.203.83.3 8337 teep-inference"; do
+for target in "$teepup 8337 teep-uplink" "$edge $WEBAPP_PORT HAProxy-edge" "${PREFIX}.83.3 8337 teep-inference"; do
   set -- $target
   valid_ip "$1" || { expect "non-isolated network -> $3" blocked "error (no address: '$1')"; continue; }
   r=$(podman exec "$PLAIN" sh -c "command -v nc >/dev/null || { echo 'error (no nc)'; exit; }; nc -z -w 5 $1 $2 && echo open || echo blocked" 2>/dev/null)

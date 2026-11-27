@@ -1,6 +1,7 @@
 """Reject grants that could accidentally turn MCP access into host/VM access."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
@@ -12,7 +13,7 @@ spec.loader.exec_module(policy)
 
 class MCPPolicyTests(unittest.TestCase):
     def grants(self, value):
-        with patch.object(Path, 'read_text', return_value=json.dumps(value)):
+        with patch.dict(os.environ, NETWORK_PREFIX=''), patch.object(Path, 'read_text', return_value=json.dumps(value)):
             return policy.mcp_grants()
 
     def test_no_grants_by_default(self):

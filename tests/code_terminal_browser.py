@@ -224,7 +224,7 @@ def check_model_host_key(*, trusted):
 from tools.environments.base import EnvironmentConnectionError
 try:
     env = SSHEnvironment("10.203.82.3", "runner", port=2222,
-                         key_path="/run/agent-ssh/id_ed25519", probe_only=True, ssh_config="/etc/ssh/ssh_config.d/99-private-hermes.conf")
+                         key_path="/run/agent-ssh/id_ed25519", probe_only=True, ssh_config="/etc/ssh/private-hermes-ssh.conf")
 except EnvironmentConnectionError:
     assert not {trusted!r}, "the configured host key was refused"
 else:

@@ -9,8 +9,7 @@ import smoke
 from deployment import compose_base, engine_command  # smoke.py puts scripts/ on sys.path
 
 
-smoke.COMPOSE = [*compose_base(), '-p', 'private-hermes-storage-test',
-                 *smoke.compose_files(False, extra=('tests/compose.yaml',))]
+smoke.COMPOSE = smoke.compose_command('private-hermes-storage-test')
 
 
 def main():

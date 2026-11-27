@@ -13,7 +13,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from deployment import engine, engine_command, compose_base, compose_files
+from deployment import engine, engine_command, compose_base, compose_files, local_image
 
 
 def dry_run_checks(override):
@@ -76,11 +76,12 @@ def profile_cleanup_checks(override):
 
 
 def main():
+    agent_image = local_image('agent')
     with tempfile.TemporaryDirectory(prefix='private-hermes-launch-') as directory:
         override = Path(directory) / 'launch.yaml'
-        override.write_text('''services:
+        override.write_text(f'''services:
   probe-owner:
-    image: private-hermes-agent:local
+    image: {agent_image}
     entrypoint: [/opt/hermes/.venv/bin/python]
     command: [-m, http.server, "8000", --bind, "127.0.0.1"]
     cap_drop: [ALL]
@@ -92,47 +93,47 @@ def main():
       retries: 30
   probe-profiled:
     profiles: [cleanup]
-    image: private-hermes-agent:local
+    image: {agent_image}
     init: true
     entrypoint: [sleep]
     command: [infinity]
     cap_drop: [ALL]
     network_mode: service:probe-owner
     depends_on:
-      probe-owner: {condition: service_healthy}
+      probe-owner: {{condition: service_healthy}}
   probe-shared:
-    image: private-hermes-agent:local
+    image: {agent_image}
     entrypoint: [/opt/hermes/.venv/bin/python]
     command: [-c, "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000').status == 200"]
     cap_drop: [ALL]
     network_mode: service:probe-owner
     depends_on:
-      probe-owner: {condition: service_healthy}
+      probe-owner: {{condition: service_healthy}}
   probe-offline:
-    image: private-hermes-agent:local
+    image: {agent_image}
     entrypoint: [/opt/hermes/.venv/bin/python]
     command: [-c, "print('offline')"]
     cap_drop: [ALL]
     network_mode: none
     depends_on:
-      probe-owner: {condition: service_healthy}
+      probe-owner: {{condition: service_healthy}}
   x402_treazury-inspect:
     network_mode: service:probe-owner
   probe-isolated:
-    image: private-hermes-agent:local
+    image: {agent_image}
     entrypoint: [/opt/hermes/.venv/bin/python]
     command: [-c, "print('isolated')"]
     cap_drop: [ALL]
     network_mode: none
   probe-offline-admin:
-    image: private-hermes-agent:local
+    image: {agent_image}
     entrypoint: [/opt/hermes/.venv/bin/python]
     command: [-c, "print('offline admin')"]
     cap_drop: [ALL]
     network_mode: none
     depends_on: [probe-isolated]
   probe-networked:
-    image: private-hermes-agent:local
+    image: {agent_image}
     entrypoint: [/opt/hermes/.venv/bin/python]
     command: [-c, "print('networked')"]
     cap_drop: [ALL]

@@ -7,8 +7,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from deployment import engine_command  # noqa: E402
-IMAGE = 'private-hermes-agent:local'
+from deployment import engine_command, local_image  # noqa: E402
+IMAGE = local_image('agent')
 PYTHON = '/opt/hermes/.venv/bin/python'
 
 

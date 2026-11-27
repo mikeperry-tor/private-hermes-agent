@@ -28,7 +28,7 @@ services:
   tailscale:
     profiles: [real-funnel]
   tls-fixture:
-    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-executor-${COMPUTER_USE_ENABLED-false}:local
     init: true
     user: "10000:10000"
     cap_drop: [ALL]
@@ -41,13 +41,13 @@ services:
     ports: ["127.0.0.1:10000:10000"]
     networks:
       funnel-link:
-        ipv4_address: 10.203.87.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.87.2
       webapp-publish: {}
 
   teep:
     # Browser/chat qualification uses deterministic local inference. Routing and
     # actual Teep behavior remain covered separately by make test.
-    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-executor-${COMPUTER_USE_ENABLED-false}:local
     build: !reset null
     entrypoint: [python3, /opt/webapp-inference.py]
     command: []
@@ -56,7 +56,7 @@ services:
       - ./tests/fixtures/webapp-inference.py:/opt/webapp-inference.py:ro
     networks: !override
       inference:
-        ipv4_address: 10.203.83.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.83.3
     healthcheck:
       test: [CMD, curl, -fsS, http://127.0.0.1:8337/health]
       interval: 1s

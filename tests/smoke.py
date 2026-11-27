@@ -23,10 +23,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from provisioning import initialize_setup, initialize_research_config
 from deployment import compose_base, compose_files, engine, engine_command, inspect_launch, parse_launch, prepare_launch, remove_networks
 
-COMPOSE = [*compose_base(), '-p', 'private-hermes-test', *compose_files(False, extra=('tests/compose.yaml',))]
+def compose_command(project, funnel=False, extra=('tests/compose.yaml',)):
+    """Build a fixed-prefix Compose command without mutating process os.environ."""
+    return ['env', f'COMPOSE_PROJECT_NAME={project}', 'NETWORK_PREFIX=10.203',
+            *compose_base(), '-p', project, *compose_files(funnel, extra=extra)]
 
 
-def remove_storage_fixture(root, marker):
+COMPOSE = compose_command('private-hermes-test')
+
+
+def remove_storage_fixture(root, marker, image=None):
     try:
         shutil.rmtree(root)
     except PermissionError:
@@ -48,6 +54,7 @@ for base,dirs,files in os.walk(root):
         owner = ('0', '0') if engine() == 'podman' else (str(os.getuid()), str(os.getgid()))
         # Do not reuse setup: its application-volume mounts would
         # recreate empty named volumes after the suite's shutdown.
+        project = COMPOSE[COMPOSE.index('-p') + 1] if '-p' in COMPOSE else 'private-hermes'
         subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none',
                         '--user', '0:0', '--cap-drop', 'ALL',
                         '--cap-add', 'CHOWN', '--cap-add', 'FOWNER',
@@ -56,7 +63,7 @@ for base,dirs,files in os.walk(root):
                         '--tmpfs', '/tmp:mode=1777',
                         '--mount', f'type=bind,source={root},target=/persistent-data',
                         '--entrypoint', '/opt/hermes/.venv/bin/python',
-                        'private-hermes-agent:local', '-c', script, marker, *owner],
+                        image or f'{project}-agent:local', '-c', script, marker, *owner],
                        check=True)
         shutil.rmtree(root)
 

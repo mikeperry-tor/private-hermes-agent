@@ -149,7 +149,7 @@ def managed_probe(scratch, backend, variant, prior, browser):
         listener.bind(('127.0.0.1', 0))
         port = listener.getsockname()[1]
     base = {**os.environ, 'CONTAINER_ENGINE': backend, 'COMPOSE_PROJECT_NAME': project,
-            'COMPOSE_ENV_FILES': '',
+            'NETWORK_PREFIX': '10.203', 'COMPOSE_ENV_FILES': '',
             'COMPUTER_USE_ENABLED': 'true' if variant == 'desktop' else 'false',
             'TEEP_ENABLED': 'false', 'TOR_ONION_ENABLED': 'false', 'TAILSCALE_FUNNEL_ENABLED': 'false',
             'WEBAPP_BIND': '127.0.0.1', 'WEBAPP_PORT': str(port), 'WEBAPP_USERNAME': 'admin',
@@ -373,7 +373,7 @@ assert decide(False) and not undecided()
 
         assert restart_policy(executor) in ('no', 'never')
         config = stack('exec', '-T', '--user', '10000:10000', 'hermes', 'stat',
-                       '-c', '%u:%g %a', '/etc/ssh/ssh_config.d/99-private-hermes.conf')
+                       '-c', '%u:%g %a', '/etc/ssh/private-hermes-ssh.conf')
         assert config == '0:0 644', config
         if prior:
             assert before == identities()
@@ -464,7 +464,7 @@ else:
         storage = checkout / 'data'
         if storage.is_dir():
             (storage / '.test-storage').write_text(marker)
-            remove_storage_fixture(storage, marker)
+            remove_storage_fixture(storage, marker, image=f'{project}-agent:local')
 
 
 def main():

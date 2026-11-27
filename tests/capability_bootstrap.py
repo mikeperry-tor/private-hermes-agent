@@ -13,7 +13,7 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from deployment import engine_command
+from deployment import engine_command, local_image
 
 CAPS = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'KILL', 'SETUID', 'SETGID']
 SNAPSHOT = '''import json,os
@@ -32,7 +32,7 @@ print(json.dumps(rows,sort_keys=True))
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--omit', choices=CAPS)
-    parser.add_argument('--image', default='private-hermes-agent:local')
+    parser.add_argument('--image', default=local_image('agent'))
     parser.add_argument('--probe-path', action='store_true', help='harmless native root-service PATH marker')
     parser.add_argument('--path', help='override container PATH for the PATH-order experiment')
     parser.add_argument('--expect-closed', action='store_true', help='assert the writable-PATH root path is closed')

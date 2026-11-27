@@ -123,7 +123,7 @@ def main():
         check()
         return
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-    from deployment import engine_command
+    from deployment import engine_command, local_image
 
     fixture = Path(__file__).resolve()
     with tempfile.TemporaryDirectory(prefix='context-managed-') as managed:
@@ -135,7 +135,7 @@ def main():
             '--mount', f'type=bind,source={managed},target=/etc/hermes,readonly',
             '--mount', f'type=bind,source={fixture},target=/tmp/context_refs_smoke.py,readonly',
             '--entrypoint', '/opt/hermes/.venv/bin/python',
-            'private-hermes-agent:local', '/tmp/context_refs_smoke.py', '--inside',
+            local_image('agent'), '/tmp/context_refs_smoke.py', '--inside',
         ], check=True)
 
 
