@@ -1,37 +1,27 @@
 #!/usr/bin/env python3
 """Explicit operator workflow: show, create, or rotate webapp login credentials."""
 import argparse
-import io
-import os
 from pathlib import Path
 import re
-from deployment import ROOT, parse_stream
+from deployment import ROOT, read_env_binding
 from auth import initialize_credentials
 
 USERNAME_PATTERN = re.compile(r'[A-Za-z0-9_.@-]+')
 
 
 def read_webapp_username(root):
-    """Read WEBAPP_USERNAME from the environment or .env without validating unrelated settings."""
-    if 'WEBAPP_USERNAME' in os.environ:
-        value, source = os.environ['WEBAPP_USERNAME'] or 'admin', 'the environment'
-    else:
-        path = Path(root) / '.env'
-        source = '.env'
-        try:
-            text = path.read_text(encoding='utf-8')
-        except FileNotFoundError:
-            value = 'admin'
-        except (OSError, UnicodeDecodeError):
+    """Read WEBAPP_USERNAME from the environment or Compose env files without validating unrelated settings."""
+    try:
+        found, source = read_env_binding('WEBAPP_USERNAME', root=root, error_type=ValueError)
+    except ValueError as error:
+        message = str(error)
+        dotenv = str(Path(root) / '.env')
+        if message.startswith((f'Cannot read {dotenv}:', f'{dotenv}, line ')):
             return None, 'WEBAPP_USERNAME could not be read from .env'
-        else:
-            found = None
-            for binding in parse_stream(io.StringIO(text)):
-                if binding.error:
-                    return None, 'WEBAPP_USERNAME could not be read from .env'
-                if binding.key == 'WEBAPP_USERNAME' and binding.value is not None:
-                    found = binding.value
-            value = found or 'admin'
+        return None, f'WEBAPP_USERNAME could not be read: {message}'
+    value = found or 'admin'
+    if source == str(Path(root) / '.env'):
+        source = '.env'
     if not USERNAME_PATTERN.fullmatch(value):
         return None, f'WEBAPP_USERNAME in {source} is invalid'
     return value, None
