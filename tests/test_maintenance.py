@@ -198,6 +198,22 @@ class MaintenanceScopeTests(unittest.TestCase):
             self.assertIn('could not be read from .env', malformed_out)
             self.assertNotIn('alice', malformed_out)
 
+            custom = root / 'custom.env'
+            custom.write_text('WEBAPP_USERNAME=carol\n', encoding='utf-8')
+            custom_out, _ = self._run_credentials_cli(root, env={'COMPOSE_ENV_FILES': str(custom)})
+            self.assertIn('credentials for carol are in config/webapp/password', custom_out)
+
+            custom.write_text('WEBAPP_USERNAME=carol\nBAD="unclosed\n', encoding='utf-8')
+            custom_bad_out, _ = self._run_credentials_cli(root, env={'COMPOSE_ENV_FILES': str(custom)})
+            self.assertIn(str(custom), custom_bad_out)
+            self.assertNotIn('could not be read from .env', custom_bad_out)
+
+            dot_local = root / '.env.local'
+            dot_local.write_text('WEBAPP_USERNAME=carol\nBAD="unclosed\n', encoding='utf-8')
+            dot_local_out, _ = self._run_credentials_cli(root, env={'COMPOSE_ENV_FILES': '.env.local'})
+            self.assertIn(str(dot_local), dot_local_out)
+            self.assertNotIn('could not be read from .env', dot_local_out)
+
 
 class DefaultPublicationTests(unittest.TestCase):
     def test_failed_publication_leaves_no_final_file_and_retry_is_complete(self):
