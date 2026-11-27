@@ -7,7 +7,11 @@ service. Image digest pins and source commits live in Dockerfiles and Compose
 files, not in `.env`. Hermes's base digest and source checks live in
 `components/hermes/Dockerfile` and `components/hermes/verify-build.mjs`;
 runtime and offline maintenance jobs share the derived
-`private-hermes-agent:local` image.
+`<COMPOSE_PROJECT_NAME>-agent:local` image (default
+`private-hermes-agent:local`). All local component images are namespaced by
+`COMPOSE_PROJECT_NAME`, so separate checkouts on different commits or upgrade
+schedules do not overwrite each other's tags while still sharing content-addressed
+build cache layers when checkouts share a commit.
 
 The root `.env` file is the unified operator input to Compose. Run `make init`
 to create a missing `.env` from `.env.example` with mode `0600`, then edit the
@@ -20,6 +24,8 @@ Compose passes each setting only to the services that need it:
 
 | Settings | Recipient |
 | --- | --- |
+| `COMPOSE_PROJECT_NAME` (default `private-hermes`) | Compose project name, volume prefix, and `<project>-*:local` image tags |
+| `NETWORK_PREFIX` (default `10.203`) | Compose bridge subnets and static IPs, `setup`, `tor`, `agent-net`, `executor-net`, `executor`, `hermes`, `webapp-proxy`, and `tailscale` |
 | Inference provider API keys | `teep` |
 | `TEEP_ENABLED` (default `true`) | Managed startup (includes or omits Teep) |
 | `TEEP_INSTALL_MODEL` | Offline `setup` when creating a fresh Hermes profile with Teep enabled |
@@ -41,19 +47,23 @@ to `.env.example` and explicit Compose service mappings together.
 
 ### Local editable directories
 
-- **`config/`** holds private editable files mounted into containers.
-  `make init` copies `components/network/mcp-allowlist.json` to
+- **`config/`** holds private editable and rendered files mounted into
+  containers. `make init` copies `components/network/mcp-allowlist.json` to
   `config/network/mcp-allowlist.json` if missing, without overwriting existing
-  policy. Required bind sources are checked before container creation; run
-  `make init` on a fresh checkout before `make up`.
+  policy. `make init` and `make up` render `config/network/hermes-resolv.conf`
+  and `config/network/executor-resolv.conf` atomically from `NETWORK_PREFIX`
+  so each instance points only at its own Tor `DNSPort`. Required bind sources
+  are checked before container creation; run `make init` on a fresh checkout
+  before `make up`.
 - **`config/webapp/`** holds generated WebApp credentials (`password`,
   `auth.json`) and rendered HAProxy configuration (`proxy.cfg`). `make init`
   creates missing credentials and renders proxy config while preserving existing
   credentials. Offline `setup` installs authentication into `hermes-data`
   without exposing it to the executor. See [webapp setup](webapp.md).
-- **Implementation defaults** (Tor and SSH configuration, resolver settings, and
-  the initial Hermes config template) stay under `components/` and are delivered
-  by image `COPY` instructions or read-only bind mounts.
+- **Implementation defaults** (Tor and SSH configuration, default `10.203`
+  resolver files used by isolated test overlays, and the initial Hermes config
+  template) stay under `components/` and are delivered by image `COPY`
+  instructions or read-only bind mounts.
 
 ## Offline setup and maintenance
 
@@ -62,7 +72,7 @@ Offline maintenance jobs use minimal mounts and have no network access (except
 
 | Job | Purpose and mounts |
 | --- | --- |
-| `setup` | Full stack provisioning. Shares `private-hermes-agent:local` with read-only root, no network, and `CHOWN`, `FOWNER`, `DAC_OVERRIDE`. Mounts persistent directories, `hermes-data`, and `x402_treazury-data` for ownership and lock checks, without running the wallet CLI. |
+| `setup` | Full stack provisioning. Shares `<COMPOSE_PROJECT_NAME>-agent:local` with read-only root, no network, and `CHOWN`, `FOWNER`, `DAC_OVERRIDE`. Mounts persistent directories, `hermes-data`, and `x402_treazury-data` for ownership and lock checks, without running the wallet CLI. |
 | `hermes-config` | Runs the Hermes configuration CLI as UID/GID 10000 with only `hermes-data` mounted and no startup validation. Repairs incompatible settings without touching webapp credentials, executor paths, or wallet state. |
 | `setup-storage` | Prepares the full storage layout and runs named-volume filesystem lock probes. |
 | `mcp-config` | Publishes the MCP bearer token and Hermes registrations using `hermes-data` and `data/x402_treazury-auth/` (no webapp credentials or wallet mounts). Disconnection runs as UID 10000 via `hermes-config` so missing auth paths never block removal. |
@@ -455,9 +465,9 @@ OpenAI-compatible clients can use `http://127.0.0.1:8337/v1`. Changing
   `18337`) before starting. Preflight checks `TEEP_HOST_PORT`, `WEBAPP_BIND`,
   and `WEBAPP_PORT` before startup and identifies the conflicting service or
   container without silently remapping ports.
-- **Isolation:** Hermes still connects internally to `10.203.83.3:8337`. The
-  executor cannot reach Teep, and neither isolated namespace gains host access
-  through this port publication.
+- **Isolation:** Hermes still connects internally to `<prefix>.83.3:8337`
+  (default `10.203.83.3:8337`). The executor cannot reach Teep, and neither
+  isolated namespace gains host access through this port publication.
 - **Local trust:** Any process on the host can call `127.0.0.1:${TEEP_HOST_PORT}`
   using Teep's provider keys; the endpoint has no client login and is never
   published through Funnel.
@@ -527,7 +537,8 @@ mcp_servers:
   container, uplink network, published port, and API key check; fresh profiles
   start without a default provider. Existing profiles retain their saved model.
   To add Teep to a profile created with Teep off, re-enable Teep and add an
-  OpenAI-compatible provider with base URL `http://10.203.83.3:8337/v1`.
+  OpenAI-compatible provider with base URL `http://<prefix>.83.3:8337/v1`
+  (default `http://10.203.83.3:8337/v1`).
 
 Apply changes to `TEEP_ENABLED` or either allowlist with `make down` followed by
 `make up`. Once the stack is running, local grants continue working during a Tor
@@ -670,7 +681,9 @@ A complete backup covers:
    `config/x402_treazury/`).
 2. The `data/` directory tree, including `data/tor/onion-service/` with all key
    files (`hs_ed25519_secret_key`, `hs_ed25519_public_key`, and `hostname`).
-3. Both application named volumes: `hermes-data` and `x402_treazury-data`.
+3. Both application named volumes: `<COMPOSE_PROJECT_NAME>_hermes-data` and
+   `<COMPOSE_PROJECT_NAME>_x402_treazury-data` (default
+   `private-hermes_hermes-data` and `private-hermes_x402_treazury-data`).
 4. The Git commit hash of this repository so matching images and defaults can be
    rebuilt.
 
@@ -694,9 +707,12 @@ includes that key).
 - **Use `make down`, never `down -v`:** `make down` stops all profiles
   gracefully and preserves both bind directories and named volumes. Compose
   `down -v` permanently deletes `hermes-data` and `x402_treazury-data`.
-- **Preserve the Compose project name:** Restarting with the default project
-  name (`private-hermes`) reattaches existing volumes; changing the project name
-  creates a separate volume set.
+- **Preserve the Compose project name:** Restarting with the same
+  `COMPOSE_PROJECT_NAME` (default `private-hermes`) reattaches existing named
+  volumes (`<COMPOSE_PROJECT_NAME>_hermes-data` and
+  `<COMPOSE_PROJECT_NAME>_x402_treazury-data`); changing `COMPOSE_PROJECT_NAME`
+  on an initialized instance detaches it from its existing volumes and creates a
+  separate volume set.
 - **Preserve ownership and modes:** Do not loosen private directory or wallet
   permissions so host tools can read them. On Linux, use privileged access or a
   container helper for service-owned files. On rootless Podman, files under
@@ -748,8 +764,9 @@ Use [local inference and HTTP MCP](#local-inference-and-http-mcp) for servers on
 the host or LAN. To connect an HTTP MCP server deployed on the stack's internal
 `mcp-access` network, add it to the separate internal allowlist:
 
-1. Attach the server container only to `mcp-access` with a static unused IP
-   (such as `10.203.84.10`).
+1. Attach the server container only to `mcp-access` with a static unused IP in
+   the instance's `<prefix>.84.0/24` subnet (such as `10.203.84.10` for the
+   default `NETWORK_PREFIX=10.203`).
 2. Add its exact IP and port to `config/network/mcp-allowlist.json` (empty by
    default):
 

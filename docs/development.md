@@ -112,6 +112,21 @@ project volumes and temporary bind directories, never operator data.
   separation in the executor, Tor vs. Teep egress, blocked host, VM, RPC, and
   private targets, Streamable HTTP MCP with SSE, blocked unselected ports, and
   Tor outage behavior.
+- **`python3 tests/multi_instance_smoke.py`:** Launches two isolated checkouts
+  concurrently with distinct `COMPOSE_PROJECT_NAME`, `NETWORK_PREFIX`
+  (`10.205` and `10.206`), and host ports. Verifies independent SSH execution,
+  Tor DNS configuration, Teep reachability, and WebApp authentication; verifies
+  cross-instance bridge, proxy, executor, and Teep denial; verifies preflight
+  rejection of overlapping `NETWORK_PREFIX`, host ports, cross-instance LAN
+  grants, and reused project names; confirms stopping one instance leaves the
+  other instance's containers, networks, volumes, and `<project>-*:local` images
+  intact; and verifies offline onion identity creation, `NETWORK_PREFIX`
+  migration (`10.205` to `10.207`) with onion ingress, host-port integration
+  grants (allowed on engines permitting `ip_forward`, fail-closed otherwise),
+  `stack.py chat`, and `x402_treazury` status, prefix detection, and private
+  Tor SOCKS namespace isolation alongside the running second instance.
+  Qualified on Docker (Docker Desktop and native Linux Docker 29.10.0) and
+  rootless Podman 5.4.2.
 - **`python3 tests/bind_mount_smoke.py`:** Networkless check confirming missing
   required bind sources fail before creating directories, containers, or
   networks while valid, overridden, and unrelated offline jobs still run. Run on
@@ -354,7 +369,9 @@ Always test OpenSSH, PTY, or Chromium changes on both engines rather than
 inferring behavior from Compose models.
 
 Compose tags the lean and desktop executors separately
-(`private-hermes-executor-false:local` and `private-hermes-executor-true:local`)
+(`<COMPOSE_PROJECT_NAME>-executor-false:local` and
+`<COMPOSE_PROJECT_NAME>-executor-true:local`, defaulting to
+`private-hermes-executor-false:local` and `private-hermes-executor-true:local`)
 so both coexist cleanly. Direct `tests/*_smoke.py` scripts expect the matching
 image to be built already; `make *-test` targets build first:
 

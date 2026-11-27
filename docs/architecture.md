@@ -34,13 +34,22 @@ inside an application container cannot grant a direct uplink.
   `gateway_mode: isolated` for IPv4 and IPv6, so their bridges have no host-side
   address. Neither Hermes nor the executor has a direct uplink.
 - **Per-namespace firewall rules:** Both `agent-net` and `executor-net` install
-  default-deny firewalls.
-  - Hermes can reach executor SSH at `10.203.82.3:2222`, Teep at
-    `10.203.83.3:8337`, allowed MCP IP and port pairs, and DNS on its Tor
-    router. Operators can also grant the Hermes UID specific host TCP ports and
-    RFC1918 `address:port` pairs through the gateway.
-  - The executor can reach only Tor DNS, public TCP through Tor, and replies to
-    agent-initiated SSH connections.
+  default-deny firewalls derived from `NETWORK_PREFIX` (default `10.203`).
+  - Hermes can reach executor SSH at `<prefix>.82.3:2222`, Teep at
+    `<prefix>.83.3:8337`, allowed MCP IP and port pairs on `<prefix>.84.0/24`,
+    and DNS on its Tor router (`<prefix>.80.3:53`). Operators can also grant the
+    Hermes UID specific host TCP ports and RFC1918 `address:port` pairs through
+    the gateway.
+  - The executor can reach only Tor DNS (`<prefix>.81.3:53`), public TCP through
+    Tor, and replies to agent-initiated SSH connections.
+- **Cross-instance isolation:** Each instance runs in its own Compose project
+  with a distinct `NETWORK_PREFIX` (`<prefix>.80.0/24` through
+  `<prefix>.91.0/24`). Default-deny firewalls block RFC1918 destinations and all
+  engine container networks, so one instance's `hermes` and `executor` cannot
+  reach another instance's bridges, proxy, executor, or Teep service. GRE inner
+  tunnel subnets (`10.204.80.0/30` and `10.204.81.0/30`) and the host alias
+  (`198.18.255.254`) stay namespace-local and do not collide across instances
+  (`10.204` is rejected as a `NETWORK_PREFIX`).
 - **Blocked destinations:** Private, shared-address, loopback (outside a
   container's own namespace), link-local, multicast, reserved, and
   connected-network targets are denied by default. This blocks Docker host and
@@ -159,16 +168,16 @@ Tor runs in its own namespace and can be restarted independently.
 ## Optional onion ingress
 
 The base stack always creates the isolated `onion-ingress` network
-(`10.203.86.0/24`), connecting only Tor (`.2`) and HAProxy (`.3`).
-`TOR_ONION_ENABLED` (default `false`) toggles HiddenService publication, the
-HAProxy onion listener, and firewall grants without changing network membership
-or Compose overlays.
+(`<prefix>.86.0/24`, default `10.203.86.0/24`), connecting only Tor (`.2`) and
+HAProxy (`.3`). `TOR_ONION_ENABLED` (default `false`) toggles HiddenService
+publication, the HAProxy onion listener, and firewall grants without changing
+network membership or Compose overlays.
 
-- When enabled, Tor's `OUTPUT` rules allow only UID 101 TCP from `10.203.86.2`
-  to `10.203.86.3:8080` ahead of private-destination denial. Raw `PREROUTING`
+- When enabled, Tor's `OUTPUT` rules allow only UID 101 TCP from `<prefix>.86.2`
+  to `<prefix>.86.3:8080` ahead of private-destination denial. Raw `PREROUTING`
   rules still block Hermes and executor traffic from reaching that address.
-- HAProxy accepts new connections on the onion listener only from `10.203.86.2`,
-  and its only outbound backend remains `10.203.85.2:9120`.
+- HAProxy accepts new connections on the onion listener only from
+  `<prefix>.86.2`, and its only outbound backend remains `<prefix>.85.2:9120`.
 - When disabled, neither the firewall grant nor the onion listener or
   HiddenService configuration is present.
 - The Podman overlay adds `isolate: strict` to `onion-ingress` alongside the
