@@ -16,7 +16,9 @@ import time
 from deployment import (ROOT, command_env_prefix, engine_command, inspect_launch,
                         maintenance_compose, parse_launch, prepare_launch)
 from addressing import DEFAULT_NETWORK_PREFIX
-from provisioning import initialize_research_config, research_config_diff, report_research_config_diff
+from provisioning import (ensure_research_config_dir, initialize_research_config,
+                          merge_research_config, report_research_config_notice,
+                          research_config_diff, reset_research_config)
 
 
 # Native terminal diagnostics at pinned 04494a74; reduced-coverage WARNs are not fatal.
@@ -249,7 +251,7 @@ class Controller:
             return
         subprocess.run([sys.executable, str(self.root / 'scripts/init-config.py'), '--wallet'],
                        cwd=self.root, check=True)
-        initialize_research_config(self.command, self.root)
+        ensure_research_config_dir(self.root)
         try:
             subprocess.run(
                 [*command_env_prefix(self.command), sys.executable,
@@ -269,17 +271,24 @@ class Controller:
         # The setup/admin jobs share this image but have no build definition.
         # Finish the cached build before inspection, disconnection or wallet work.
         self.call('build', 'x402_treazury')
-        initialize_research_config(self.command, self.root)
-        report_research_config_diff(self.command, self.root)
-        if self.inspect()['prepared']:
+        interrupted = False
+        try:
+            ensure_research_config_dir(self.root)
+            if self.inspect()['prepared']:
+                self.activate()
+                return
+            self.admin('validate')
+            self.disconnect()
+            self.call('stop', '--timeout', '-1', 'x402_treazury')
+            self.admin('disconnected')
+            self.wallet_command('prepare')
             self.activate()
-            return
-        self.admin('validate')
-        self.disconnect()
-        self.call('stop', '--timeout', '-1', 'x402_treazury')
-        self.admin('disconnected')
-        self.wallet_command('prepare')
-        self.activate()
+        except KeyboardInterrupt:
+            interrupted = True
+            raise
+        finally:
+            if not interrupted:
+                report_research_config_notice(self.command, self.root)
 
     def activate(self):
         if not self.running('hermes'):
@@ -306,6 +315,7 @@ class Controller:
             raise
 
     def startup(self):
+        interrupted = False
         try:
             state = self.inspect()
             if state['prepared']:
@@ -315,8 +325,14 @@ class Controller:
                     self.call('stop', '--timeout', '-1', 'x402_treazury')
                 print('Research preparation pending: ' + state['reason'] + '\n'
                       'Use make x402_treazury-init, then make x402_treazury-prepare. Hermes is available.')
+        except KeyboardInterrupt:
+            interrupted = True
+            raise
         except Exception as error:
             print('Hermes is available; research activation failed: ' + str(error), file=sys.stderr)
+        finally:
+            if not interrupted:
+                report_research_config_notice(self.command, self.root)
 
 
 def _running_stack_prefix(command=None):
@@ -366,11 +382,12 @@ def _running_stack_prefix(command=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=('init', 'status', 'prepare', 'config', 'config-diff'))
+    parser.add_argument('action', choices=('init', 'status', 'prepare', 'config', 'config-diff',
+                                           'config-merge', 'config-reset'))
     args = parser.parse_args()
     # Only treasury and existing Hermes control RPC are used here. Actual treasury
     # policy is validated by its own admin/job, not unrelated ingress settings.
-    offline = args.action in ('status', 'config', 'config-diff')
+    offline = args.action in ('status', 'config', 'config-diff', 'config-merge', 'config-reset')
     if offline:
         command = maintenance_compose(allow_invalid_network=True, validate_project=False)
     else:
@@ -384,18 +401,25 @@ def main():
     if args.action == 'config-diff':
         research_config_diff(controller.command, ROOT)
         return
-    if args.action == 'config':
-        initialize_research_config(controller.command, ROOT)
-        print('Research policy is available at config/x402_treazury/research_desk.toml; existing policy was preserved.')
-        return
     if args.action == 'status':
         controller.admin('status')
-    else:
-        with operation_lock(ROOT):
-            if args.action == 'init':
-                controller.initialize()
+        return
+    with operation_lock(ROOT):
+        if args.action == 'config':
+            created = initialize_research_config(controller.command, ROOT)
+            if created:
+                print('Created editable local copy at config/x402_treazury/research_desk.toml. '
+                      'After editing, run make down && make up to apply.', flush=True)
             else:
-                controller.prepare()
+                print('Preserved existing config/x402_treazury/research_desk.toml.', flush=True)
+        elif args.action == 'config-merge':
+            merge_research_config(controller.command, ROOT)
+        elif args.action == 'config-reset':
+            reset_research_config(controller.command, ROOT)
+        elif args.action == 'init':
+            controller.initialize()
+        else:
+            controller.prepare()
 
 
 if __name__ == '__main__':

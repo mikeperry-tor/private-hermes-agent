@@ -214,10 +214,10 @@ To create a treasury and back it up before depositing ZEC:
 make x402_treazury-init
 ```
 
-The provided `config/x402_treazury/research_desk.toml` (created after `make
-x402_treazury-init`) has 12 MCP endpoints organized by topic, automatically
-connected to your Hermes Agent. Funding this wallet with $5 worth of ZEC enables
-all endpoints sharing a pair of ~$2.50 USDC wallets.
+The packaged `research_desk.toml` configuration inside the `x402_treazury` image
+defines 12 MCP endpoints organized by topic, automatically connected to your
+Hermes Agent. Funding this wallet with $5 worth of ZEC enables all endpoints
+sharing a pair of ~$2.50 USDC wallets.
 
 This gets you started, while adding $20 worth of ZEC improves privacy: the 12
 MCP endpoints split across four independent wallet groups after your agent uses
@@ -254,12 +254,15 @@ See the
 and this repository's
 [x402_treazury onboarding guide](docs/x402_treazury.md) for more information.
 
-For config changes after the stack is running, stop with `make down`, edit, and
-restart with `make up`; there is no hot reload.
+For config changes after the stack is running, create an editable local copy
+with `make x402_treazury-config` if you have not already, stop with `make down`,
+edit `config/x402_treazury/research_desk.toml`, and restart with `make up`;
+there is no hot reload.
 
 ## Living Dangerously: Full wallet access
 
-You can give the agent a general-purpose cryptocurrency wallet by uncommenting
+You can give the agent a general-purpose cryptocurrency wallet by running
+`make x402_treazury-config` to create an editable local copy and uncommenting
 the `[servers.toolbox.swap_control]` stanza at the bottom of
 `config/x402_treazury/research_desk.toml`.
 
@@ -480,11 +483,17 @@ before starting the new build.
 make up
 ```
 
-If the packaged `x402_treazury` `research_desk.toml` config changes during an
-update, or you customize `config/x402_treazury/research_desk.toml`, `make up`
-and `make x402_treazury-prepare` display differences from the packaged defaults.
-To reset this file to the defaults, remove it and run `make
-x402_treazury-config` (it creates the file only if missing).
+By default, `x402_treazury` uses the `research_desk.toml` packaged inside each
+new image, so upgrades pick up updated defaults automatically. If you opted in
+to a local `config/x402_treazury/research_desk.toml` via
+`make x402_treazury-config` and the packaged default changes relative to your
+base snapshot (or an earlier release's local copy differs from the packaged
+default), `make up` and `make x402_treazury-prepare` print a notice after
+startup. Run `make x402_treazury-config-diff` to inspect differences,
+`make x402_treazury-config-merge` to 3-way merge image updates into your local
+copy, or `make x402_treazury-config-reset` to back up any local edits and return
+to the latest image defaults. See
+[editing research configuration](docs/x402_treazury.md#edit-the-research-configuration).
 
 Use `make check-updates` to check stack versions and `make plugins` to manage
 persistent Hermes plugins. See

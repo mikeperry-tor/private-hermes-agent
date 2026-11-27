@@ -84,7 +84,7 @@ class MaintenanceScopeTests(unittest.TestCase):
         with patch.dict(os.environ, BAD), patch.object(sys, 'argv', ['stack.py', 'build']), \
                 patch.object(stack, 'settings', side_effect=AssertionError('unrelated policy gate')), \
                 patch.object(stack, 'initialize_setup', side_effect=AssertionError('state initialization')), \
-                patch.object(stack, 'initialize_research_config', side_effect=AssertionError('policy publication')), \
+                patch.object(stack, 'ensure_research_config_dir', side_effect=AssertionError('policy directory')), \
                 patch.object(stack, 'run') as run:
             stack.main()
         self.assertEqual(run.call_args.args[0][-3:], ['--profile', '*', 'build'])
@@ -102,7 +102,7 @@ class MaintenanceScopeTests(unittest.TestCase):
         controller.inspect = lambda: {'wallet_absent': False, 'wallet_valid': True}
         controller.admin = Mock()
         with patch('x402_treazury.subprocess.run') as run, \
-                patch('x402_treazury.initialize_research_config') as seed, redirect_stdout(io.StringIO()):
+                patch('x402_treazury.ensure_research_config_dir') as seed, redirect_stdout(io.StringIO()):
             controller.initialize()
         controller.admin.assert_called_once_with('status')
         run.assert_not_called()
@@ -118,6 +118,20 @@ class MaintenanceScopeTests(unittest.TestCase):
             (root / 'config').write_text('not a directory')
             with operation_lock(root):
                 self.assertEqual((root / '.operation.lock').stat().st_mode & 0o777, 0o600)
+
+    def test_x402_config_commands_stay_offline_despite_invalid_network_and_ingress_settings(self):
+        import x402_treazury
+        for action, target in (('config', 'initialize_research_config'),
+                               ('config-diff', 'research_config_diff'),
+                               ('config-merge', 'merge_research_config'),
+                               ('config-reset', 'reset_research_config')):
+            with self.subTest(action=action), patch.dict(os.environ, dict(BAD, NETWORK_PREFIX='invalid')), \
+                    patch.object(sys, 'argv', ['x402_treazury.py', action]), \
+                    patch.object(x402_treazury, 'operation_lock'), \
+                    patch.object(x402_treazury, target, return_value=False) as fn, \
+                    redirect_stdout(io.StringIO()):
+                x402_treazury.main()
+            fn.assert_called_once()
 
     def _run_credentials_cli(self, root, *argv, env=None):
         spec = importlib.util.spec_from_file_location('credential_cli', ROOT / 'scripts/webapp-credentials.py')

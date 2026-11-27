@@ -152,10 +152,10 @@ class ShutdownTests(unittest.TestCase):
             auth_path.write_text(json.dumps(credentials))
             # Ordering tests isolate host bind validation, covered separately in
             # test_bind_sources.py; a clean checkout has no operator state.
-            with patch.object(sys,'argv',['stack.py','up']), patch.object(stack,'ROOT',root), patch.object(stack,'settings',return_value=(Settings.read(values()), [])) as settings, patch.object(stack,'render') as render, patch.object(stack,'stop_funnel') as disable, patch.object(stack,'run') as run, patch.object(stack,'Controller'), patch.object(stack,'initialize_setup') as provision, patch.object(stack, 'initialize_research_config') as seed, patch.object(stack, 'report_research_config_diff') as diff, patch.object(stack, 'require_inference_key') as key, patch.object(stack, 'prepare_launch'), patch.object(stack, 'check_engine'), patch.object(stack, 'check_bind_sources'), patch.object(sys.modules['deployment'], 'engine', return_value='docker'), patch.dict('os.environ'):
+            with patch.object(sys,'argv',['stack.py','up']), patch.object(stack,'ROOT',root), patch.object(stack,'settings',return_value=(Settings.read(values()), [])) as settings, patch.object(stack,'render') as render, patch.object(stack,'stop_funnel') as disable, patch.object(stack,'run') as run, patch.object(stack,'Controller'), patch.object(stack,'initialize_setup') as provision, patch.object(stack, 'ensure_research_config_dir') as seed, patch.object(stack, 'require_inference_key') as key, patch.object(stack, 'prepare_launch'), patch.object(stack, 'check_engine'), patch.object(stack, 'check_bind_sources'), patch.object(sys.modules['deployment'], 'engine', return_value='docker'), patch.dict('os.environ'):
                 events = []
                 run.side_effect = lambda command, **kwargs: events.append(command)
-                diff.side_effect = lambda *args: events.append(['config-diff'])
+                seed.side_effect = lambda *args: events.append(['ensure-config-dir'])
                 provision.side_effect = lambda command: events.append(['offline-setup'])
                 with patch.object(stack, 'running_service'), patch.object(stack, 'attached_project_mounts', return_value={}):
                     stack.main()
@@ -165,8 +165,8 @@ class ShutdownTests(unittest.TestCase):
                 self.assertTrue({'hermes', 'tor', 'executor', 'teep', 'x402_treazury', 'webapp-proxy'} <= set(build))
                 preflight = next(c for c in commands if 'scripts/preflight.py' in c)
                 self.assertIn('teep', preflight[preflight.index('--services') + 1:])
-                self.assertLess(events.index(build), events.index(['config-diff']))
-                self.assertLess(events.index(['config-diff']), events.index(['offline-setup']))
+                self.assertLess(events.index(build), events.index(['ensure-config-dir']))
+                self.assertLess(events.index(['ensure-config-dir']), events.index(['offline-setup']))
                 gateway = next(i for i,c in enumerate(commands) if '--force-recreate' in c and c[-1]=='hermes')
                 self.assertEqual(json.loads(run.call_args_list[gateway].kwargs['env'][stack.EXECUTOR_ROOTS]), ['/workspace'])
                 self.assertLess(events.index(['offline-setup']), events.index(commands[gateway]))
@@ -227,7 +227,7 @@ class ShutdownTests(unittest.TestCase):
             with patch.object(sys, 'argv', ['stack.py', 'up']), patch.object(stack, 'ROOT', root), \
                     patch.object(stack, 'settings', return_value=(selected, [])), patch.object(stack, 'render'), \
                     patch.object(stack, 'initialize_setup') as setup, patch.object(stack, 'Controller'), \
-                    patch.object(stack, 'initialize_research_config'), patch.object(stack, 'report_research_config_diff'), \
+                    patch.object(stack, 'ensure_research_config_dir'), \
                     patch.object(stack, 'require_inference_key'), \
                     patch.object(stack, 'check_bind_sources'), \
                     patch.object(stack, 'prepare_launch'), patch.object(stack, 'check_engine'), patch.object(sys.modules['deployment'], 'engine', return_value='docker'), patch.dict('os.environ'), \

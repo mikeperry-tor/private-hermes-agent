@@ -4,11 +4,13 @@ from pathlib import Path
 import argparse
 import stat
 import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'components/webapp'))
 from auth import initialize_credentials
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'components/provisioning'))
 from storage import initialize as initialize_storage
 from private_files import publish_default
+from provisioning import ensure_research_config_dir
 
 
 def initialize(root, wallet_only=False):
@@ -24,6 +26,7 @@ def initialize(root, wallet_only=False):
         publish_default(target, source.read_bytes(), stat.S_IMODE(source.stat().st_mode))
     if not target.is_file():
         raise SystemExit('config/network/mcp-allowlist.json must be a file')
+    ensure_research_config_dir(root)
     initialize_storage(root / 'data', paths=('tor',) if wallet_only else None)
     if not wallet_only:
         initialize_credentials(root)

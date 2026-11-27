@@ -32,11 +32,17 @@ execution boundaries, see [architecture and isolation](architecture.md). Read
   build caching; no extra freshness markers are stored.
 - `make build` builds images only (no state initialization or policy
   validation). Inspection, backup, and shutdown never trigger builds.
-- `make up` and `make x402_treazury-prepare` print an advisory diff comparing
-  saved `config/x402_treazury/research_desk.toml` against the built image's
-  rendered default (using a networkless container with no private mounts).
-  `make x402_treazury-config-diff` runs the same comparison standalone without
-  building or seeding and exits nonzero on inspection failure. See
+- `x402_treazury` uses its packaged image default unless an operator opts in to
+  a local override with `make x402_treazury-config` (which creates
+  `config/x402_treazury/research_desk.toml` and `.research_desk.toml.base`).
+  When a local override exists and differs from an updated packaged default (or
+  lacks a base snapshot), `make up` and `make x402_treazury-prepare` print an
+  advisory notice at the end of startup (after `Research services prepared and
+  connected to Hermes.`, or after pending-preparation and activation-error
+  messages) using a networkless container with no private mounts.
+  `make x402_treazury-config-diff`, `make x402_treazury-config-merge`, and
+  `make x402_treazury-config-reset` run standalone offline without building and
+  exit nonzero on inspection, merge, or validation failure. See
   [editing research configuration](x402_treazury.md#edit-the-research-configuration).
 
 Hermes and wallet databases use named volumes (`hermes-data` and

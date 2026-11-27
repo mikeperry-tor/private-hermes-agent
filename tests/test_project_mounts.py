@@ -439,7 +439,7 @@ class ProjectMountTests(unittest.TestCase):
                  'bind': {'create_host_path': False}}]}}}
             patches.enter_context(patch.object(stack, 'ROOT', root))
             for name in ('require_same_project_mounts', 'run_preflight', 'validate', 'render',
-                         'stop_funnel', 'initialize_research_config', 'report_research_config_diff',
+                         'stop_funnel', 'ensure_research_config_dir',
                          'initialize_setup', 'prepare_launch', 'compose'):
                 patches.enter_context(patch.object(stack, name))
             patches.enter_context(patch.object(deployment, '_output', return_value=json.dumps(model)))

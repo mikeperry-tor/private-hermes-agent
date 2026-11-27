@@ -22,14 +22,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10003 x402_treazury \
     && useradd --uid 10003 --gid 10003 --home-dir /var/lib/x402 --no-create-home x402_treazury \
-    && install -d -o 10003 -g 10003 -m 0700 /var/lib/x402
-COPY --from=build /out/x402_treazury /usr/local/bin/x402_treazury
-COPY --from=build /out/research_desk.toml /opt/x402/examples/deployments/research_desk.toml
+    && install -d -o 10003 -g 10003 -m 0700 /var/lib/x402 \
+    && install -d -m 0755 /opt/x402/examples/deployments
+COPY --from=build /out/x402_treazury /opt/x402/bin/x402_treazury
+COPY --chmod=0755 components/x402_treazury/x402_treazury-wrapper.py /usr/local/bin/x402_treazury
+COPY --from=build /out/research_desk.toml /opt/x402/defaults/deployments/research_desk.toml
 COPY --from=build /src/providers /opt/x402/providers
 COPY components/x402_treazury/entrypoint.py /opt/x402_treazury-entrypoint.py
 COPY components/x402_treazury/onboarding.py components/x402_treazury/endpoints.py /opt/
 USER 10003:10003
-ENV HOME=/var/lib/x402 \
-    X402_TREAZURY_CONFIG=/opt/x402/examples/deployments/research_desk.toml
+ENV HOME=/var/lib/x402
 ENTRYPOINT ["python3", "/opt/x402_treazury-entrypoint.py"]
 CMD ["serve"]

@@ -359,12 +359,12 @@ class NativeExecutionTests(unittest.TestCase):
 
 class ActivationTests(unittest.TestCase):
     def setUp(self):
-        seed = patch('x402_treazury.initialize_research_config')
+        seed = patch('x402_treazury.ensure_research_config_dir')
         self.seed = seed.start()
         self.addCleanup(seed.stop)
-        diff = patch('x402_treazury.report_research_config_diff')
-        self.diff = diff.start()
-        self.addCleanup(diff.stop)
+        notice = patch('x402_treazury.report_research_config_notice')
+        self.notice = notice.start()
+        self.addCleanup(notice.stop)
 
     def controller(self):
         controller = Controller(['docker', 'compose'])
@@ -389,7 +389,7 @@ class ActivationTests(unittest.TestCase):
     def test_absent_init_starts_network_but_invalid_state_does_not(self):
         controller = self.controller()
         controller.inspect = lambda: {'wallet_absent': True, 'wallet_valid': False}
-        with patch('x402_treazury.subprocess.run'), patch('x402_treazury.initialize_research_config'):
+        with patch('x402_treazury.subprocess.run'), patch('x402_treazury.ensure_research_config_dir'):
             controller.initialize()
         self.assertEqual(controller.events, [('up', '-d', '--wait', '--no-deps', '--no-recreate', 'tor', 'agent-net'),
                                              ('wallet', 'init')])
@@ -443,7 +443,7 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(controller.events, [('build', 'x402_treazury')])
         self.seed.assert_not_called()
 
-    def test_prepare_entrypoint_builds_before_seeding_missing_policy(self):
+    def test_prepare_entrypoint_builds_before_dir_prep_and_reports_notice_after_activation(self):
         import x402_treazury
         for fail in (False, True):
             with self.subTest(build_fails=fail):
@@ -453,18 +453,50 @@ class ActivationTests(unittest.TestCase):
                     if fail:
                         raise subprocess.CalledProcessError(1, list(args))
                 controller.call = build
-                self.seed.side_effect = lambda *args: controller.events.append(('seed-policy',))
-                self.diff.side_effect = lambda *args: controller.events.append(('config-diff',))
+                self.seed.side_effect = lambda *args: controller.events.append(('ensure-config-dir',))
+                self.notice.side_effect = lambda *args: (
+                    controller.events.append(('config-notice',)),
+                    print('Notice: test config diff'),
+                )
                 with patch.object(sys, 'argv', ['x402_treazury.py', 'prepare']), \
                         patch.object(x402_treazury, 'Controller', return_value=controller), \
-                        patch.object(x402_treazury, 'operation_lock', return_value=contextlib.nullcontext()):
+                        patch.object(x402_treazury, 'operation_lock', return_value=contextlib.nullcontext()), \
+                        contextlib.redirect_stdout(output := io.StringIO()):
                     if fail:
                         with self.assertRaises(subprocess.CalledProcessError):
                             x402_treazury.main()
                         self.assertEqual(controller.events, [('build', 'x402_treazury')])
                     else:
                         x402_treazury.main()
-                        self.assertEqual(controller.events[:3], [('build', 'x402_treazury'), ('seed-policy',), ('config-diff',)])
+                        self.assertEqual(controller.events[:2], [('build', 'x402_treazury'), ('ensure-config-dir',)])
+                        self.assertEqual(controller.events[-1], ('config-notice',))
+                        text = output.getvalue()
+                        self.assertLess(text.index('Research services prepared and connected to Hermes.'),
+                                        text.index('Notice: test config diff'))
+
+    def test_startup_reports_notice_after_activation_or_failure_but_skips_keyboard_interrupt(self):
+        controller = self.controller()
+        self.notice.side_effect = lambda *args: print('Notice: test config diff')
+        with contextlib.redirect_stdout(output := io.StringIO()):
+            controller.startup()
+        text = output.getvalue()
+        self.assertLess(text.index('Research services prepared and connected to Hermes.'),
+                        text.index('Notice: test config diff'))
+
+        self.notice.reset_mock()
+        controller = self.controller()
+        controller.admin = lambda action: (_ for _ in ()).throw(RuntimeError('invalid policy'))
+        with contextlib.redirect_stderr(err := io.StringIO()), contextlib.redirect_stdout(out := io.StringIO()):
+            controller.startup()
+        self.assertIn('research activation failed', err.getvalue())
+        self.assertIn('Notice: test config diff', out.getvalue())
+
+        self.notice.reset_mock()
+        controller = self.controller()
+        controller.inspect = lambda: (_ for _ in ()).throw(KeyboardInterrupt())
+        with self.assertRaises(KeyboardInterrupt):
+            controller.startup()
+        self.notice.assert_not_called()
 
     def test_prepare_retries_activation_without_repeating_completed_wallet_work(self):
         controller = self.controller()

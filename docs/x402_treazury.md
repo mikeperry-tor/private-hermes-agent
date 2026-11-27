@@ -77,10 +77,12 @@ The packaged `research_desk.toml` sets `[wallet_bootstrap]` with
 - **Metadata relays:** Paid metadata relays for catalogs, pricing, help, and
   discovery always pay from `general` under this policy (overriding
   `relay_fallback.wallet`) and do not trigger deferred group funding.
-- **Customizing bootstrap behavior:** Existing saved `research_desk.toml` files
-  are preserved across updates. To fund every group separately from the start,
-  remove the `[wallet_bootstrap]` table. Omitted reserve bounds use upstream's
-  $2-3 default.
+- **Customizing bootstrap behavior:** By default, `x402_treazury` tracks the
+  packaged image default across upgrades. To pin and customize the policy, run
+  `make x402_treazury-config` and edit `config/x402_treazury/research_desk.toml`
+  (existing saved files are preserved across updates). To fund every group
+  separately from the start, remove the `[wallet_bootstrap]` table. Omitted
+  reserve bounds use upstream's $2-3 default.
 
 Inspect the packaged default policy offline before funding (no private mounts;
 replace `private-hermes` with your `COMPOSE_PROJECT_NAME` if customized):
@@ -108,25 +110,66 @@ image so default policy is available) and automatically activates
 
 ## Edit the research configuration
 
-Seed `config/x402_treazury/research_desk.toml` from the built image at any time
-without creating a wallet:
+By default, `x402_treazury` uses the rendered `research_desk.toml` packaged
+inside the `x402_treazury` image (`/opt/x402/defaults/deployments/research_desk.toml`).
+No file is written to `config/x402_treazury/` unless you opt in, so upgrades
+automatically pick up updated providers, discovery keywords, wallet bounds, and
+bootstrap defaults from each new image.
+
+To opt in to a local editable copy (without creating a wallet), run:
 
 ```sh
 make x402_treazury-config
 ```
 
-`make up` and `make x402_treazury-init` also seed the file if missing, never
-overwriting an existing file. Both `make up` and `make x402_treazury-prepare`
-print an advisory unified diff between the image's rendered default and your
-saved policy so you can review upstream changes without losing local edits. To
-view that diff standalone:
+This creates `config/x402_treazury/research_desk.toml` together with its base
+snapshot `config/x402_treazury/.research_desk.toml.base` (if `research_desk.toml`
+already exists, it is preserved untouched). Once a local copy exists,
+`x402_treazury` loads it instead of the image default and keeps it pinned across
+upgrades.
+
+When a local copy exists, `make up` and `make x402_treazury-prepare` print a
+concise notice at the end of startup (after `Research services prepared and
+connected to Hermes.`, or after pending-preparation and activation-error
+messages) whenever the packaged image default has changed relative to
+`.research_desk.toml.base`, or when a pre-existing copy without a base file
+differs from the packaged image default. When the packaged image default has not
+changed since your local copy was created or last merged, startup stays quiet.
+
+Use these offline commands to manage a local copy (run `make build` first if
+comparing, merging, or seeding against a new source pin before `make up`):
 
 ```sh
+# Compare local research_desk.toml against the packaged image default.
 make x402_treazury-config-diff
+
+# 3-way merge packaged image updates into your local copy and validate offline.
+make x402_treazury-config-merge
+
+# Return to tracking packaged image defaults (saves an edited copy to .bak).
+make x402_treazury-config-reset
 ```
 
-Run `make build` first if comparing against a new source pin. The diff prints
-saved configuration values, so inspect it before sharing logs.
+- `make x402_treazury-config-diff` prints a unified diff containing saved
+  configuration values, so inspect it before sharing logs. In default mode (no
+  local copy), it reports that packaged image defaults are active.
+- `make x402_treazury-config-merge` runs a 3-way merge (`git merge-file`) using
+  `.research_desk.toml.base` and validates a clean merge offline in a
+  networkless, read-only container with no wallet mount before updating
+  `research_desk.toml` and `.research_desk.toml.base`. If merge conflicts or
+  validation errors occur, the live `research_desk.toml` and base file remain
+  untouched and the candidate is written to
+  `config/x402_treazury/research_desk.toml.merge`. If you resolve conflicts
+  manually by copying `.merge` over `research_desk.toml`, `make up` continues
+  showing the advisory notice until you reset to image defaults. Pre-existing
+  copies created before `.research_desk.toml.base` existed cannot 3-way merge;
+  review them with `config-diff` or reset with `config-reset`.
+- `make x402_treazury-config-reset` removes `research_desk.toml` and
+  `.research_desk.toml.base` so `x402_treazury` returns to tracking the packaged
+  image default automatically. If the local file differs from the packaged
+  default (or the local image is unavailable), it writes a backup to
+  `config/x402_treazury/research_desk.toml.bak` first. Restart with `make down
+  && make up` to apply the reset.
 
 ### Applying edits
 
@@ -362,9 +405,11 @@ make test
   healthy siblings, restart without stale-error replay, empty-inventory
   activation, and probe cleanup.
 - **`tests/research_config_smoke.py`:** Offline policy tests using the built
-  image and a temporary unfunded wallet covering policy loading, atomic edits,
-  invalid or missing TOML refusal, offline status availability under broken
-  policy or ingress config, `wallet preview`, and `wallet rename` error paths.
+  image and a temporary unfunded wallet covering default-mode fallback, opt-in
+  seeding, atomic edits, invalid TOML and dangling-symlink refusal, 3-way merge
+  validation, reset backup and recovery, offline status availability under
+  broken policy or ingress config, `wallet preview`, and `wallet rename` error
+  paths.
 - **`make x402_treazury-test`:** Builds the treasury image and tests bearer-token
   auth, MCP `initialize` and `tools/list` on all twelve endpoints, HTTPS through
   Tor's Unix SOCKS socket against a free Tor-check API, executor isolation, RPC

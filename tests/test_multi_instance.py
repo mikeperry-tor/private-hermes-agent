@@ -801,7 +801,7 @@ class RuntimeConfigAndProvisioningTests(unittest.TestCase):
             with patch.dict(os.environ, {'TEEP_HOST_PORT': 'invalid', 'WEBAPP_PORT': 'invalid',
                                          'COMPUTER_USE_ENABLED': 'invalid'}), \
                     patch.object(controller, 'inspect', return_value={'wallet_absent': True, 'wallet_valid': False}), \
-                    patch.object(x402_treazury, 'initialize_research_config'), \
+                    patch.object(x402_treazury, 'ensure_research_config_dir'), \
                     patch.object(controller, 'call') as call_mock, \
                     patch.object(controller, 'wallet_command') as wallet_mock, \
                     patch.object(x402_treazury.subprocess, 'run', side_effect=fake_run):

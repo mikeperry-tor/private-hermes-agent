@@ -6,7 +6,8 @@ COMPOSE = $(shell python3 scripts/deployment.py compose-command || echo false)
 .PHONY: help \
 	init build up down chat gateway \
 	webapp-credentials webapp-rotate onion-address \
-	x402_treazury-init x402_treazury-prepare x402_treazury-status x402_treazury-config x402_treazury-config-diff \
+	x402_treazury-init x402_treazury-prepare x402_treazury-status x402_treazury-config \
+	x402_treazury-config-diff x402_treazury-config-merge x402_treazury-config-reset \
 	check-updates plugins \
 	check test webapp-test webapp-live-test onion-test onion-live-test \
 	computer-use-test browser-use-test storage-test x402_treazury-test \
@@ -31,7 +32,10 @@ help:
 	@echo "  make x402_treazury-init         # Create the Zcash treasury wallet and print its shielded receive address"
 	@echo "  make x402_treazury-prepare      # Fund the initial bootstrap wallet, warm catalogs, and connect MCP tools"
 	@echo "  make x402_treazury-status       # Show treasury funding status and shielded receive address"
-	@echo "  make x402_treazury-config-diff  # Compare saved research_desk.toml against the packaged image default"
+	@echo "  make x402_treazury-config       # Create an editable local copy of research_desk.toml (opt in)"
+	@echo "  make x402_treazury-config-diff  # Compare local research_desk.toml against the packaged image default"
+	@echo "  make x402_treazury-config-merge # Merge image default updates into local research_desk.toml and validate"
+	@echo "  make x402_treazury-config-reset # Return to packaged image defaults (backs up edited local copy)"
 	@echo ""
 	@echo "Updates and plugins:"
 	@echo "  make check-updates              # Check upstream image and source versions over Tor without changing pins"
@@ -98,6 +102,12 @@ x402_treazury-config:
 
 x402_treazury-config-diff:
 	python3 scripts/x402_treazury.py config-diff
+
+x402_treazury-config-merge:
+	python3 scripts/x402_treazury.py config-merge
+
+x402_treazury-config-reset:
+	python3 scripts/x402_treazury.py config-reset
 
 # Updates and plugins
 

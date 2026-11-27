@@ -617,7 +617,7 @@ review the [risks of opening executor-written files](#security-considerations-fo
 | `data/x402_treazury-auth/` | Persistent MCP bearer token, kept separate from wallet state |
 | `data/tor/` | Tor guard state and optional onion identity under `onion-service/` |
 | `data/tailscale/` | Optional Tailscale Funnel enrollment and node identity |
-| `config/x402_treazury/` | Editable research desk policy (`research_desk.toml`) |
+| `config/x402_treazury/` | Optional opt-in research desk policy (`research_desk.toml`), base snapshot (`.research_desk.toml.base`), and any reset backups |
 
 `make init` creates missing directories without overwriting files. Before
 services start, `setup` sets the declared leaf-directory ownership and modes

@@ -13,7 +13,7 @@ from deployment import (ROOT, check_bind_sources, check_engine, compose, compose
 from addressing import DEFAULT_NETWORK_PREFIX, validate_network_prefix
 from auth import validate
 from x402_treazury import Controller, operation_lock
-from provisioning import initialize_setup, initialize_research_config, report_research_config_diff
+from provisioning import initialize_setup, ensure_research_config_dir
 from project_mounts import (PROJECTS, SETTING, bind_sources, check_project_model, engine_views, parse_mounts,
                             overlaps, project_override, source_ids, valid_destination, validate_sources)
 
@@ -251,7 +251,8 @@ def start_stack(config, prefix, command, mounts, original_sources):
     if inference:
         require_inference_key(command)
     # Build shared images before setup consumes them or services are changed.
-    # Include treasury even before preparation: setup/config seeding need it.
+    # Include treasury even before preparation: startup inspection and opt-in
+    # config checks need it.
     build = [service for service in selected if service not in network_endpoints] + ['x402_treazury']
     run(command + ['build', *build])
     render(config)
@@ -259,8 +260,7 @@ def start_stack(config, prefix, command, mounts, original_sources):
         stop_funnel(prefix + compose(config, all_ingress=True))
     # A changed bind-mounted credential file does not itself recreate a
     # completed container. Always apply current settings before startup.
-    initialize_research_config(command, ROOT)
-    report_research_config_diff(command, ROOT)
+    ensure_research_config_dir(ROOT)
     initialize_setup(command)
     model = check_bind_sources(command, ['up', '--no-deps', *selected])
     prepare_launch(command, model)

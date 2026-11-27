@@ -56,9 +56,11 @@ make up
   stays up. Build failures abort before runtime state changes. Builds may need
   host Internet access and never search for newer commits or force base pulls.
 - **State preservation:** `make down` waits for graceful treasury shutdown and
-  preserves named volumes, bind directories, and `config/x402_treazury/research_desk.toml`.
-  `make up` reruns offline setup, prints an advisory diff if your saved research
-  policy differs from packaged defaults, and reconnects a prepared treasury.
+  preserves named volumes, bind directories, and any opt-in
+  `config/x402_treazury/research_desk.toml`. `make up` reruns offline setup,
+  reconnects a prepared treasury, and prints an advisory notice at the end of
+  startup if an opt-in local research policy differs from updated packaged
+  defaults (see [editing research configuration](x402_treazury.md#edit-the-research-configuration)).
   Invalid treasury policy blocks research activation without discarding
   preparation history.
 - **In-place Hermes updates:** The official Hermes image disables in-place core

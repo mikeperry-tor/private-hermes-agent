@@ -156,8 +156,14 @@ def main():
             publish('invalid TOML [')
             assert execute('x402_treazury', 'config', 'show', check=False).returncode
             assert inspect()['prepared'] and address in admin('status').stdout
+            # A dangling symlink must fail closed rather than silently falling back to defaults.
             path.unlink()
+            path.symlink_to('/nonexistent/research_desk.toml')
             assert execute('x402_treazury', 'config', 'show', check=False).returncode
+            assert inspect()['prepared'] and address in admin('status').stdout
+            # Removing the local override returns cleanly to packaged image defaults.
+            path.unlink()
+            assert policy()['servers']['web']['wallet'] == 'general'
             assert inspect()['prepared'] and address in admin('status').stdout
             publish(changed)
             assert inspect()['prepared']
@@ -202,6 +208,33 @@ def main():
             assert path.read_text() == 'invalid TOML ['
             assert path.stat().st_mode & 0o777 == previous_mode
             assert not (root / 'data').exists()
+            publish(changed)
+            # Exercise real Make config-merge (offline validation) and config-reset (.bak + default mode).
+            base = directory / '.research_desk.toml.base'
+            backup = directory / 'research_desk.toml.bak'
+            # Simulate an upstream change by modifying .base relative to the packaged default while
+            # keeping an orthogonal local comment edit in saved research_desk.toml.
+            base.write_text('# old packaged base\n' + original)
+            publish('# old packaged base\n' + original + '\n# local operator note\n')
+            merged = subprocess.run(['make', 'x402_treazury-config-merge'], cwd=root, env=environment,
+                                    capture_output=True, text=True, check=True)
+            assert 'validated offline' in merged.stdout
+            assert '# old packaged base' not in path.read_text()
+            assert '# local operator note' in path.read_text()
+            assert base.read_text() == original
+            reset = subprocess.run(['make', 'x402_treazury-config-reset'], cwd=root, env=environment,
+                                   capture_output=True, text=True, check=True)
+            assert 'research_desk.toml.bak' in reset.stdout
+            assert not path.exists() and not base.exists()
+            assert '# local operator note' in backup.read_text()
+            assert policy()['servers']['web']['wallet'] == 'general'
+            default_diff = subprocess.run(['make', 'x402_treazury-config-diff'], cwd=root, env=environment,
+                                          capture_output=True, text=True, check=True)
+            assert 'Using packaged image defaults' in default_diff.stdout
+            opt_in = subprocess.run(['make', 'x402_treazury-config'], cwd=root, env=environment,
+                                    capture_output=True, text=True, check=True)
+            assert path.read_text() == original and base.read_text() == original
+            backup.unlink()
             publish(changed)
             # Broken unrelated network/storage/config paths must not be mounted
             # or initialized by saved-wallet inspection or repeated init.
