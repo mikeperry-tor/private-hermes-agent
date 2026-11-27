@@ -19,8 +19,10 @@ from auth import hash_password
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = 'private-hermes-onion-test'
-smoke.COMPOSE = [*compose_base(), '-p', PROJECT, *smoke.compose_files(True, extra=(
-    'tests/compose.yaml', 'tests/webapp-compose.yaml', 'tests/onion-compose.yaml'))]
+smoke.COMPOSE = smoke.compose_command(
+    PROJECT, funnel=True,
+    extra=('tests/compose.yaml', 'tests/webapp-compose.yaml', 'tests/onion-compose.yaml'),
+)
 
 
 def run_suite(folder, data):
@@ -35,6 +37,7 @@ def run_suite(folder, data):
     target_env = {**os.environ, 'COMPOSE_PROJECT_NAME': PROJECT,
                   'TOR_ONION_ENABLED': 'malformed', 'TAILSCALE_FUNNEL_ENABLED': 'malformed',
                   'TEEP_HOST_PORT': 'invalid', 'WEBAPP_EXTERNAL_CONTENT': 'invalid'}
+    project_network_image = f'{PROJECT}-network:local'
 
     def target(check=True):
         result = subprocess.run([sys.executable, 'scripts/onion_address.py'], cwd=checkout,
@@ -47,7 +50,7 @@ def run_suite(folder, data):
         return subprocess.check_output([*engine_command(), 'run', '--rm', '--network', 'none',
             '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE', '--cap-add', 'CHOWN',
             '--entrypoint', 'python3', '-v', f'{data / "tor"}:/var/lib/tor',
-            'private-hermes-network:local', '-c', 'from pathlib import Path; import hashlib,os; '
+            project_network_image, '-c', 'from pathlib import Path; import hashlib,os; '
             'p=Path("/var/lib/tor/onion-service"); ' + code], text=True).strip()
 
     # A first-run interruption before writing any identity may leave only the
@@ -76,7 +79,7 @@ def run_suite(folder, data):
         '--sysctl', 'net.ipv4.ip_forward=0',
         '--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE', '-e', 'TOR_ONION_ENABLED=true',
         '-v', f'{data / "tor"}:/var/lib/tor', '--entrypoint', 'python3',
-        'private-hermes-network:local', '/opt/network.py', 'router'], text=True, capture_output=True)
+        project_network_image, '/opt/network.py', 'router'], text=True, capture_output=True)
     assert guarded.returncode and 'invalid native format' in guarded.stderr, guarded.stderr
     state('assert (p/"hs_ed25519_secret_key").read_bytes()==b"invalid"; '
           '(p/"hs_ed25519_secret_key").unlink(); (p/"saved-secret").rename(p/"hs_ed25519_secret_key"); '
@@ -116,8 +119,10 @@ def run_suite(folder, data):
         wait_ready()
         assert state('print((p/"hs_ed25519_public_key").is_file())') == 'True'
         # webapp_smoke import selects its own fixture project; restore ours.
-        smoke.COMPOSE = [*compose_base(), '-p', PROJECT, *smoke.compose_files(True, extra=(
-            'tests/compose.yaml', 'tests/webapp-compose.yaml', 'tests/onion-compose.yaml'))]
+        smoke.COMPOSE = smoke.compose_command(
+            PROJECT, funnel=True,
+            extra=('tests/compose.yaml', 'tests/webapp-compose.yaml', 'tests/onion-compose.yaml'),
+        )
         def tor_request(host=address):
             return smoke.execute('tor', 'python3', '-c',
                 'import urllib.request; r=urllib.request.urlopen(urllib.request.Request('
@@ -129,7 +134,7 @@ def run_suite(folder, data):
             subprocess.run([*engine_command(), 'run', '--rm', '-i', '--network', 'bridge',
                 '--user', '101:102', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
                 '--read-only', '--tmpfs', '/tmp:mode=1777', '--entrypoint', 'python3',
-                'private-hermes-network:local', '-c', (ROOT / 'tests/fixtures/onion-client.py').read_text()],
+                project_network_image, '-c', (ROOT / 'tests/fixtures/onion-client.py').read_text()],
                 input=json.dumps([address, password]), text=True, check=True)
         assert target().stdout.strip() == 'http://' + address
         state('(p/"hostname").rename(p/"saved-hostname")')

@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from deployment import compose_base, engine_command  # noqa: E402
 
 PROJECT = 'private-hermes-webapp-test'
-smoke.COMPOSE = [*compose_base(), '-p', PROJECT,
-                 *smoke.compose_files(True, extra=('tests/compose.yaml', 'tests/webapp-compose.yaml'))]
+smoke.COMPOSE = smoke.compose_command(PROJECT, funnel=True,
+                                      extra=('tests/compose.yaml', 'tests/webapp-compose.yaml'))
 
 
 def http(path, headers=None, data=None):

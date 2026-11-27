@@ -21,7 +21,7 @@ def main():
                         '-subj', '/CN=public.test', '-addext', 'subjectAltName=DNS:public.test'],
                        check=True, capture_output=True)
         (tls / 'key.pem').chmod(0o644)  # disposable fixture key only
-        env = {**os.environ, 'IMAGE_TEST_TLS': folder}
+        env = {**os.environ, 'COMPOSE_PROJECT_NAME': 'private-hermes-images-test', 'IMAGE_TEST_TLS': folder}
         def compose(*args, check=True):
             return subprocess.run([*COMMAND, *args], cwd=ROOT, env=env, check=check)
         try:

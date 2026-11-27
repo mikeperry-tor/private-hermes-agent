@@ -51,6 +51,11 @@ services:
         target: /run/agent-ssh
         read_only: true
         bind: {create_host_path: false}
+      - type: bind
+        source: ./components/hermes/resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
+        bind: {create_host_path: false}
   teep:
     command: [serve]
     # Publish only on loopback, using a disposable port rather than the
@@ -73,7 +78,7 @@ services:
         bind:
           create_host_path: false
   fixture:
-    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-executor-${COMPUTER_USE_ENABLED-false}:local
     user: "10000:10000"
     # The fixture binds port 111 without capabilities; Docker allows this by
     # default, Podman sets the floor to 1024.
@@ -87,9 +92,9 @@ services:
       - ./tests/fixtures/mcp.py:/opt/fixture.py:ro
     networks:
       mcp-access:
-        ipv4_address: 10.203.84.10
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.84.10
       agent-route:
-        ipv4_address: 10.203.80.10
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.80.10
   x402_treazury:
     profiles: !reset []
     # Real Rust server; test config has local catalogs, an ephemeral static key,
@@ -131,6 +136,11 @@ services:
       - type: bind
         source: ${TEST_DATA_DIR:?disposable test data required}/executor/workspace
         target: /workspace
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./components/executor/resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
         bind: {create_host_path: false}
   x402_treazury-admin:
     # Offline creation qualification needs the scratch filesystem used by the

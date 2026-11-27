@@ -26,7 +26,7 @@ class PassthroughSettingsTests(unittest.TestCase):
             shutil.copyfile(ROOT / name, self.root / name)
         self.environment = dict(os.environ)
         for name in tuple(self.environment):
-            if name.startswith(('WEBAPP_', 'TAILSCALE_', 'TEEP_', 'COMPOSE_')):
+            if name == 'NETWORK_PREFIX' or name.startswith(('WEBAPP_', 'TAILSCALE_', 'TEEP_', 'COMPOSE_')):
                 self.environment.pop(name)
         self.environment['COMPUTER_USE_ENABLED'] = 'false'
 

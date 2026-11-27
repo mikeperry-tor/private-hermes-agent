@@ -13,15 +13,14 @@ from endpoints import ADDRESS, ENDPOINTS
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from deployment import compose_base, engine_command  # noqa: E402
 
-smoke.COMPOSE = [*compose_base(), '-p', 'private-hermes-x402-treazury-test',
-                 *smoke.compose_files(False, extra=('tests/compose.yaml',))]
+smoke.COMPOSE = smoke.compose_command('private-hermes-x402-treazury-test')
 
 
 def run_suite():
     failed = True
     try:
         print('Validating the production x402_treazury configuration offline...', flush=True)
-        command = [*engine_command(), 'run', '--rm', '--network', 'none', 'private-hermes-x402_treazury:local']
+        command = [*engine_command(), 'run', '--rm', '--network', 'none', 'private-hermes-x402-treazury-test-x402_treazury:local']
         production = json.loads(subprocess.check_output(command + ['config', 'show'], text=True))
         assert production['base_rpc_policy']['primary_default']
         assert production['base_rpc_policy']['fallback_defaults']
@@ -41,12 +40,12 @@ def run_suite():
         assert identity['source_revision'] == '8bd82bb1f9fae7e4b75e3f8f9ec7faed72447d27'
         assert identity['source_dirty'] is False
         gate = subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none', '--entrypoint', 'python3',
-                               'private-hermes-x402_treazury:local', '-c',
+                               'private-hermes-x402-treazury-test-x402_treazury:local', '-c',
                                "import sys; sys.path.insert(0,'/opt'); from onboarding import serve; serve()"],
                               text=True, capture_output=True)
         assert gate.returncode != 0 and 'Serving refused' in gate.stderr
         partial = subprocess.run([*engine_command(), 'run', '--rm', '--network', 'none', '--entrypoint', 'python3',
-                                  'private-hermes-x402_treazury:local', '-c',
+                                  'private-hermes-x402-treazury-test-x402_treazury:local', '-c',
                                   "import sys; from pathlib import Path; sys.path.insert(0,'/opt'); from onboarding import initialize; Path('/var/lib/x402/state').mkdir(); initialize()"],
                                  text=True, capture_output=True)
         assert partial.returncode != 0 and 'initialization refused' in partial.stderr

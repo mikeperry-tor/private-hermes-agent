@@ -16,7 +16,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from deployment import compose_base, compose_files, engine, engine_command
+from deployment import compose_base, compose_files, engine, engine_command, local_image
 from project_mounts import (SETTING, check_project_model, engine_views, parse_mounts,
                             project_override, validate_sources)
 
@@ -273,7 +273,7 @@ def main():
         alias_probes(scratch, views)
         variants = {'lean': ('false',), 'desktop': ('true',), 'both': ('false', 'true')}[args.variant]
         for variant in variants:
-            image = f'private-hermes-executor-{variant}:local'
+            image = local_image(f'executor-{variant}')
             image_check = subprocess.run([*engine_command(), 'image', 'inspect', image], capture_output=True)
             if image_check.returncode:
                 image = 'localhost/' + image

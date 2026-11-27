@@ -37,8 +37,9 @@ def compose_command():
 
 def model(*files):
     arguments = [argument for name in files for argument in ('-f', name)]
+    env = {k: v for k, v in os.environ.items() if k not in ('COMPOSE_PROJECT_NAME', 'NETWORK_PREFIX')}
     result = subprocess.run([*compose_command(), *arguments, '--profile', '*', '--env-file', '/dev/null',
-                             'config', '--format', 'json'], cwd=ROOT, text=True, capture_output=True)
+                             'config', '--format', 'json'], cwd=ROOT, env=env, text=True, capture_output=True)
     if result.returncode:
         raise AssertionError(result.stderr)
     return json.loads(result.stdout)
@@ -842,7 +843,8 @@ class EngineDependentCheckTests(unittest.TestCase):
             return ''
 
         with patch.object(preflight, 'output', side_effect=output), patch.object(preflight, 'check_engine'), \
-                patch.object(preflight, 'engine', return_value='docker'), patch.dict(os.environ, WEBAPP_PORT='19120'), \
+                patch.object(preflight, 'engine', return_value='docker'), \
+                patch.dict(os.environ, WEBAPP_PORT='19120', COMPOSE_PROJECT_NAME='', NETWORK_PREFIX=''), \
                 patch('sys.stdout', new_callable=io.StringIO), patch.object(preflight.socket, 'socket') as probe:
             with patch.object(sys, 'argv', args):
                 preflight.main()

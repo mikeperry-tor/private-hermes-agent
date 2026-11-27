@@ -21,7 +21,8 @@ class OnionTests(unittest.TestCase):
                 for funnel_enabled in ('false', 'true'):
                     with self.subTest(engine=selected, onion=onion_enabled, funnel=funnel_enabled), patch.dict(
                             os.environ, TOR_ONION_ENABLED=onion_enabled,
-                            TAILSCALE_FUNNEL_ENABLED=funnel_enabled, TAILSCALE_FUNNEL_HOST='test.example.ts.net'):
+                            TAILSCALE_FUNNEL_ENABLED=funnel_enabled, TAILSCALE_FUNNEL_HOST='test.example.ts.net',
+                            COMPOSE_PROJECT_NAME='', NETWORK_PREFIX=''):
                         files = ['compose.yaml']
                         if funnel_enabled == 'true':
                             files.append('compose.funnel.yaml')

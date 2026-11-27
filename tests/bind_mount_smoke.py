@@ -10,10 +10,11 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from deployment import engine, engine_command
+from deployment import engine, engine_command, local_image
 
 
 def main():
+    agent_image = local_image('agent')
     with tempfile.TemporaryDirectory(prefix='private-hermes-bind-') as directory:
         root = Path(directory)
         present, missing = root / 'present', root / 'missing'
@@ -22,11 +23,12 @@ def main():
         (root / 'compose.executor.yaml').write_bytes((ROOT / 'compose.executor.yaml').read_bytes())
         override = root / 'bind.json'
         def job(source, **extra):
-            return dict(image='private-hermes-agent:local', network_mode='none',
+            return dict(image=agent_image, network_mode='none',
                         entrypoint=['/opt/hermes/.venv/bin/python'], command=['-c', "print('bind probe')"],
                         cap_drop=['ALL'], volumes=[{'type': 'bind', 'source': str(source), 'target': '/probe',
                                                    'read_only': True, 'bind': {'create_host_path': False}}], **extra)
         override.write_text(json.dumps({'services': {
+            'hermes-config': {'image': agent_image},
             'bind-present': job(present), 'bind-absent': job(missing),
             'bind-dependent': job(present, depends_on={'bind-absent': {'condition': 'service_completed_successfully'}})}}))
         project = 'private-hermes-bind-' + uuid.uuid4().hex[:10]

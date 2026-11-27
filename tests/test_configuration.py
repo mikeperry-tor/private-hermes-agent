@@ -17,11 +17,16 @@ spec.loader.exec_module(init_config)
 
 
 class OperatorConfigurationTests(unittest.TestCase):
+    def clean_env(self, **overrides):
+        env = {k: v for k, v in os.environ.items() if k not in ('COMPOSE_PROJECT_NAME', 'NETWORK_PREFIX')}
+        env.update(overrides)
+        return env
+
     def test_computer_use_selects_one_executor_and_scoped_syscall_policy(self):
         models = {}
         for enabled in ('false', 'true'):
-            result = subprocess.run([*compose_base(), '-f', 'compose.yaml', 'config', '--format', 'json'],
-                                    cwd=ROOT, env=dict(os.environ, COMPUTER_USE_ENABLED=enabled),
+            result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml', 'config', '--format', 'json'],
+                                    cwd=ROOT, env=self.clean_env(COMPUTER_USE_ENABLED=enabled),
                                     text=True, capture_output=True, check=True)
             services = json.loads(result.stdout)['services']
             executor = services['executor']
@@ -37,16 +42,16 @@ class OperatorConfigurationTests(unittest.TestCase):
             models[enabled] = executor
         for key in ('volumes', 'network_mode', 'cap_drop', 'tmpfs'):
             self.assertEqual(models['false'][key], models['true'][key], key)
-        result = subprocess.run([*compose_base(), '-f', 'compose.yaml', 'config', '--quiet'],
-                                cwd=ROOT, env=dict(os.environ, COMPUTER_USE_ENABLED='invalid'),
+        result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml', 'config', '--quiet'],
+                                cwd=ROOT, env=self.clean_env(COMPUTER_USE_ENABLED='invalid'),
                                 capture_output=True)
         self.assertNotEqual(result.returncode, 0)
 
     def test_terminal_mode_maps_only_to_hermes_on_both_models(self):
         for overlay in ([], ['-f', 'compose.podman.yaml']):
             for mode in ('code', 'agent', ''):
-                env = dict(os.environ, WEBAPP_TERMINAL_ENVIRONMENT=mode)
-                result = subprocess.run([*compose_base(), '-f', 'compose.yaml', *overlay,
+                env = self.clean_env(WEBAPP_TERMINAL_ENVIRONMENT=mode)
+                result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml', *overlay,
                                          'config', '--format', 'json'], cwd=ROOT, env=env,
                                         text=True, capture_output=True, check=True)
                 model = json.loads(result.stdout)
@@ -57,7 +62,7 @@ class OperatorConfigurationTests(unittest.TestCase):
                 self.assertEqual(recipients, {'hermes': mode})
         result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml',
                                  'config', '--format', 'json'], cwd=ROOT,
-                                env={k: v for k, v in os.environ.items() if k != 'WEBAPP_TERMINAL_ENVIRONMENT'},
+                                env={k: v for k, v in self.clean_env().items() if k != 'WEBAPP_TERMINAL_ENVIRONMENT'},
                                 text=True, capture_output=True, check=True)
         self.assertEqual(json.loads(result.stdout)['services']['hermes']['environment']['WEBAPP_TERMINAL_ENVIRONMENT'], 'code')
 
@@ -125,10 +130,10 @@ class OperatorConfigurationTests(unittest.TestCase):
         provider_keys = ('VENICE_API_KEY', 'NEARAI_API_KEY', 'CHUTES_API_KEY',
                          'TINFOIL_API_KEY', 'NANOGPT_API_KEY', 'PHALA_API_KEY')
         secrets = {key: 'test-only-' + key for key in (*provider_keys, 'BASE_RPC_URL', 'TS_AUTHKEY')}
-        environment = dict(os.environ, **secrets, TEEP_HOST_PORT='18337',
-                           TEEP_INSTALL_MODEL='neardirect:qualification/custom-model',
-                           TEEP_SERVE_ARGS="--log-level 'debug'")
-        result = subprocess.run([*compose_base(), '-f', 'compose.yaml', '-f', 'compose.funnel.yaml', '--profile', '*', 'config', '--format', 'json'],
+        environment = self.clean_env(**secrets, TEEP_HOST_PORT='18337',
+                                     TEEP_INSTALL_MODEL='neardirect:qualification/custom-model',
+                                     TEEP_SERVE_ARGS="--log-level 'debug'")
+        result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml', '-f', 'compose.funnel.yaml', '--profile', '*', 'config', '--format', 'json'],
                                 cwd=ROOT, env=environment, text=True,
                                 capture_output=True, check=True)
         services = json.loads(result.stdout)['services']
@@ -175,8 +180,8 @@ class OperatorConfigurationTests(unittest.TestCase):
             'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS': '11434',
             'HERMES_INTEGRATIONS_LAN_ENDPOINTS': '192.168.50.4:8765',
         }
-        result = subprocess.run([*compose_base(), '-f', 'compose.yaml', '--profile', '*', 'config', '--format', 'json'],
-                                cwd=ROOT, env=dict(os.environ, **grants), text=True,
+        result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml', '--profile', '*', 'config', '--format', 'json'],
+                                cwd=ROOT, env=self.clean_env(**grants), text=True,
                                 capture_output=True, check=True)
         for name, service in json.loads(result.stdout)['services'].items():
             environment = service.get('environment', {})

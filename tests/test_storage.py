@@ -71,9 +71,10 @@ class PersistentStorageTests(unittest.TestCase):
             self.assertFalse((outside / 'agent').exists())
 
     def test_persistent_mounts_preserve_wallet_and_executor_separation(self):
-        result = subprocess.run([*compose_base(), '-f', 'compose.yaml', '-f', 'compose.funnel.yaml',
+        env = {k: v for k, v in os.environ.items() if k not in ('COMPOSE_PROJECT_NAME', 'NETWORK_PREFIX')}
+        result = subprocess.run([*compose_base(), '--env-file', '/dev/null', '-f', 'compose.yaml', '-f', 'compose.funnel.yaml',
                                  '--profile', '*', 'config', '--format', 'json'],
-                                cwd=ROOT, text=True, capture_output=True, check=True)
+                                cwd=ROOT, env=env, text=True, capture_output=True, check=True)
         config = json.loads(result.stdout)
         for name, uid, volume in (('hermes-config', '10000:10000', 'hermes-data'),
                                   ('x402_treazury-inspect', '10003:10003', 'x402_treazury-data')):

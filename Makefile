@@ -118,56 +118,58 @@ check:
 	python3 -m compileall -q components scripts tests
 
 test: check
-	$(COMPOSE) -f compose.yaml build hermes executor
-	python3 scripts/preflight.py private-hermes-test --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor teep hermes executor x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-test --skip-ports
 	python3 -u tests/smoke.py
 
 webapp-test: check
-	$(COMPOSE) -f compose.yaml build hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-webapp-test --funnel --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-webapp-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-webapp-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-webapp-test --funnel --skip-ports
 	python3 -u tests/webapp_smoke.py
 
 # Explicit public-network Tor image, outage, and recovery qualification.
 webapp-live-test: check
-	$(COMPOSE) -f compose.yaml build hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-webapp-test --funnel --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-webapp-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-webapp-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-webapp-test --funnel --skip-ports
 	python3 -u tests/webapp_smoke.py --live-egress
 
 onion-test: check
-	$(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-onion-test --funnel --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-onion-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-onion-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-onion-test --funnel --skip-ports
 	python3 -u tests/onion_smoke.py
 
 # Explicitly publishes a temporary authenticated onion service for qualification.
 onion-live-test: check
-	$(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy
-	python3 scripts/preflight.py private-hermes-onion-test --funnel --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-onion-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor hermes executor webapp-proxy x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-onion-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-onion-test --funnel --skip-ports
 	python3 -u tests/onion_smoke.py --live
 
 computer-use-test: check
-	COMPUTER_USE_ENABLED=true $(COMPOSE) -f compose.yaml build hermes executor
-	COMPUTER_USE_ENABLED=true python3 scripts/preflight.py private-hermes-test --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-test COMPUTER_USE_ENABLED=true NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor teep hermes executor x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-test COMPUTER_USE_ENABLED=true NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-test --skip-ports
 	COMPUTER_USE_ENABLED=true python3 -u tests/computer_use_smoke.py
 
 browser-use-test: check
-	COMPUTER_USE_ENABLED=true $(COMPOSE) -f compose.yaml build hermes executor
-	COMPUTER_USE_ENABLED=true python3 scripts/preflight.py private-hermes-test --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-test COMPUTER_USE_ENABLED=true NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor teep hermes executor x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-test COMPUTER_USE_ENABLED=true NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-test --skip-ports
 	COMPUTER_USE_ENABLED=true python3 -u tests/browser_use_smoke.py
 
 storage-test: check
+	COMPOSE_PROJECT_NAME=private-hermes-storage-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor hermes x402_treazury
 	python3 -u tests/storage_smoke.py
 
 x402_treazury-test: check
-	$(COMPOSE) -f compose.yaml build x402_treazury
-	python3 scripts/preflight.py private-hermes-x402-treazury-test --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-x402-treazury-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor teep hermes executor x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-x402-treazury-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-x402-treazury-test --skip-ports
 	python3 -u tests/x402_treazury_smoke.py
 
 plugins-test: check
-	python3 scripts/preflight.py private-hermes-plugins-test --skip-ports
+	COMPOSE_PROJECT_NAME=private-hermes-plugins-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build tor hermes x402_treazury
+	COMPOSE_PROJECT_NAME=private-hermes-plugins-test NETWORK_PREFIX=10.203 python3 scripts/preflight.py private-hermes-plugins-test --skip-ports
 	python3 -u tests/plugins_smoke.py
 
 images-test: check
-	$(COMPOSE) -f compose.yaml build hermes
+	COMPOSE_PROJECT_NAME=private-hermes-images-test NETWORK_PREFIX=10.203 $(COMPOSE) -f compose.yaml build hermes
 	python3 -u tests/images_smoke.py
 
 hermes-ui-test: check

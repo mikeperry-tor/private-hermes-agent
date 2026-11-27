@@ -8,7 +8,7 @@ import sys
 import tempfile
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from deployment import compose_base  # noqa: E402
+from deployment import compose_base, local_image  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,12 +28,12 @@ def main():
                   'read_only': True, 'tmpfs': ['/tmp:mode=1777'], 'working_dir': '/tmp',
                   'init': True, 'stop_grace_period': '-1s'}
         model = {'services': {
-            'x402_treazury': {**common, 'image': 'private-hermes-x402_treazury:local',
+            'x402_treazury': {**common, 'image': local_image('x402_treazury'),
                 'network_mode': 'none', 'entrypoint': ['python3', '/opt/native-fixture.py'],
                 'environment': {'RESEARCH_TEST_FLAGS': '/run/test-flags'},
                 'volumes': [f'{ROOT}/tests/fixtures/x402_treazury.py:/opt/native-fixture.py:ro',
                             f'{root}/token:/run/x402_treazury-auth/token:ro', f'{flags}:/run/test-flags:ro']},
-            'hermes': {**common, 'image': 'private-hermes-agent:local', 'user': '10000:10000',
+            'hermes': {**common, 'image': local_image('agent'), 'user': '10000:10000',
                 'network_mode': 'service:x402_treazury', 'entrypoint': ['sleep', 'infinity'],
                 'environment': {'HERMES_HOME': '/tmp/profile', 'HOME': '/tmp'},
                 'volumes': [f'{root}/hermes.env:/tmp/profile/.env:ro']}}}

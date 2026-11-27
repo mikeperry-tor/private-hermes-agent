@@ -204,7 +204,8 @@ def run_fixture(args):
             'hermes': {'image': 'private-hermes-agent:local-integration-test'},
         }, 'volumes': {'tor-fixture-data': {}}}
         overlay.write_text(json.dumps(definition))
-        os.environ.update(COMPOSE_ENV_FILES='.env.example', TOR_ONION_ENABLED='false',
+        os.environ.update(COMPOSE_ENV_FILES='.env.example', NETWORK_PREFIX='10.203',
+                          TOR_ONION_ENABLED='false',
                           HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS='none',
                           HERMES_INTEGRATIONS_LAN_ENDPOINTS='none')
         project = 'private-hermes-local-proof-' + secrets.token_hex(4)

@@ -110,7 +110,8 @@ class WebappTests(unittest.TestCase):
                 commands.append(args)
                 return Mock(returncode=0, stdout=json.dumps({'BackendState': 'Running', 'Self': {'DNSName': actual + '.'}}))
             environment = {'TAILSCALE_FUNNEL_ENABLED': 'true', 'TAILSCALE_FUNNEL_HOST': 'test.example.ts.net',
-                           'TAILSCALE_FUNNEL_PORT': '443', 'TS_AUTHKEY': 'test-only-key'}
+                           'TAILSCALE_FUNNEL_PORT': '443', 'TS_AUTHKEY': 'test-only-key',
+                           'NETWORK_PREFIX': ''}
             with patch.dict(funnel.os.environ, environment), patch.object(funnel.subprocess, 'Popen', return_value=child), patch.object(funnel, 'cli', side_effect=cli), patch.object(funnel, 'publish') as publish, patch.object(funnel.signal, 'signal'), patch.object(funnel.time, 'sleep', side_effect=KeyboardInterrupt):
                 with self.assertRaises(expected_error):
                     funnel.main()

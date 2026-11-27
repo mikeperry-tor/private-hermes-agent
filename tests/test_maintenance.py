@@ -39,6 +39,8 @@ class MaintenanceScopeTests(unittest.TestCase):
 
     def test_executor_build_preserves_desktop_selection_despite_bad_ingress_settings(self):
         with patch.dict(os.environ, dict(BAD, COMPUTER_USE_ENABLED='true')):
+            os.environ.pop('COMPOSE_PROJECT_NAME', None)
+            os.environ.pop('NETWORK_PREFIX', None)
             command = deployment.maintenance_compose(all_ingress=True, executor_build=True)
             result = subprocess.run([*command, '--env-file', '/dev/null', 'config', '--format', 'json'],
                                     cwd=ROOT, check=True, capture_output=True, text=True)

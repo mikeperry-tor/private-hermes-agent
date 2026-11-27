@@ -13,7 +13,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from provisioning import initialize_research_config
-from deployment import compose_base, engine, engine_command  # noqa: E402
+from deployment import compose_base, engine, engine_command, local_image  # noqa: E402
 
 
 def docker(*args, check=True):
@@ -22,7 +22,7 @@ def docker(*args, check=True):
 
 def main():
     identity = 'private-hermes-config-test-' + uuid.uuid4().hex
-    image = 'private-hermes-x402_treazury:local'
+    image = local_image('x402_treazury')
     with tempfile.TemporaryDirectory(prefix=identity) as folder:
         root = Path(folder)
         initialize_research_config([*compose_base(), '-f', 'compose.yaml'], root)
@@ -31,6 +31,7 @@ def main():
         original = path.read_text()
         docker('volume', 'create', identity)
         try:
+            docker('image', 'tag', image, f'{identity}-x402_treazury:local')
             docker('run', '--rm', '--network', 'none', '--user', '0:0',
                    '--mount', f'type=volume,src={identity},dst=/var/lib/x402',
                    '--entrypoint', 'chown', image, '10003:10003', '/var/lib/x402')
@@ -236,6 +237,7 @@ def main():
             docker('rm', '-f', identity, check=False)
             docker('volume', 'rm', identity)
             docker('volume', 'rm', identity + '_hermes-data', check=False)
+            docker('image', 'rm', '-f', f'{identity}-x402_treazury:local', check=False)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 name: private-hermes-images-test
 services:
   canary:
-    image: private-hermes-agent:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-agent:local
     entrypoint: [/opt/hermes/.venv/bin/python, /opt/image-canary.py]
     user: "10000:10000"
     cap_drop: [ALL]
@@ -15,7 +15,7 @@ services:
       inference: {ipv4_address: 10.203.83.3}
       mcp: {ipv4_address: 10.203.84.10}
   check:
-    image: private-hermes-agent:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-agent:local
     entrypoint: [/opt/hermes/.venv/bin/python, /opt/images_check.py]
     user: "10000:10000"
     cap_drop: [ALL]

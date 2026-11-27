@@ -223,9 +223,10 @@ def main():
         check()
         return
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-    from deployment import engine_command
+    from deployment import engine_command, local_image
 
     fixture = Path(__file__).resolve()
+    agent_image = local_image('agent')
     for mode, enabled in [(m, e) for m in ('tor_proxied', 'ask', 'off', 'browser_native') for e in ('false', 'true')]:
         subprocess.run([
             *engine_command(), 'run', '--rm', '--network', 'none', '--cap-drop', 'ALL',
@@ -235,7 +236,7 @@ def main():
             '-e', 'TERMINAL_SSH_HOST=10.203.82.3', '-e', 'TERMINAL_SSH_PORT=2222',
             '-e', 'TERMINAL_SSH_USER=runner', '-e', 'TERMINAL_SSH_KEY=/run/agent-ssh/id_ed25519',
             '--mount', f'type=bind,source={fixture},target=/tmp/desktop_tools_smoke.py,readonly',
-            '--entrypoint', '/bin/sh', 'private-hermes-agent:local', '-ec',
+            '--entrypoint', '/bin/sh', agent_image, '-ec',
             '/opt/hermes/.venv/bin/python -I /opt/hermes/docker/private-managed-policy.py && '
             'exec /opt/hermes/.venv/bin/python /tmp/desktop_tools_smoke.py --inside',
         ], check=True)
