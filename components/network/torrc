@@ -4,8 +4,6 @@ SocksPort 0
 HTTPTunnelPort 0
 TransPort 10.204.80.1:9040
 TransPort 10.204.81.1:9040
-DNSPort 10.203.80.3:9053
-DNSPort 10.203.81.3:9053
 ControlPort 0
 ControlSocket /run/tor-control/control.sock
 CookieAuthentication 1

@@ -11,9 +11,11 @@ import textwrap
 import deployment
 from deployment import compose_base, compose_files, engine, engine_command
 sys.path.insert(0, str(deployment.ROOT / 'components/network'))
+from addressing import validate_network_prefix, validate_project_name
 from integrations import grants
 
-ADDRESS_PLAN_HELP = ('Pinned subnets live in the networks: block of compose.yaml.',
+ADDRESS_PLAN_HELP = ('Set a distinct NETWORK_PREFIX in .env (for example, NETWORK_PREFIX=10.205) '
+                     'to move all pinned subnets in the networks: block of compose.yaml.',
                      'Funnel networks (funnel-link and tailscale-uplink) live in compose.funnel.yaml.')
 
 
@@ -335,9 +337,25 @@ def main():
     check_engine()
     options = ['-p', arguments.project] if arguments.project else []
     command = [*compose_base(), *options, *compose_files(arguments.funnel)]
-    config = json.loads(output(*command, 'config', '--format', 'json',
-                               *(['--', *arguments.services] if arguments.services else [])))
+    try:
+        rendered = output(*command, 'config', '--format', 'json',
+                          *(['--', *arguments.services] if arguments.services else []))
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or '').strip()
+        fail((detail or 'Compose could not render the deployment configuration.',),
+             ('No network or container was changed.',))
+    config = json.loads(rendered)
     project = arguments.project or config.get('name', 'private-hermes')
+    try:
+        validate_project_name(project)
+        declared_project = (config.get('x-deployment') or {}).get('project_name')
+        if declared_project is not None:
+            validate_project_name(declared_project)
+        declared_prefix = (config.get('x-deployment') or {}).get('network_prefix')
+        if declared_prefix is not None:
+            validate_network_prefix(declared_prefix)
+    except ValueError as error:
+        fail((str(error),), ('No network or container was changed.',))
     check_security_options(config)
     check_pinned_networks(config)
     identifiers = output(*engine_command(), 'network', 'ls', '-q').split()

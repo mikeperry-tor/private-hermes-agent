@@ -1,16 +1,15 @@
 """Exact IPv4 TCP exceptions shared by the agent and its trusted gateway."""
 import ipaddress
+from pathlib import Path
 import re
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from addressing import HOST_ALIAS, network_prefix, reserved_subnets
 
 HOST_PORTS = 'HERMES_INTEGRATIONS_ALLOWED_HOST_PORTS'
 LAN_ENDPOINTS = 'HERMES_INTEGRATIONS_LAN_ENDPOINTS'
-HOST_ALIAS = '198.18.255.254'
 RFC1918 = tuple(map(ipaddress.IPv4Network, ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')))
-# Include the networks that neither namespace sees in its connected routes.
-RESERVED = tuple(map(ipaddress.IPv4Network, (
-    *(f'10.203.{subnet}.0/24' for subnet in range(80, 92)),
-    '10.204.80.0/30', '10.204.81.0/30',
-)))
 
 
 def entries(environment, name):
@@ -26,7 +25,7 @@ def port(value, name):
 
 def grants(environment, connected=()):
     host = sorted({port(value, HOST_PORTS) for value in entries(environment, HOST_PORTS)})
-    excluded = (*RESERVED, *map(ipaddress.IPv4Network, connected))
+    excluded = (*reserved_subnets(network_prefix(environment)), *map(ipaddress.IPv4Network, connected))
     lan = set()
     for entry in entries(environment, LAN_ENDPOINTS):
         address, _, number = entry.partition(':')

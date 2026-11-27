@@ -5,13 +5,20 @@ from pathlib import Path
 import subprocess
 import sys
 
+try:
+    from addressing import Addresses, DEFAULT_NETWORK_PREFIX, network_prefix
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'network'))
+    from addressing import Addresses, DEFAULT_NETWORK_PREFIX, network_prefix
+
 
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, **kwargs)
 
 
-def firewall(forwarder, edge, edge_ip, port, funnel, onion=False):
+def firewall(forwarder, edge, edge_ip, port, funnel, onion=False, prefix=DEFAULT_NETWORK_PREFIX):
     """Return the IPv4 iptables-restore input for HAProxy's namespace."""
+    addresses = Addresses(prefix)
     if forwarder == 'interface':
         # Docker delivers published connections on the publication interface.
         rules = [f'-A INPUT -i {edge} -d {edge_ip}/32 -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
@@ -22,15 +29,15 @@ def firewall(forwarder, edge, edge_ip, port, funnel, onion=False):
         rules = [f'-A INPUT -i lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT',
                  f'-A OUTPUT -o lo -p tcp --dport {port} -m conntrack --ctstate NEW -j ACCEPT']
     if funnel:
-        rules += ['-A INPUT -s 10.203.87.2/32 -d 10.203.87.3/32 -p tcp --dport 8443 -m conntrack --ctstate NEW -j ACCEPT']
+        rules += [f'-A INPUT -s {addresses.tailscale_funnel_link}/32 -d {addresses.proxy_funnel_link}/32 -p tcp --dport 8443 -m conntrack --ctstate NEW -j ACCEPT']
     if onion:
-        rules += ['-A INPUT -s 10.203.86.2/32 -d 10.203.86.3/32 -p tcp --dport 8080 -m conntrack --ctstate NEW -j ACCEPT']
+        rules += [f'-A INPUT -s {addresses.tor_onion_ingress}/32 -d {addresses.proxy_onion_ingress}/32 -p tcp --dport 8080 -m conntrack --ctstate NEW -j ACCEPT']
     return '\n'.join([
         '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
         '-A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',
         '-A OUTPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT',
         *rules,
-        '-A OUTPUT -d 10.203.85.2/32 -p tcp --dport 9120 -m conntrack --ctstate NEW -j ACCEPT',
+        f'-A OUTPUT -d {addresses.agent_webapp_backend}/32 -p tcp --dport 9120 -m conntrack --ctstate NEW -j ACCEPT',
         'COMMIT', '',
     ])
 
@@ -40,6 +47,7 @@ def main():
     for binary in ('iptables', 'ip6tables'):
         for chain in ('INPUT', 'OUTPUT', 'FORWARD'):
             run(binary, '-P', chain, 'DROP')
+    addresses = Addresses(network_prefix(os.environ))
     policy = os.environ.get('WEBAPP_EXTERNAL_CONTENT')
     if policy not in ('tor_proxied', 'ask', 'off', 'browser_native'):
         raise ValueError('Invalid external-content policy')
@@ -63,19 +71,21 @@ def main():
         raise ValueError('Invalid onion enablement')
     if config.splitlines()[2:3] != [f'# TOR_ONION_ENABLED={onion}']:
         raise ValueError('Onion enablement mismatch: regenerate ingress and recreate services')
+    if config.splitlines()[3:4] != [f'# NETWORK_PREFIX={addresses.prefix}']:
+        raise ValueError('Network prefix mismatch: regenerate ingress and recreate services')
     if onion == 'true' and port == 8080:
         raise ValueError('Local port conflicts with onion listener')
-    addresses = json.loads(run('ip', '-j', '-4', 'addr', capture_output=True).stdout)
-    edge = [entry['ifname'] for entry in addresses if entry['ifname'] != 'lo'
+    internal_ips = (addresses.proxy_webapp_backend, addresses.proxy_onion_ingress, addresses.proxy_funnel_link)
+    host_addresses = json.loads(run('ip', '-j', '-4', 'addr', capture_output=True).stdout)
+    edge = [entry['ifname'] for entry in host_addresses if entry['ifname'] != 'lo'
             and any(info['scope'] == 'global' for info in entry['addr_info'])
-            and not any(info['local'] in ('10.203.85.3', '10.203.86.3', '10.203.87.3')
-                        for info in entry['addr_info'])]
+            and not any(info['local'] in internal_ips for info in entry['addr_info'])]
     if len(edge) != 1:
         raise ValueError('Expected exactly one host publication interface')
-    edge_ip = next(info['local'] for entry in addresses if entry['ifname'] == edge[0]
+    edge_ip = next(info['local'] for entry in host_addresses if entry['ifname'] == edge[0]
                    for info in entry['addr_info'] if info['scope'] == 'global')
     os.environ['PRIVATE_HERMES_EDGE_IP'] = edge_ip
-    run('iptables-restore', input=firewall(forwarder, edge[0], edge_ip, port, enabled == 'true', onion == 'true'))
+    run('iptables-restore', input=firewall(forwarder, edge[0], edge_ip, port, enabled == 'true', onion == 'true', addresses.prefix))
     run('ip6tables-restore', input='\n'.join([
         '*filter', ':INPUT DROP [0:0]', ':OUTPUT DROP [0:0]', ':FORWARD DROP [0:0]',
         'COMMIT', '',

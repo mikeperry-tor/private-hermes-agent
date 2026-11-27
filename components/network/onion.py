@@ -56,13 +56,15 @@ def initialize(state=STATE):
         config.write_text('')
         log = Path(temporary) / 'tor.log'
         with log.open('w+') as output:
+            # Tor requires a HiddenServicePort target even with DisableNetwork 1;
+            # it is not persisted, and runtime network.py configures <prefix>.86.3:8080.
             child = subprocess.Popen([
                 'setpriv', '--reuid=101', '--regid=102', '--clear-groups',
                 '--bounding-set=-all', '--inh-caps=-all', '--ambient-caps=-all', '--no-new-privs',
                 'tor', '-f', str(config), '--DataDirectory', str(state),
                 '--DisableNetwork', '1', '--SocksPort', '0', '--ControlPort', '0',
                 '--HiddenServiceDir', str(service), '--HiddenServiceVersion', '3',
-                '--HiddenServicePort', '80 10.203.86.3:8080', '--Log', 'notice stdout',
+                '--HiddenServicePort', '80 127.0.0.1:8080', '--Log', 'notice stdout',
             ], stdout=output, stderr=subprocess.STDOUT)
             try:
                 while True:

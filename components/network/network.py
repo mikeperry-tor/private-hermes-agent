@@ -12,8 +12,11 @@ import signal
 import subprocess
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from addressing import (Addresses, GRE_AGENT_INNER, GRE_AGENT_PEER,
+                        GRE_EXECUTOR_INNER, GRE_EXECUTOR_PEER, HOST_ALIAS,
+                        network_prefix)
 from onion import require_secret, read_address
-from integrations import HOST_ALIAS, RESERVED, RFC1918, grants
+from integrations import RFC1918, grants
 
 # Block non-public IPv4 destinations even when applications use literal IPs or
 # public DNS returns a private answer. Explicit service grants precede this list.
@@ -74,17 +77,19 @@ def deny(chain, networks):
     return [f'-A {chain} -d {network} -j DROP' for network in networks]
 
 
-def mcp_grants():
+def mcp_grants(addresses=None):
+    addresses = addresses or Addresses(network_prefix(os.environ))
     entries = json.loads(Path('/etc/private-hermes/mcp-allowlist.json').read_text())
     if not isinstance(entries, list):
         raise ValueError('MCP allowlist must be a list')
     rules = []
+    subnet = ipaddress.IPv4Network(addresses.mcp_access_subnet)
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) != {'ip', 'port'}:
             raise ValueError('Each MCP grant must contain only ip and port')
         address = ipaddress.IPv4Address(entry['ip'])
         port = entry['port']
-        if address not in ipaddress.IPv4Network('10.203.84.0/24') or int(address) & 255 in (0, 1, 2, 255):
+        if address not in subnet or int(address) & 255 in (0, 1, 2, 255):
             raise ValueError('MCP grants must target service addresses on mcp-access')
         if type(port) is not int or not 1 <= port <= 65535:
             raise ValueError('MCP port must be an integer from 1 to 65535')
@@ -103,11 +108,12 @@ def tunnel(name, local, remote, address):
 
 
 def endpoint(role):
+    addresses = Addresses(network_prefix(os.environ))
     agent = role == 'agent'
-    gateway = '10.203.80.3' if agent else '10.203.81.3'
-    outer = '10.203.80.2' if agent else '10.203.81.2'
-    inner = '10.204.80.2' if agent else '10.204.81.2'
-    peer = '10.204.80.1' if agent else '10.204.81.1'
+    gateway = addresses.tor_agent_route if agent else addresses.tor_executor_route
+    outer = addresses.agent_route if agent else addresses.executor_route
+    inner = GRE_AGENT_INNER if agent else GRE_EXECUTOR_INNER
+    peer = GRE_AGENT_PEER if agent else GRE_EXECUTOR_PEER
     tunnel('tor-route', outer, gateway, inner + '/30')
     outgoing = [f'-A OUTPUT -d {gateway}/32 -p udp --dport 53 -j ACCEPT',
                 f'-A OUTPUT -d {gateway}/32 -p gre -j ACCEPT']
@@ -122,14 +128,14 @@ def endpoint(role):
         ]
         # A preexisting connection cannot bypass the current owner/tuple policy.
         early_output += [f'-A OUTPUT -o tor-route -d {network} -j DROP' for network in DENIED]
-        incoming += ['-A INPUT -s 10.203.85.3/32 -d 10.203.85.2/32 -p tcp --dport 9120 -j ACCEPT']
+        incoming += [f'-A INPUT -s {addresses.proxy_webapp_backend}/32 -d {addresses.agent_webapp_backend}/32 -p tcp --dport 9120 -j ACCEPT']
         outgoing += [
-            '-A OUTPUT -d 10.203.83.3/32 -p tcp --dport 8337 -j ACCEPT',
-            '-A OUTPUT -d 10.203.82.3/32 -p tcp --dport 2222 -j ACCEPT',
-            *mcp_grants(),
+            f'-A OUTPUT -d {addresses.teep_inference}/32 -p tcp --dport 8337 -j ACCEPT',
+            f'-A OUTPUT -d {addresses.executor_execution_control}/32 -p tcp --dport 2222 -j ACCEPT',
+            *mcp_grants(addresses),
         ]
     else:
-        incoming += ['-A INPUT -s 10.203.82.2/32 -d 10.203.82.3/32 -p tcp --dport 2222 -j ACCEPT']
+        incoming += [f'-A INPUT -s {addresses.agent_execution_control}/32 -d {addresses.executor_execution_control}/32 -p tcp --dport 2222 -j ACCEPT']
     outgoing += deny('OUTPUT', (*DENIED, *connected()))
     outgoing += ['-A OUTPUT -p tcp -j ACCEPT']
     # Drop embedded Docker DNS before its DNAT changes port 53. Also prevents
@@ -141,37 +147,37 @@ def endpoint(role):
     drop(65534, 65534, sys.executable, os.path.abspath(__file__), 'wait')
 
 
-UPLINK_ADDRESS = '10.203.88.2'
 IP_FORWARD = Path('/proc/sys/net/ipv4/ip_forward')
 LOCAL_GRANT_WARNINGS = Path('/tmp/local-grant-warnings')
 
 
-def uplink_route(address, uplink):
+def uplink_route(address, uplink, uplink_address):
     result = subprocess.run(['ip', '-j', '-4', 'route', 'get', address], text=True, capture_output=True)
     if result.returncode == 0:
         route, = json.loads(result.stdout)
         return (route.get('dev') == uplink and route.get('gateway')
-                and route.get('prefsrc') == UPLINK_ADDRESS)
+                and route.get('prefsrc') == uplink_address)
     return False
 
 
-def host_backend(podman, uplink):
+def host_backend(podman, uplink, addresses=None):
+    addresses = addresses or Addresses(network_prefix(os.environ))
     try:
         address = ipaddress.IPv4Address(os.environ.get('PRIVATE_HERMES_ENGINE_HOST_ADDRESS', ''))
     except ipaddress.AddressValueError:
         return None
-    if any(address in network for network in RESERVED):
+    if any(address in network for network in addresses.reserved):
         return None
     # A link-local address is eligible only from Podman's native static
     # alias. Ordinary LAN rules never admit any link-local address.
     if (any(address in network for network in RFC1918)
             or (podman and address.is_link_local)):
-        if uplink_route(str(address), uplink):
+        if uplink_route(str(address), uplink, addresses.tor_uplink):
             return str(address)
     return None
 
 
-def local_forwarding(client, uplink, destinations):
+def local_forwarding(client, uplink, destinations, uplink_address):
     raw, nat, forwarding = [], [], []
     for original, backend, port in destinations:
         ingress = f'-i client-0 -s {client}/32 -p tcp'
@@ -185,7 +191,7 @@ def local_forwarding(client, uplink, destinations):
             nat += [f'-A PREROUTING {ingress} {target} -j DNAT --to-destination {backend}']
         nat += [
             f'-A POSTROUTING -o {uplink} -s {client}/32 -p tcp {actual} '
-            f'-m conntrack --ctdir ORIGINAL {connection} -j SNAT --to-source {UPLINK_ADDRESS}'
+            f'-m conntrack --ctdir ORIGINAL {connection} -j SNAT --to-source {uplink_address}'
         ]
         # Filter after DNAT and before SNAT, including established packets.
         # Check the original tuple so alias and literal rules cannot substitute.
@@ -224,6 +230,7 @@ def enable_local_forwarding():
 
 
 def router():
+    addresses = Addresses(network_prefix(os.environ))
     # Also close a retained namespace before changing any existing rules.
     if IP_FORWARD.read_text().strip() != '0':
         IP_FORWARD.write_text('0\n')
@@ -233,8 +240,8 @@ def router():
     if onion == 'true':
         require_secret()
         read_address()
-    clients = [('10.203.80.2', '10.203.80.3', '10.204.80.2', '10.204.80.1'),
-               ('10.203.81.2', '10.203.81.3', '10.204.81.2', '10.204.81.1')]
+    clients = [(addresses.agent_route, addresses.tor_agent_route, GRE_AGENT_INNER, GRE_AGENT_PEER),
+               (addresses.executor_route, addresses.tor_executor_route, GRE_EXECUTOR_INNER, GRE_EXECUTOR_PEER)]
     for index, (client, gateway, inner, peer) in enumerate(clients):
         tunnel(f'client-{index}', gateway, client, peer + '/30')
     routes = connected()
@@ -245,16 +252,17 @@ def router():
     if host or lan:
         interfaces = json.loads(run('ip', '-j', '-4', 'addr', 'show', capture_output=True).stdout)
         uplink, = [entry['ifname'] for entry in interfaces
-                   if any(addr['local'] == UPLINK_ADDRESS for addr in entry['addr_info'])]
+                   if any(addr['local'] == addresses.tor_uplink for addr in entry['addr_info'])]
         platform = os.environ.get('PRIVATE_HERMES_NETWORK_PLATFORM', 'docker')
         if lan and platform == 'docker':
             warnings.append('Docker LAN grants require Docker Desktop. LAN grants closed.')
             lan = []
-        destinations = [(address, address, port) for address, port in lan if uplink_route(address, uplink)]
+        destinations = [(address, address, port) for address, port in lan
+                        if uplink_route(address, uplink, addresses.tor_uplink)]
         if len(destinations) != len(lan):
             warnings.append('LAN grants lacking a tor-uplink route were closed.')
         if host:
-            backend = host_backend(platform == 'podman', uplink)
+            backend = host_backend(platform == 'podman', uplink, addresses)
             if backend:
                 destinations += [(HOST_ALIAS, backend, port) for port in host]
             else:
@@ -265,7 +273,7 @@ def router():
             except subprocess.CalledProcessError:
                 warnings.append('GRE TCP checksum repair unavailable. Local forwarding closed.')
                 destinations = []
-        raw, nat, forwarding = local_forwarding(clients[0][2], uplink, destinations)
+        raw, nat, forwarding = local_forwarding(clients[0][2], uplink, destinations, addresses.tor_uplink)
     for client, gateway, inner, peer in clients:
         # GRE carries the original public-destination packet inside an internal
         # IP packet. Docker's internal bridge drops public-destination Ethernet
@@ -288,7 +296,7 @@ def router():
     # The Tor process itself also cannot contact host, VM, or private networks.
     outgoing = [f'-A OUTPUT -d {client}/32 -p gre -j ACCEPT' for client, *_ in clients]
     if onion == 'true':
-        outgoing += ['-A OUTPUT -s 10.203.86.2/32 -d 10.203.86.3/32 -p tcp --dport 8080 -m owner --uid-owner 101 -j ACCEPT']
+        outgoing += [f'-A OUTPUT -s {addresses.tor_onion_ingress}/32 -d {addresses.proxy_onion_ingress}/32 -p tcp --dport 8080 -m owner --uid-owner 101 -j ACCEPT']
     outgoing += deny('OUTPUT', networks)
     outgoing += ['-A OUTPUT -m owner --uid-owner 101 -p tcp -j ACCEPT']
     apply(raw, nat, incoming, outgoing, forwarding=forwarding)
@@ -313,6 +321,9 @@ def router():
     os.chown('/run/tor-control', 101, 102)
     print('router: firewall installed; starting Tor without network capabilities', flush=True)
     original = Path('/etc/tor/torrc').read_text()
+    if not original.endswith('\n'):
+        original += '\n'
+    original += f'DNSPort {addresses.tor_agent_route}:9053\nDNSPort {addresses.tor_executor_route}:9053\n'
     if os.environ.get('PRIVATE_HERMES_X402_TREAZURY_SOCKS', '0') == '1':
         socks = Path('/run/tor-x402_treazury')
         os.chown(socks, 101, 102)
@@ -321,7 +332,7 @@ def router():
             raise ValueError('Expected one disabled SOCKS listener in the base Tor config')
         original = original.replace('SocksPort 0', 'SocksPort unix:/run/tor-x402_treazury/socks IsolateSOCKSAuth GroupWritable RelaxDirModeCheck')
     if onion == 'true':
-        original += '\nHiddenServiceDir /var/lib/tor/onion-service\nHiddenServiceVersion 3\nHiddenServicePort 80 10.203.86.3:8080\n'
+        original += f'\nHiddenServiceDir /var/lib/tor/onion-service\nHiddenServiceVersion 3\nHiddenServicePort 80 {addresses.proxy_onion_ingress}:8080\n'
     config = '/tmp/private-hermes-torrc'
     Path(config).write_text(original)
     drop(101, 102, '/usr/bin/tor', '-f', config)

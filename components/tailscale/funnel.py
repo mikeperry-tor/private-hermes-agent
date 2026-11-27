@@ -7,14 +7,21 @@ import subprocess
 import sys
 import time
 
+try:
+    from addressing import Addresses, DEFAULT_NETWORK_PREFIX, network_prefix
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'network'))
+    from addressing import Addresses, DEFAULT_NETWORK_PREFIX, network_prefix
+
 SOCKET = '/tmp/tailscaled.sock'
 CONFIG = Path('/tmp/serve/config.json')
 
 
-def serve_config(host, port):
+def serve_config(host, port, prefix=DEFAULT_NETWORK_PREFIX):
+    addresses = Addresses(prefix)
     authority = f'{host}:{port}'
     return {'TCP': {str(port): {'HTTPS': True}},
-            'Web': {authority: {'Handlers': {'/': {'Proxy': 'http://10.203.87.3:8443'}}}},
+            'Web': {authority: {'Handlers': {'/': {'Proxy': f'http://{addresses.proxy_funnel_link}:8443'}}}},
             'AllowFunnel': {authority: True}}
 
 
@@ -33,6 +40,7 @@ def cli(*arguments, check=True):
 def main():
     if os.environ.get('TAILSCALE_FUNNEL_ENABLED') != 'true':
         raise SystemExit('Funnel is disabled; refusing to enroll or publish.')
+    prefix = network_prefix(os.environ)
     host = os.environ['TAILSCALE_FUNNEL_HOST']
     port = int(os.environ['TAILSCALE_FUNNEL_PORT'])
     if not os.environ.get('TS_AUTHKEY') and not Path('/var/lib/tailscale/tailscaled.state').exists():
@@ -58,7 +66,7 @@ def main():
                         actual = status.get('Self', {}).get('DNSName', '').rstrip('.')
                         if actual != host:
                             raise RuntimeError('Enrolled Tailscale DNS name differs from TAILSCALE_FUNNEL_HOST; public forwarding remains disabled.')
-                        publish(serve_config(host, port))
+                        publish(serve_config(host, port, prefix))
                         enabled = True
                         print('Configured authenticated webapp Funnel for the verified node name.', flush=True)
             time.sleep(1)

@@ -1,7 +1,13 @@
 """Strict deployment settings shared by the host workflow and config renderer."""
 from dataclasses import dataclass
 import ipaddress
+from pathlib import Path
 import re
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'network'))
+from addressing import (Addresses, DEFAULT_NETWORK_PREFIX, DEFAULT_PROJECT_NAME,
+                        validate_network_prefix, validate_project_name)
 
 
 def boolean(value, name):
@@ -29,9 +35,13 @@ class Settings:
     external_content: str
     teep: bool
     executor_bind_mounts: str = ''
+    project_name: str = DEFAULT_PROJECT_NAME
+    network_prefix: str = DEFAULT_NETWORK_PREFIX
 
     @classmethod
     def read(cls, values):
+        project_name = validate_project_name(values.get('project_name', DEFAULT_PROJECT_NAME))
+        network_prefix = validate_network_prefix(values.get('network_prefix', DEFAULT_NETWORK_PREFIX))
         if values.get('terminal_environment', 'code') not in ('code', 'agent'):
             raise ValueError('WEBAPP_TERMINAL_ENVIRONMENT must be code or agent')
         external_content = values['external_content']
@@ -65,7 +75,7 @@ class Settings:
             raise ValueError('TAILSCALE_FUNNEL_PORT must be 443, 8443 or 10000')
         teep = boolean(values.get('teep_enabled', 'true'), 'TEEP_ENABLED')
         return cls(onion, funnel, bind, local_port, username, host, public_port, node, external_content,
-                   teep, values.get('code_executor_bind_mounts', ''))
+                   teep, values.get('code_executor_bind_mounts', ''), project_name, network_prefix)
 
 
 def authorities(host, port_number, default_port):
@@ -84,12 +94,14 @@ def proxy_config(settings, loopback_forwarder=False, onion_host=''):
     loopback_forwarder the local frontend listens on all proxy addresses and
     the proxy firewall admits new loopback connections only.
     """
+    addresses = Addresses(settings.network_prefix)
     local_hosts = sorted({authority for host in ('localhost', settings.bind)
                           for authority in authorities(host, settings.port, 80)})
     forwarder = 'loopback' if loopback_forwarder else 'interface'
     text = (f'# WEBAPP_EXTERNAL_CONTENT={settings.external_content}\n'
             f'# PORT_FORWARDER={forwarder}\n'
-            f'# TOR_ONION_ENABLED={str(settings.onion).lower()}\n') + '''global
+            f'# TOR_ONION_ENABLED={str(settings.onion).lower()}\n'
+            f'# NETWORK_PREFIX={addresses.prefix}\n') + f'''global
     log stdout format raw local0 notice
 
 defaults
@@ -103,7 +115,7 @@ backend hermes
     # Add a second policy: browsers intersect it with Hermes's own CSP, so its
     # script/connect restrictions remain intact while third-party fonts stop.
     http-response add-header Content-Security-Policy "font-src 'self' data:; style-src 'self' 'unsafe-inline'"
-    server agent 10.203.85.2:9120
+    server agent {addresses.agent_webapp_backend}:9120
 '''
     def frontend(name, listen, hosts, scheme, peer=None):
         source_rule = f"    http-request deny deny_status 403 unless {{ src {peer} }}\n" if peer else ""
@@ -124,11 +136,12 @@ frontend {name}
     listen = f':{settings.port}' if loopback_forwarder else f'${{PRIVATE_HERMES_EDGE_IP}}:{settings.port}'
     text += frontend('localhost', listen, local_hosts, 'http')
     if settings.funnel:
-        text += frontend('funnel', '10.203.87.3:8443',
-                         authorities(settings.funnel_host, settings.funnel_port, 443), 'https', '10.203.87.2')
+        text += frontend('funnel', f'{addresses.proxy_funnel_link}:8443',
+                         authorities(settings.funnel_host, settings.funnel_port, 443), 'https',
+                         addresses.tailscale_funnel_link)
     if settings.onion:
         if not re.fullmatch(r'[a-z2-7]{56}\.onion', onion_host):
             raise ValueError('One saved v3 onion hostname is required for onion ingress')
-        text += frontend('onion', '10.203.86.3:8080', authorities(onion_host, 80, 80),
-                         'http', '10.203.86.2')
+        text += frontend('onion', f'{addresses.proxy_onion_ingress}:8080', authorities(onion_host, 80, 80),
+                         'http', addresses.tor_onion_ingress)
     return text
