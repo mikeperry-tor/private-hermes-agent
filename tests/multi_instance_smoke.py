@@ -428,6 +428,13 @@ def main():
 
                 chat_help = run_in(checkout_a, sys.executable, 'scripts/stack.py', 'chat', '--help', capture=True)
                 assert chat_help.returncode == 0
+                chat_env = run_in(
+                    checkout_a, sys.executable, 'scripts/stack.py', 'compose',
+                    'run', '--rm', '-T', '--no-deps', '--entrypoint', 'sh', 'hermes', '-c',
+                    'printf "%s %s" "$NETWORK_PREFIX" "$TERMINAL_SSH_HOST"',
+                    capture=True,
+                )
+                assert chat_env.stdout.strip() == f'{migrated_prefix} {migrated_prefix}.82.3', chat_env.stdout
                 creds = run_in(checkout_a, sys.executable, 'scripts/webapp-credentials.py', capture=True)
                 assert creds.returncode == 0 and 'credentials for admin' in creds.stdout, creds.stdout
                 plugins = run_in(checkout_a, sys.executable, 'scripts/plugins.py', 'list', capture=True)

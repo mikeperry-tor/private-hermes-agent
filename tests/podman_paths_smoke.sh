@@ -15,10 +15,21 @@ case "$(python3 scripts/deployment.py compose-command)" in
   *) echo "FAIL  select Podman first: CONTAINER_ENGINE=podman make podman-paths-test"; exit 2;;
 esac
 podman() { command podman --remote=false "$@"; }
-P=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import deployment; print(deployment.configured_env_value("COMPOSE_PROJECT_NAME", "private-hermes"))') || { echo "FAIL  could not read COMPOSE_PROJECT_NAME"; exit 2; }
-PREFIX=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import deployment; from addressing import validate_network_prefix; print(validate_network_prefix(deployment.configured_env_value("NETWORK_PREFIX", "10.203")))') || { echo "FAIL  could not read valid NETWORK_PREFIX"; exit 2; }
-WEBAPP_PORT=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import deployment; print(deployment.configured_env_value("WEBAPP_PORT", "9120"))') || { echo "FAIL  could not read WEBAPP_PORT"; exit 2; }
-[ -n "$P" ] && [ -n "$PREFIX" ] && [ -n "$WEBAPP_PORT" ] || { echo "FAIL  empty project, network prefix, or webapp port"; exit 2; }
+IFS=' ' read -r P PREFIX WEBAPP_PORT <<EOF
+$(python3 -c '
+import sys
+sys.path.insert(0, "scripts")
+import deployment
+from addressing import validate_network_prefix, validate_project_name
+project = validate_project_name(deployment.configured_env_value("COMPOSE_PROJECT_NAME", "private-hermes"))
+prefix = validate_network_prefix(deployment.configured_env_value("NETWORK_PREFIX", "10.203"))
+port = deployment.configured_env_value("WEBAPP_PORT", "9120")
+if not port.isdigit() or not 1 <= int(port) <= 65535:
+    raise SystemExit("invalid WEBAPP_PORT")
+print(project, prefix, port)
+')
+EOF
+[ -n "$P" ] && [ -n "$PREFIX" ] && [ -n "$WEBAPP_PORT" ] || { echo "FAIL  could not read valid COMPOSE_PROJECT_NAME, NETWORK_PREFIX, or WEBAPP_PORT"; exit 2; }
 c() { echo "${P}-$1-1"; }
 pass=0; fail=0
 expect() { # name, expected (open|blocked), actual (open|blocked)
@@ -168,7 +179,7 @@ for target in "$teepup 8337 teep-uplink" "$edge $WEBAPP_PORT HAProxy-edge" "${PR
   r=$(podman exec "$PLAIN" sh -c "command -v nc >/dev/null || { echo 'error (no nc)'; exit; }; nc -z -w 5 $1 $2 && echo open || echo blocked" 2>/dev/null)
   expect "non-isolated network -> $3 $1:$2" blocked "$r"
 done
-names=$(podman network ls --format '{{.Name}}' | grep "^${P}_")
+names=$(podman network ls --filter "label=com.docker.compose.project=${P}" --format '{{.Name}}')
 count=$(echo "$names" | grep -c .)
 [ "$count" -ge 9 ] && expect "project networks found ($count)" open open || expect "project networks found" open "blocked ($count)"
 for name in $names; do
