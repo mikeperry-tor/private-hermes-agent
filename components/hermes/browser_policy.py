@@ -1,7 +1,15 @@
 """Response enforcement for the browser app and every separately served document."""
 import base64
 import hashlib
+import os
+from pathlib import Path
+import sys
 
+try:
+    from hermes_cli.private_addressing import Addresses, network_prefix
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'network'))
+    from addressing import Addresses, network_prefix
 from hermes_cli.private_external_content import deployment_mode
 
 INERT_PREVIEW = '''<!doctype html><meta charset="utf-8"><title>Inert preview</title>
@@ -41,6 +49,7 @@ class PrivateContentMiddleware:
     def __init__(self, app):
         self.app = app
         self.mode = deployment_mode()
+        self.backend_ip = Addresses(network_prefix(os.environ)).agent_webapp_backend
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -49,7 +58,7 @@ class PrivateContentMiddleware:
         ingress_mode = request_headers.get(b'x-private-hermes-content-mode')
         # Uvicorn may normalize the client through trusted forwarding headers;
         # the accepted socket's local address still identifies fixed ingress.
-        ingress_socket = scope.get('server', (None, None))[0] == '10.203.85.2'
+        ingress_socket = scope.get('server', (None, None))[0] == self.backend_ip
         if ((ingress_socket and ingress_mode is None) or
                 (ingress_mode is not None and ingress_mode.decode('ascii', 'replace') != self.mode)):
             from starlette.responses import PlainTextResponse

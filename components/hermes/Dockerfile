@@ -42,11 +42,12 @@ COPY --from=webapp-build /opt/hermes/tui_gateway/ /opt/hermes/tui_gateway/
 COPY --from=webapp-build /opt/hermes/cli.py /opt/hermes/model_tools.py /opt/hermes/run_agent.py /opt/hermes/toolsets.py /opt/hermes/
 COPY --from=webapp-build /opt/hermes/apps/desktop/dist-webapp/ /opt/hermes/apps/desktop/dist-webapp/
 COPY --from=webapp-build /tmp/private-hermes-tui/dist/ /opt/hermes/ui-tui/dist/
+COPY components/network/addressing.py /opt/hermes/hermes_cli/private_addressing.py
 COPY components/hermes/managed_policy.py /opt/hermes/docker/private-managed-policy.py
 COPY components/hermes/external_content.py /opt/hermes/hermes_cli/private_external_content.py
 COPY components/hermes/public_images.py /opt/hermes/hermes_cli/private_public_images.py
 COPY components/hermes/browser_policy.py /opt/hermes/hermes_cli/private_browser_policy.py
-COPY --chown=0:0 --chmod=0644 components/hermes/ssh-client.conf /etc/ssh/ssh_config.d/99-private-hermes.conf
+COPY --chown=0:0 --chmod=0644 components/hermes/ssh-client.conf /etc/ssh/private-hermes-ssh.conf
 # Keep the user-writable profile wrapper directory last so root s6, cont-init
 # and wrapper command lookup cannot execute profile content. Unique profile
 # wrapper names still resolve for the unprivileged application.

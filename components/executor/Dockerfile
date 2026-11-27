@@ -7,7 +7,7 @@ RUN apk add --no-cache bash python3 py3-pip py3-yaml git curl openssh-server ope
     && chown runner:runner /workspace
 COPY components/executor/sshd_config /etc/ssh/sshd_config
 WORKDIR /workspace
-CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config"]
+CMD ["/bin/sh", "-ec", "exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config -o \"ListenAddress=${PRIVATE_HERMES_EXECUTOR_SSH_HOST:-10.203.82.3}\""]
 
 # Independently published desktop sandbox; qualify separately from Hermes source.
 FROM nousresearch/hermes-sandbox@sha256:c7d8607d076f26a64e0bd6828f74e1764af43fe3281368188459bb693bfa7567 AS executor-true

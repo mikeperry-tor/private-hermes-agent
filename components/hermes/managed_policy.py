@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 
-SSH_CONFIG = "/etc/ssh/ssh_config.d/99-private-hermes.conf"
+SSH_CONFIG = "/etc/ssh/private-hermes-ssh.conf"
 MODES = {"code": "executor", "agent": "gateway"}
 # Keep JSON valid in the YAML reader, including paths outside the BMP.
 YAML_ESCAPES = {ord(char): f"\\u{ord(char):04x}" for char in "\u2028\u2029\ufffe\uffff"}

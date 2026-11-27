@@ -8,11 +8,15 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'components/network'))
 sys.path.insert(0, str(ROOT / 'components/webapp'))
 sys.path.insert(0, str(ROOT / 'scripts/vendor/dotenv'))
+from addressing import (Addresses, DEFAULT_NETWORK_PREFIX, DEFAULT_PROJECT_NAME,
+                        validate_network_prefix, validate_project_name)
 from settings import Settings, proxy_config
 from parser import parse_stream  # vendored python-dotenv parser, see scripts/vendor/dotenv/SOURCE.md
 
@@ -28,6 +32,19 @@ _AMBIENT_OVERRIDES = []
 # parses as no arguments after the Teep command's fixed `serve` word.
 TEEP_RENDER_PLACEHOLDERS = {'PRIVATE_HERMES_TEEP_PORT_OVERRIDE': '8337',
                             'PRIVATE_HERMES_TEEP_ARGS_OVERRIDE': ' '}
+MAINTENANCE_PLACEHOLDERS = {
+    'WEBAPP_TERMINAL_ENVIRONMENT': 'code',
+    'TOR_ONION_ENABLED': 'false',
+    'TAILSCALE_FUNNEL_ENABLED': 'false',
+    'WEBAPP_EXTERNAL_CONTENT': 'off',
+    'WEBAPP_BIND': '127.0.0.1',
+    'WEBAPP_PORT': '9120',
+    'WEBAPP_USERNAME': 'admin',
+    'TAILSCALE_FUNNEL_HOST': '',
+    'TAILSCALE_FUNNEL_PORT': '443',
+    'TAILSCALE_HOSTNAME': 'private-hermes',
+    **TEEP_RENDER_PLACEHOLDERS,
+}
 
 
 class EngineError(RuntimeError):
@@ -302,15 +319,16 @@ def compose_files(funnel, extra=()):
     return [argument for name in files for argument in ('-f', name)]
 
 
-def settings(extra=(), options=(), *, allow_unused_teep=False):
+def settings(extra=(), options=(), *, allow_unused_teep=False, env=None):
     """Read deployment settings and return any command prefix needed for this launch."""
     command = [*compose_base(), *compose_files(False, extra), *options, 'config', '--format', 'json']
-    prefix = ['env', *(f'{name}=' for name in TEEP_RENDER_PLACEHOLDERS)]
+    extra_env = [f'{name}={value}' for name, value in (env or {}).items()]
+    prefix = ['env', *extra_env, *(f'{name}=' for name in TEEP_RENDER_PLACEHOLDERS)]
     result = subprocess.run(prefix + command, cwd=ROOT, text=True, capture_output=True)
     if result.returncode and allow_unused_teep:
         # Compose parses commands and ports for unselected services too. Retry
         # with placeholders only when reading a managed launch that omits Teep.
-        disabled = ['env', *(f'{name}={value}' for name, value in TEEP_RENDER_PLACEHOLDERS.items())]
+        disabled = ['env', *extra_env, *(f'{name}={value}' for name, value in TEEP_RENDER_PLACEHOLDERS.items())]
         retry = subprocess.run(disabled + command, cwd=ROOT, text=True, capture_output=True)
         if retry.returncode == 0:
             config = Settings.read(json.loads(retry.stdout)['x-deployment'])
@@ -325,14 +343,71 @@ def compose(config, all_ingress=False, extra=()):
     return [*compose_base(), *compose_files(config.funnel or all_ingress, extra)]
 
 
-def maintenance_compose(all_ingress=False, executor_build=False, extra=()):
+def _configured_env_paths(path=None):
+    if path is not None:
+        return (Path(path),)
+    env_files = os.environ.get('COMPOSE_ENV_FILES', '')
+    entries = [entry.strip() for entry in env_files.split(',') if entry.strip()]
+    if not entries:
+        return (ROOT / '.env',)
+    return tuple(Path(entry) if Path(entry).is_absolute() else ROOT / entry for entry in entries)
+
+
+def configured_env_value(key, default='', path=None):
+    """Read one key from process environment or Compose env files without exporting it."""
+    if key in os.environ:
+        value = os.environ[key]
+    else:
+        value = None
+        for candidate in _configured_env_paths(path):
+            try:
+                text = candidate.read_text(encoding='utf-8')
+            except FileNotFoundError:
+                continue
+            except (OSError, UnicodeDecodeError) as error:
+                raise ValueError(
+                    f'Cannot read {candidate}: {getattr(error, "strerror", None) or error.__class__.__name__}'
+                ) from None
+            for binding in parse_stream(io.StringIO(text)):
+                if binding.error:
+                    raise ValueError(f'{candidate}, line {binding.original.line}: not a valid assignment')
+                if binding.key == key:
+                    value = binding.value if binding.value is not None else ''
+    return value or default
+
+
+def local_image(component, path=None):
+    """Return the local image tag for a component in the configured project."""
+    project = configured_env_value('COMPOSE_PROJECT_NAME', DEFAULT_PROJECT_NAME, path=path)
+    return f'{project}-{component}:local'
+
+
+def _atomic_write_text(path, text, mode=0o644):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.fchmod(stream.fileno(), mode)
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def maintenance_compose(all_ingress=False, executor_build=False, extra=(), *,
+                        allow_invalid_network=True, validate_project=False):
     # These operations must not start ingress, inference or the agent with
     # placeholders. Actual treasury policy remains in its mounted configuration.
     # Compose still interpolates unused services and publications.
-    os.environ.update(WEBAPP_TERMINAL_ENVIRONMENT='code', TOR_ONION_ENABLED='false', TAILSCALE_FUNNEL_ENABLED='false', WEBAPP_EXTERNAL_CONTENT='off',
-                      WEBAPP_BIND='127.0.0.1', WEBAPP_PORT='9120', WEBAPP_USERNAME='admin',
-                      TAILSCALE_FUNNEL_HOST='', TAILSCALE_FUNNEL_PORT='443',
-                      TAILSCALE_HOSTNAME='private-hermes', **TEEP_RENDER_PLACEHOLDERS)
+    if validate_project:
+        validate_project_name(configured_env_value('COMPOSE_PROJECT_NAME', DEFAULT_PROJECT_NAME))
+    if allow_invalid_network:
+        os.environ['NETWORK_PREFIX'] = DEFAULT_NETWORK_PREFIX
+    else:
+        validate_network_prefix(configured_env_value('NETWORK_PREFIX', DEFAULT_NETWORK_PREFIX))
+    os.environ.update(MAINTENANCE_PLACEHOLDERS)
     if not executor_build:
         # Saved-state inspection/shutdown do not select or build an executor.
         # An invalid optional desktop preference must not block those operations.
@@ -354,9 +429,26 @@ def render(config):
     if config.onion:
         from onion_address import saved_address
         onion_host = saved_address()
-    path = ROOT / 'config/webapp/proxy.cfg'
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(proxy_config(config, loopback_forwarder=engine() == 'podman', onion_host=onion_host))
+    addresses = Addresses(config.network_prefix)
+    proxy_path = ROOT / 'config/webapp/proxy.cfg'
+    _atomic_write_text(
+        proxy_path,
+        proxy_config(config, loopback_forwarder=engine() == 'podman', onion_host=onion_host),
+        mode=0o644,
+    )
+    network_dir = ROOT / 'config/network'
+    network_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(network_dir, 0o755)
+    _atomic_write_text(
+        network_dir / 'hermes-resolv.conf',
+        f'nameserver {addresses.tor_agent_route}\noptions timeout:5 attempts:2\n',
+        mode=0o644,
+    )
+    _atomic_write_text(
+        network_dir / 'executor-resolv.conf',
+        f'nameserver {addresses.tor_executor_route}\noptions timeout:5 attempts:2\n',
+        mode=0o644,
+    )
 
 
 # Compose global options that the stack.py passthrough accepts before the subcommand.
@@ -445,6 +537,8 @@ class ComposeLaunch:
     no_deps: bool = False
     build: bool = False
     dry_run: Optional[bool] = None
+    project_name: Optional[str] = None
+    env_path: Optional[tuple] = None
 
 
 def parse_launch(rest):
@@ -589,6 +683,7 @@ def split_passthrough(arguments):
     wrapper must know the project and model a launch uses.
     """
     files, options, dry_run = [], [], False
+    explicit_project, env_files, project_dir = None, [], None
     rest = list(arguments)
     while rest and rest[0].startswith('-'):
         argument = rest.pop(0)
@@ -608,11 +703,23 @@ def split_passthrough(arguments):
             if not rest:
                 raise ValueError(f'{name} needs a value')
             value = rest.pop(0)
-        if GLOBAL_OPTIONS[name] == 'file':
+        kind = GLOBAL_OPTIONS[name]
+        if kind == 'file':
             files.append(value)
         else:
             options += [name, value]
+            if kind == 'project':
+                explicit_project = value
+            elif kind == 'env':
+                env_files.append(Path(value) if Path(value).is_absolute() else ROOT / value)
+            elif kind == 'directory':
+                project_dir = Path(value) if Path(value).is_absolute() else ROOT / value
     launch = parse_launch(rest)
+    launch.project_name = explicit_project
+    if env_files:
+        launch.env_path = tuple(env_files)
+    elif project_dir is not None:
+        launch.env_path = (project_dir / '.env',)
     if launch.dry_run is not None:
         dry_run = launch.dry_run
     elif launch.action not in ('run', 'up', 'create', 'scale'):

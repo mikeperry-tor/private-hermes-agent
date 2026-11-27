@@ -10,6 +10,7 @@ import sys
 from deployment import (ROOT, check_bind_sources, check_engine, compose, compose_base, compose_files,
                         engine, engine_command, inspect_launch, maintenance_command, maintenance_compose, prepare_launch,
                         parse_launch, remove_networks, render, settings, split_passthrough)
+from addressing import DEFAULT_NETWORK_PREFIX, validate_network_prefix, validate_project_name
 from auth import validate
 from x402_treazury import Controller, operation_lock
 from provisioning import initialize_setup, initialize_research_config, report_research_config_diff
@@ -132,13 +133,14 @@ def start_chat(chat_args=()):
         applied = dict(entry.split('=', 1) for entry in entries)
         recorded = json.loads(applied[EXECUTOR_ROOTS])
         mode, content, desktop = (applied[name] for name in CHAT_SETTINGS)
+        applied_prefix = validate_network_prefix(applied.get('NETWORK_PREFIX') or DEFAULT_NETWORK_PREFIX)
     except (subprocess.CalledProcessError, ValueError, AttributeError, KeyError, TypeError) as error:
         raise RuntimeError(unavailable) from error
     if (recorded != mounted or mode not in ('code', 'agent') or desktop not in ('true', 'false')
             or content not in ('tor_proxied', 'ask', 'off', 'browser_native')):
         raise RuntimeError(unavailable)
     command = ['env', *(f'{name}={applied[name]}' for name in CHAT_SETTINGS),
-               f'{EXECUTOR_ROOTS}={json.dumps(mounted)}', *command]
+               f'{EXECUTOR_ROOTS}={json.dumps(mounted)}', f'NETWORK_PREFIX={applied_prefix}', *command]
     arguments = ['run', '--rm', '--no-deps', 'hermes', 'chat', *chat_args]
     model, networked = inspect_launch(command, parse_launch(arguments))
     if networked:
@@ -155,7 +157,8 @@ def main_unlocked():
         start_chat([*shlex.split(os.environ.get('PRIVATE_HERMES_CHAT_ARGS', '')), *args.arguments])
         return
     if args.action == 'build':
-        run(maintenance_compose(all_ingress=True, executor_build=True) + ['--profile', '*', 'build'])
+        run(maintenance_compose(all_ingress=True, executor_build=True, validate_project=True)
+            + ['--profile', '*', 'build'])
         return
     if args.action == 'down':
         all_command = maintenance_compose(all_ingress=True) + ['--profile', '*']
@@ -174,13 +177,21 @@ def main_unlocked():
         files, options, dry_run, rest, launch = split_passthrough(args.arguments)
         if not rest:
             raise ValueError('Provide a Compose command after the global options')
+        explicit_project, custom_env = launch.project_name, launch.env_path is not None
+        project_prefix = ['env', f'COMPOSE_PROJECT_NAME={explicit_project}'] if explicit_project is not None else []
         if rest[0] == 'config':
             # Inspect the actual model, including invalid policy values, without
             # replacing them with maintenance placeholders or pre-validating policy.
-            run([*compose_base(), *compose_files(True, files), *options, *rest])
+            run([*project_prefix, *compose_base(), *compose_files(True, files), *options, *rest])
             return
         if maintenance_command(launch):
-            command = maintenance_compose(all_ingress=True, executor_build=rest[0] == 'build', extra=files) + options
+            is_build = rest[0] == 'build'
+            if is_build and explicit_project is not None:
+                validate_project_name(explicit_project)
+            command = project_prefix + maintenance_compose(
+                all_ingress=True, executor_build=is_build, extra=files,
+                validate_project=is_build and explicit_project is None and not custom_env,
+            ) + options
             if rest[0] == 'down':
                 command += ['--profile', '*']
             inspect_launch(command, launch, dry_run=dry_run, require_offline=True)
@@ -190,7 +201,8 @@ def main_unlocked():
             return
         standalone = (launch.action == 'run' and launch.no_deps
                       and launch.targets[0] in ('hermes', 'x402_treazury'))
-        config, prefix = settings(extra=files, options=options, allow_unused_teep=standalone)
+        project_env = {'COMPOSE_PROJECT_NAME': explicit_project} if explicit_project is not None else None
+        config, prefix = settings(extra=files, options=options, allow_unused_teep=standalone, env=project_env)
         command = prefix + compose(config, extra=files) + options
         model, networked = inspect_launch(command, launch, dry_run=dry_run)
         if not dry_run and networked:

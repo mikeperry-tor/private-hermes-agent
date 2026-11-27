@@ -1,5 +1,4 @@
 Port 2222
-ListenAddress 10.203.82.3
 HostKey /run/executor-auth/ssh_host_ed25519_key
 PidFile /run/sshd.pid
 AuthorizedKeysFile /run/executor-auth/authorized_keys

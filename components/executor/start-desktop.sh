@@ -14,4 +14,4 @@ setpriv --reuid=10000 --regid=10000 --clear-groups \
         profile=/home/runner/.hermes/bot-desktop/browser-profile
         rm -f "$profile/SingletonLock" "$profile/SingletonSocket" \
             "$profile/SingletonCookie" "$profile/DevToolsActivePort"'
-exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config
+exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config -o "ListenAddress=${PRIVATE_HERMES_EXECUTOR_SSH_HOST:-10.203.82.3}"

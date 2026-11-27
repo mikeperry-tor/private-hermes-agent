@@ -1,12 +1,14 @@
-name: private-hermes
+name: ${COMPOSE_PROJECT_NAME:-private-hermes}
 
 # Derived pinned Hermes; the official base/source pin lives in its Dockerfile.
-x-hermes-image: &hermes-image private-hermes-agent:local
+x-hermes-image: &hermes-image ${COMPOSE_PROJECT_NAME:-private-hermes}-agent:local
 x-hermes-build: &hermes-build
   context: .
   dockerfile: components/hermes/Dockerfile
 
 x-deployment:
+  project_name: "${COMPOSE_PROJECT_NAME:-private-hermes}"
+  network_prefix: "${NETWORK_PREFIX:-10.203}"
   code_executor_bind_mounts: "${CODE_EXECUTOR_BIND_MOUNTS-}"
   teep_enabled: "${TEEP_ENABLED-true}"
   onion_enabled: "${TOR_ONION_ENABLED:-false}"
@@ -27,7 +29,7 @@ x-isolated: &isolated
     com.docker.network.bridge.gateway_mode_ipv6: isolated
 
 x-network: &network
-  image: private-hermes-network:local
+  image: ${COMPOSE_PROJECT_NAME:-private-hermes}-network:local
   build:
     context: .
     dockerfile: components/network/Dockerfile
@@ -65,6 +67,7 @@ services:
     read_only: true
     tmpfs: [/tmp:mode=1777]
     environment:
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
       WEBAPP_USERNAME: ${WEBAPP_USERNAME:-admin}
       TEEP_INSTALL_MODEL: ${TEEP_INSTALL_MODEL:-}
       TEEP_ENABLED: ${TEEP_ENABLED-true}
@@ -146,6 +149,7 @@ services:
       setup: {condition: service_completed_successfully}
     environment:
       <<: *local-integrations
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
       TOR_ONION_ENABLED: ${TOR_ONION_ENABLED:-false}
       PRIVATE_HERMES_X402_TREAZURY_SOCKS: "1"
       PRIVATE_HERMES_NETWORK_PLATFORM: ${PRIVATE_HERMES_NETWORK_PLATFORM-docker}
@@ -173,13 +177,13 @@ services:
       - /run/tor-control:mode=0700
     networks:
       tor-uplink:
-        ipv4_address: 10.203.88.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.88.2
       onion-ingress:
-        ipv4_address: 10.203.86.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.86.2
       agent-route:
-        ipv4_address: 10.203.80.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.80.3
       executor-route:
-        ipv4_address: 10.203.81.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.81.3
     healthcheck:
       test: [CMD, python3, /opt/tor-health.py]
       interval: 30s
@@ -193,7 +197,9 @@ services:
     command: [agent]
     depends_on:
       tor: {condition: service_healthy}
-    environment: *local-integrations
+    environment:
+      <<: *local-integrations
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
     extra_hosts:
       host.docker.internal: 198.18.255.254
     volumes:
@@ -205,32 +211,34 @@ services:
           create_host_path: false
     networks:
       agent-route:
-        ipv4_address: 10.203.80.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.80.2
       execution-control:
-        ipv4_address: 10.203.82.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.82.2
       inference:
-        ipv4_address: 10.203.83.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.83.2
       mcp-access:
-        ipv4_address: 10.203.84.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.84.2
       webapp-backend:
-        ipv4_address: 10.203.85.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.85.2
 
   executor-net:
     <<: *network
     command: [executor]
     depends_on:
       tor: {condition: service_healthy}
+    environment:
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
     networks:
       executor-route:
-        ipv4_address: 10.203.81.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.81.2
       execution-control:
-        ipv4_address: 10.203.82.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.82.3
 
   executor:
     extends:
       file: compose.executor.yaml
       service: executor-${COMPUTER_USE_ENABLED-false}
-    image: private-hermes-executor-${COMPUTER_USE_ENABLED-false}:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-executor-${COMPUTER_USE_ENABLED-false}:local
     build:
       context: .
       dockerfile: components/executor/Dockerfile
@@ -244,6 +252,7 @@ services:
     cap_add: [CHOWN, SETUID, SETGID, SYS_CHROOT]
     read_only: true
     environment:
+      PRIVATE_HERMES_EXECUTOR_SSH_HOST: ${NETWORK_PREFIX:-10.203}.82.3
       ANONYMIZED_TELEMETRY: "false"
       CUA_DRIVER_RS_TELEMETRY_ENABLED: "0"
     tmpfs: [/tmp:mode=1777, /run:mode=0755]
@@ -261,7 +270,11 @@ services:
         source: ./data/executor/workspace
         target: /workspace
         bind: {create_host_path: false}
-      - ./components/executor/resolv.conf:/etc/resolv.conf:ro
+      - type: bind
+        source: ./config/network/executor-resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
+        bind: {create_host_path: false}
     restart: unless-stopped
     healthcheck:
       test: [CMD-SHELL, "test -f /run/sshd.pid && kill -0 $$(cat /run/sshd.pid)"]
@@ -272,7 +285,7 @@ services:
       start_period: 15s
 
   teep:
-    image: private-hermes-teep:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-teep:local
     command: "serve ${PRIVATE_HERMES_TEEP_ARGS_OVERRIDE:-${TEEP_SERVE_ARGS:-}}"
     build:
       context: .
@@ -297,7 +310,7 @@ services:
       XDG_CACHE_HOME: /tmp/cache
     networks:
       inference:
-        ipv4_address: 10.203.83.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.83.3
       teep-uplink:
         gw_priority: 1
     cap_drop: [ALL]
@@ -309,7 +322,7 @@ services:
   x402_treazury:
     profiles: [x402_treazury]
     stop_grace_period: -1s
-    image: &x402-image private-hermes-x402_treazury:local
+    image: &x402-image ${COMPOSE_PROJECT_NAME:-private-hermes}-x402_treazury:local
     init: true
     build:
       context: .
@@ -425,8 +438,13 @@ services:
         target: /run/agent-ssh
         read_only: true
         bind: {create_host_path: false}
-      - ./components/hermes/resolv.conf:/etc/resolv.conf:ro
+      - type: bind
+        source: ./config/network/hermes-resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
+        bind: {create_host_path: false}
     environment:
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
       COMPUTER_USE_ENABLED: ${COMPUTER_USE_ENABLED-false}
       WEBAPP_EXTERNAL_CONTENT: ${WEBAPP_EXTERNAL_CONTENT-tor_proxied}
       HERMES_UID: "10000"
@@ -439,8 +457,8 @@ services:
       HERMES_CONFIG_BACKEND: file
       HERMES_MANAGED_DIR: /etc/hermes
       TERMINAL_ENV: ssh
-      TERMINAL_SSH_CONFIG: /etc/ssh/ssh_config.d/99-private-hermes.conf
-      TERMINAL_SSH_HOST: 10.203.82.3
+      TERMINAL_SSH_CONFIG: /etc/ssh/private-hermes-ssh.conf
+      TERMINAL_SSH_HOST: ${NETWORK_PREFIX:-10.203}.82.3
       TERMINAL_SSH_PORT: "2222"
       TERMINAL_SSH_USER: runner
       TERMINAL_SSH_KEY: /run/agent-ssh/id_ed25519
@@ -456,7 +474,7 @@ services:
 
   onion-inspect:
     profiles: [maintenance]
-    image: private-hermes-network:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-network:local
     entrypoint: [python3, /opt/onion.py]
     command: [inspect]
     network_mode: none
@@ -474,7 +492,7 @@ services:
 
   onion-init:
     profiles: [maintenance]
-    image: private-hermes-network:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-network:local
     entrypoint: [python3, /opt/onion.py]
     command: [initialize]
     network_mode: none
@@ -491,7 +509,7 @@ services:
         bind: {create_host_path: false}
 
   webapp-proxy:
-    image: private-hermes-webapp-proxy:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-webapp-proxy:local
     build:
       context: .
       dockerfile: components/webapp/proxy.Dockerfile
@@ -504,6 +522,7 @@ services:
     read_only: true
     tmpfs: [/run:mode=0755]
     environment:
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
       WEBAPP_EXTERNAL_CONTENT: ${WEBAPP_EXTERNAL_CONTENT-tor_proxied}
       WEBAPP_PORT: ${WEBAPP_PORT:-9120}
       TAILSCALE_FUNNEL_ENABLED: ${TAILSCALE_FUNNEL_ENABLED:-false}
@@ -520,51 +539,51 @@ services:
       - "${WEBAPP_BIND:-127.0.0.1}:${WEBAPP_PORT:-9120}:${WEBAPP_PORT:-9120}"
     networks:
       webapp-backend:
-        ipv4_address: 10.203.85.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.85.3
       webapp-publish: {}
       onion-ingress:
-        ipv4_address: 10.203.86.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.86.3
     restart: unless-stopped
 
 networks:
   onion-ingress:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.86.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.86.0/24"}]
   tor-uplink:
     ipam:
-      config: [{subnet: 10.203.88.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.88.0/24"}]
   teep-uplink:
     ipam:
-      config: [{subnet: 10.203.89.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.89.0/24"}]
   agent-route:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.80.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.80.0/24"}]
   executor-route:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.81.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.81.0/24"}]
   execution-control:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.82.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.82.0/24"}]
   inference:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.83.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.83.0/24"}]
   mcp-access:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.84.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.84.0/24"}]
 
   webapp-backend:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.85.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.85.0/24"}]
   webapp-publish:
     ipam:
-      config: [{subnet: 10.203.90.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.90.0/24"}]
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "false"
 

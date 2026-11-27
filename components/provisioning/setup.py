@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 COMPONENTS = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(COMPONENTS / 'network'))
 sys.path.insert(0, str(COMPONENTS / 'webapp'))
 sys.path.insert(0, str(COMPONENTS / 'x402_treazury'))
 from storage import prepare, verify_filesystem

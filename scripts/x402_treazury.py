@@ -13,7 +13,9 @@ import subprocess
 import sys
 import threading
 import time
-from deployment import ROOT, engine_command, inspect_launch, maintenance_compose, parse_launch, prepare_launch
+from deployment import (MAINTENANCE_PLACEHOLDERS, ROOT, compose_base, compose_files, configured_env_value,
+                        engine_command, inspect_launch, maintenance_compose, parse_launch, prepare_launch)
+from addressing import DEFAULT_NETWORK_PREFIX, DEFAULT_PROJECT_NAME, validate_project_name
 from provisioning import initialize_research_config, research_config_diff, report_research_config_diff
 
 
@@ -248,6 +250,20 @@ class Controller:
         subprocess.run([sys.executable, str(self.root / 'scripts/init-config.py'), '--wallet'],
                        cwd=self.root, check=True)
         initialize_research_config(self.command, self.root)
+        preflight_env = dict(os.environ)
+        if self.command and self.command[0] == 'env':
+            for token in self.command[1:]:
+                if '=' not in token:
+                    break
+                key, value = token.split('=', 1)
+                preflight_env[key] = value
+        try:
+            subprocess.run(
+                [sys.executable, str(self.root / 'scripts/preflight.py'), '--skip-ports', '--services', 'tor', 'agent-net'],
+                cwd=self.root, env=preflight_env, check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise SystemExit(error.returncode) from None
         # Hermes may already share agent-net. Keep the existing namespace and
         # its applied grants until a coordinated stack restart.
         self.call('up', '-d', '--wait', '--no-deps', '--no-recreate', 'tor', 'agent-net')
@@ -309,13 +325,48 @@ class Controller:
             print('Hermes is available; research activation failed: ' + str(error), file=sys.stderr)
 
 
+def _running_stack_prefix():
+    """Read applied NETWORK_PREFIX from an existing agent-net, hermes, or tor container."""
+    command = [*compose_base(), *compose_files(False)]
+    env = {**os.environ, **MAINTENANCE_PLACEHOLDERS,
+           'NETWORK_PREFIX': DEFAULT_NETWORK_PREFIX, 'COMPUTER_USE_ENABLED': 'false'}
+    for ps_args in (('ps', '-q'), ('ps', '-a', '-q')):
+        containers = subprocess.run([*command, *ps_args, 'agent-net', 'hermes', 'tor'],
+                                    cwd=ROOT, env=env, text=True, capture_output=True)
+        if containers.returncode != 0:
+            continue
+        ids = [cid for cid in containers.stdout.strip().splitlines() if cid]
+        if not ids:
+            continue
+        inspected = subprocess.run([*engine_command(), 'inspect', '--format', '{{json .Config.Env}}', ids[0]],
+                                   cwd=ROOT, text=True, capture_output=True)
+        if inspected.returncode != 0:
+            continue
+        try:
+            entries = json.loads(inspected.stdout)
+            if not isinstance(entries, list):
+                continue
+            container_env = dict(entry.split('=', 1) for entry in entries if '=' in entry)
+            return container_env.get('NETWORK_PREFIX') or DEFAULT_NETWORK_PREFIX
+        except ValueError:
+            continue
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=('init', 'status', 'prepare', 'config', 'config-diff'))
     args = parser.parse_args()
     # Only treasury and existing Hermes control RPC are used here. Actual treasury
     # policy is validated by its own admin/job, not unrelated ingress settings.
-    controller = Controller(maintenance_compose())
+    offline = args.action in ('status', 'config', 'config-diff')
+    if not offline:
+        validate_project_name(configured_env_value('COMPOSE_PROJECT_NAME', DEFAULT_PROJECT_NAME))
+        applied_prefix = _running_stack_prefix()
+        if applied_prefix:
+            os.environ['NETWORK_PREFIX'] = applied_prefix
+    # COMPOSE_PROJECT_NAME is validated above before inspecting running containers.
+    controller = Controller(maintenance_compose(allow_invalid_network=offline, validate_project=False))
     if args.action == 'config-diff':
         research_config_diff(controller.command, ROOT)
         return

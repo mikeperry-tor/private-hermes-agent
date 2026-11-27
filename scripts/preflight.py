@@ -175,7 +175,9 @@ def check_address_conflicts(project, config, existing):
                          f'{", ".join(desired)}.',),
                         ('No network was changed.',),
                         ('Run make down to remove the project networks.',
-                         'Run make up to recreate them.', *ADDRESS_PLAN_HELP),
+                         'Run make up to recreate them.',
+                         'If you are starting a separate instance, set a distinct COMPOSE_PROJECT_NAME in .env instead.',
+                         *ADDRESS_PLAN_HELP),
                     )
                 continue
         for occupied_network in occupied:

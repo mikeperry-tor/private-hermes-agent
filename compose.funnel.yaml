@@ -8,10 +8,10 @@ services:
   webapp-proxy:
     networks:
       funnel-link:
-        ipv4_address: 10.203.87.3
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.87.3
 
   tailscale:
-    image: private-hermes-tailscale:local
+    image: ${COMPOSE_PROJECT_NAME:-private-hermes}-tailscale:local
     build:
       context: .
       dockerfile: components/tailscale/Dockerfile
@@ -21,6 +21,7 @@ services:
     read_only: true
     tmpfs: [/tmp:mode=1777, /run:mode=0755]
     environment:
+      NETWORK_PREFIX: ${NETWORK_PREFIX:-10.203}
       TAILSCALE_FUNNEL_ENABLED: ${TAILSCALE_FUNNEL_ENABLED:-false}
       TAILSCALE_FUNNEL_HOST: ${TAILSCALE_FUNNEL_HOST:-}
       TAILSCALE_FUNNEL_PORT: ${TAILSCALE_FUNNEL_PORT:-443}
@@ -34,7 +35,7 @@ services:
         bind: {create_host_path: false}
     networks:
       funnel-link:
-        ipv4_address: 10.203.87.2
+        ipv4_address: ${NETWORK_PREFIX:-10.203}.87.2
       tailscale-uplink:
         gw_priority: 1
     depends_on:
@@ -46,7 +47,7 @@ networks:
   funnel-link:
     <<: *isolated
     ipam:
-      config: [{subnet: 10.203.87.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.87.0/24"}]
   tailscale-uplink:
     ipam:
-      config: [{subnet: 10.203.91.0/24}]
+      config: [{subnet: "${NETWORK_PREFIX:-10.203}.91.0/24"}]
