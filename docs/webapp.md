@@ -188,11 +188,12 @@ private permissions intact:
   (Reading a hostname still works without complete key files, but reports the
   stored address rather than serving readiness; a malformed hostname is rejected
   before rendering HAProxy configuration.)
-- Tor and HAProxy share an isolated network (`10.203.86.0/24`). Only Tor
-  (`10.203.86.2`) can reach HAProxy's onion frontend (`10.203.86.3:8080`), which
-  accepts only the saved onion hostname (with optional `:80`), strips forwarded
-  headers, and passes HTTP as the trusted scheme. Neither Hermes nor the
-  executor joins this network, and HAProxy never mounts `data/tor/`.
+- Tor and HAProxy share an isolated network (`<prefix>.86.0/24`, default
+  `10.203.86.0/24`). Only Tor (`<prefix>.86.2`) can reach HAProxy's onion
+  frontend (`<prefix>.86.3:8080`), which accepts only the saved onion hostname
+  (with optional `:80`), strips forwarded headers, and passes HTTP as the
+  trusted scheme. Neither Hermes nor the executor joins this network, and
+  HAProxy never mounts `data/tor/`.
 - Onion HTTP uses host-only `HttpOnly; SameSite=Lax` cookies (without `Secure`,
   unlike Funnel HTTPS). All ingress hostnames share the same credentials and
   signing key, while image consent is scoped per exact browser origin. Onion
@@ -231,9 +232,10 @@ bounding capability sets:
   [engine differences](architecture.md#rootless-podman)), Funnel connections
   only from Tailscale to port `8443`, and onion connections only from Tor to
   port `8080`.
-- **Outbound:** Initiates connections only to Hermes at `10.203.85.2:9120` plus
-  established replies. Connections to the host, VM, LAN, Internet, DNS, or other
-  services are blocked, and IP forwarding is off.
+- **Outbound:** Initiates connections only to Hermes at `<prefix>.85.2:9120`
+  (default `10.203.85.2:9120`) plus established replies. Connections to the
+  host, VM, LAN, Internet, DNS, or other services are blocked, and IP forwarding
+  is off.
 - **Headers and origins:** Enforces exact `Host` headers separately on local,
   Funnel, and onion frontends, strips incoming `Forwarded` and `X-Forwarded-*`
   headers, and injects the trusted scheme and peer identity. Hermes trusts only

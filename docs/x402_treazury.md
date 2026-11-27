@@ -82,7 +82,8 @@ The packaged `research_desk.toml` sets `[wallet_bootstrap]` with
   remove the `[wallet_bootstrap]` table. Omitted reserve bounds use upstream's
   $2-3 default.
 
-Inspect the packaged default policy offline before funding (no private mounts):
+Inspect the packaged default policy offline before funding (no private mounts;
+replace `private-hermes` with your `COMPOSE_PROJECT_NAME` if customized):
 
 ```sh
 # Docker

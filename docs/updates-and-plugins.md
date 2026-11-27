@@ -144,11 +144,12 @@ inference or paid calls.
 
 ## Derived Hermes build and patch maintenance
 
-The derived Hermes image (`private-hermes-agent:local`) builds from official
-Hermes v0.23.4 (source commit `8fc0374447313e276f6b9a2764bfc750190c966a`). In a
-separate frontend build stage, `components/hermes/verify-build.mjs` verifies
-the base image's install stamp, source hash, and renderer receipt before
-applying the ordered patch series under `components/hermes/patches/`.
+The derived Hermes image (`<COMPOSE_PROJECT_NAME>-agent:local`, default
+`private-hermes-agent:local`) builds from official Hermes v0.23.4 (source
+commit `8fc0374447313e276f6b9a2764bfc750190c966a`). In a separate frontend
+build stage, `components/hermes/verify-build.mjs` verifies the base image's
+install stamp, source hash, and renderer receipt before applying the ordered
+patch series under `components/hermes/patches/`.
 
 That build stage installs a hash-verified `pnpm` pin for the frozen-lockfile
 WebApp and Ink TUI builds, clears stale frontend outputs, and copies patched

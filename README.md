@@ -494,6 +494,33 @@ applying plugin updates and understanding plugin authority.
 Backups must include the named volumes as well as local `config` and `data`
 directories; see [backup scope](docs/configuration.md#backup-scope).
 
+## Running multiple instances
+
+You can run two or more Private Hermes instances concurrently on the same host
+by using a separate repository checkout for each instance. Separate checkouts
+keep `.env`, `config/`, `data/`, and Git revisions isolated so instances can
+upgrade independently or run different commits without overwriting each other's
+images.
+
+Before running `make up` in a new checkout, run `make init` and set distinct
+values in `.env` for:
+
+- `COMPOSE_PROJECT_NAME` (default `private-hermes`): isolates containers,
+  networks, named volumes, and `<project>-*:local` image tags.
+- `NETWORK_PREFIX` (default `10.203`): two-octet RFC1918 IPv4 prefix
+  (`10.<0-255>` except `10.204`, `172.<16-31>`, or `192.168`) for the instance's
+  internal bridge subnets.
+- `WEBAPP_PORT` (default `9120`): host loopback port for the local WebApp.
+- `TEEP_HOST_PORT` (default `8337`): host loopback port for Teep when enabled.
+- `TAILSCALE_HOSTNAME` (default `private-hermes`) and `TAILSCALE_FUNNEL_HOST`:
+  distinct, matching node name and tailnet FQDN when Tailscale Funnel is
+  enabled.
+
+Choose `COMPOSE_PROJECT_NAME` before the first `make up` and do not rename it
+on an initialized instance: named volumes (`<COMPOSE_PROJECT_NAME>_hermes-data`
+and `<COMPOSE_PROJECT_NAME>_x402_treazury-data`) are scoped to the project name.
+See [configuration and backups](docs/configuration.md) for full details.
+
 ## Service hardening
 
 Private Hermes adds substantially stronger containment than the
